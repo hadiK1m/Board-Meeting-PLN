@@ -8,7 +8,7 @@ export const agendas = pgTable("agendas", {
     priority: text("priority").notNull(),
     director: text("director").notNull(),
     initiator: text("initiator").notNull(),
-    support: text("support").notNull(),
+    support: text("support"),
     contactPerson: text("contact_person").notNull(),
     position: text("position").notNull(),
     phone: text("phone").notNull(),
