@@ -37,7 +37,7 @@ interface DetailAgendaSheetProps {
 }
 
 export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
-    // Lokal tipe untuk mengamankan akses properti yang dinamis
+    // Lokal tipe untuk mengamankan akses properti yang dinamis dan variasi nama field
     type AgendaExtras = RakordirAgenda & {
         supportingDocuments?: string | string[] | null
         supporting_documents?: string | string[] | null
@@ -46,28 +46,30 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
         presentationMaterial?: string | null
         presentation_material?: string | null
         priority?: string | null
+        // Memastikan field personil ada
         director?: string | null
         support?: string | null
         position?: string | null
         phone?: string | null
     }
 
+    // Casting agenda ke tipe lengkap
     const ag = agenda as AgendaExtras | null
 
-    // ✅ Logic Parsing untuk menangani format database: '"[]"' dan variasi lain
+    // ✅ Logic Parsing untuk menangani format database
     const extraDocs: string[] = React.useMemo(() => {
-        // Ambil data dari property manapun yang tersedia (gunakan ag yang sudah mencakup extras)
         const raw = ag?.supportingDocuments ?? ag?.supporting_documents
 
         if (!raw || raw === "null" || raw === "" || raw === "[]" || raw === '"[]"') return []
 
         try {
-            // Jika data berupa array langsung
+            // Jika sudah array
             if (Array.isArray(raw)) return raw.map(String)
 
-            // Jika data berupa string (menangani double encoding)
+            // Jika string, coba parse
             let parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-            // Jika hasil parse pertama masih berupa string (JSON dalam string)
+
+            // Handle double stringify
             if (typeof parsed === 'string') {
                 parsed = JSON.parse(parsed)
             }
@@ -97,7 +99,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
         }
     }
 
-    // ✅ Sesuaikan Mapping Dokumen Utama dengan field database Anda
+    // ✅ Mapping Dokumen Utama Rakordir (Hanya 2 File)
     const docs = {
         ndUsulan: ag?.proposal_note || ag?.proposalNote || null,
         materi: ag?.presentation_material || ag?.presentationMaterial || null,
@@ -107,6 +109,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
+                // ✅ h-dvh dan flex flex-col memastikan container mengambil tinggi penuh layar
                 className="w-full sm:max-w-150 p-0 flex flex-col h-dvh border-none shadow-2xl overflow-hidden bg-white"
             >
                 <SheetClose className="absolute right-6 top-6 z-50 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 active:scale-95 focus:outline-none">
@@ -127,21 +130,37 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                     </SheetDescription>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 bg-slate-50">
+                {/* ✅ flex-1 dan min-h-0 sangat penting agar ScrollArea berfungsi di dalam Flexbox */}
+                <ScrollArea className="flex-1 min-h-0 bg-slate-50 border-t">
                     <div className="p-6 md:p-8 space-y-6 md:space-y-8 pb-32">
 
                         {/* SECTION 1: INFO UTAMA */}
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <InfoCard label="Urgensi" icon={ShieldCheck} content={
-                                <Badge variant="outline" className="border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px]">
-                                    {agenda.urgency || "NORMAL"}
-                                </Badge>
-                            } />
+                        {/* ✅ Mengubah grid menjadi 2 kolom di desktop agar Urgensi bisa Full Width di baris pertama */}
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
+                            {/* ✅ Urgensi dibuat Full Width (col-span-2) */}
+                            <div className="col-span-1 md:col-span-2">
+                                <InfoCard
+                                    label="Urgensi"
+                                    icon={ShieldCheck}
+                                    content={
+                                        <Badge
+                                            variant="outline"
+                                            // ✅ Styling agar teks panjang bisa wrap ke bawah
+                                            className=" rounded-1xl border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-2 h-auto w-full block break-words"
+                                        >
+                                            {agenda.urgency || "NORMAL"}
+                                        </Badge>
+                                    }
+                                />
+                            </div>
+
                             <InfoCard label="Deadline" icon={Calendar} content={
                                 <p className="text-xs md:text-sm font-black text-[#125d72]">
                                     {agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy", { locale: id }) : "-"}
                                 </p>
                             } />
+
                             <InfoCard label="Prioritas" icon={Info} content={
                                 <div className={cn(
                                     "text-[10px] font-black italic px-2 py-0.5 rounded border w-fit uppercase",
@@ -174,7 +193,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                             </div>
                         </div>
 
-                        {/* ✅ SECTION 4: LAMPIRAN (Sudah Fix) */}
+                        {/* SECTION 4: LAMPIRAN */}
                         <div className="space-y-4">
                             <h4 className="text-[10px] font-black text-[#14a2ba] uppercase tracking-[0.2em] border-b pb-2">Lampiran Dokumen Rakordir</h4>
                             <div className="grid gap-2">
@@ -191,7 +210,6 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                                     />
                                 ))}
 
-                                {/* Fallback jika benar-benar tidak ada file sama sekali */}
                                 {!docs.ndUsulan && !docs.materi && extraDocs.length === 0 && (
                                     <div className="flex flex-col items-center justify-center p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                                         <Paperclip className="h-8 w-8 text-slate-200 mb-2" />
@@ -213,11 +231,13 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
 
 function InfoCard({ label, icon: Icon, content }: { label: string, icon: LucideIcon, content: React.ReactNode }) {
     return (
-        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-100 shadow-sm flex flex-row md:flex-col justify-between md:justify-start items-center md:items-start gap-2 hover:border-[#14a2ba]/30 transition-colors">
-            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-100 shadow-sm flex flex-row md:flex-col justify-between md:justify-start items-center md:items-start gap-2 hover:border-[#14a2ba]/30 transition-colors h-full">
+            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 shrink-0">
                 <Icon className="h-3 w-3 text-[#14a2ba]" /> {label}
             </p>
-            {content}
+            <div className="w-full">
+                {content}
+            </div>
         </div>
     )
 }
@@ -237,7 +257,6 @@ function DetailItem({ label, value, icon }: { label: string, value: string | nul
 }
 
 function FileLink({ label, path, onOpen, isExtra }: { label: string, path: string | null | undefined, onOpen: (path: string) => Promise<void>, isExtra?: boolean }) {
-    // Membersihkan path dari karakter string "null" atau "[]"
     if (!path || path === "null" || path === "" || path === "[]") return null
 
     return (

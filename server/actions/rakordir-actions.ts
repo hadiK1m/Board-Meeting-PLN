@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 import { randomUUID } from "crypto"
 import { eq, inArray } from "drizzle-orm"
 
-// ✅ Menghilangkan 'any' dengan inferensi tipe dari Drizzle
+// ✅ Type-Safety: Menggunakan inferensi tipe dari Drizzle Schema
 type NewAgenda = typeof agendas.$inferInsert;
 type ExistingAgenda = typeof agendas.$inferSelect;
 
@@ -69,18 +69,17 @@ export async function createRakordirAction(formData: FormData) {
         const proposalPath = await uploadToStorage(formData.get("proposalNote") as File, "proposal")
         const presentationPath = await uploadToStorage(formData.get("presentationMaterial") as File, "presentation")
 
-        // ✅ Mapping data secara eksplisit menggunakan tipe NewAgenda
         const insertData: NewAgenda = {
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
+            priority: formData.get("priority") as string, // ✅ Tambah Prioritas
             deadline: new Date(formData.get("deadline") as string),
-            director: formData.get("director") as string,
-            initiator: formData.get("initiator") as string,
-            support: formData.get("support") as string,
+            director: formData.get("director") as string, // ✅ Simpan String dari Multi-Select
+            initiator: formData.get("initiator") as string, // ✅ Simpan String dari Multi-Select
+            support: formData.get("support") as string, // ✅ Simpan String dari Multi-Select
             contactPerson: formData.get("contactPerson") as string,
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
-            priority: formData.get("priority") as string,
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
             status: (proposalPath || presentationPath) ? "DAPAT_DILANJUTKAN" : "DRAFT",
@@ -109,34 +108,53 @@ export async function updateRakordirAction(formData: FormData, id: string) {
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
 
-        const newProposalFile = formData.get("proposalNote") as File;
-        const newPresentationFile = formData.get("presentationMaterial") as File;
+        // Proses File (Upload Baru & Deteksi Hapus)
+        const proposalFile = formData.get("proposalNote") as File;
+        const presentationFile = formData.get("presentationMaterial") as File;
+        const deleteProposal = formData.get("delete_proposalNote") === 'true';
+        const deletePresentation = formData.get("delete_presentationMaterial") === 'true';
 
-        const newProposalPath = await uploadToStorage(newProposalFile, "proposal");
-        const newPresentationPath = await uploadToStorage(newPresentationFile, "presentation");
+        let proposalPath = existing.proposalNote;
+        let presentationPath = existing.presentationMaterial;
 
-        const filesToDelete: string[] = [];
-        if (newProposalPath && existing.proposalNote) {
-            filesToDelete.push(existing.proposalNote);
+        const filesToRemove: string[] = [];
+
+        // Logika Update Proposal
+        if (proposalFile && proposalFile.size > 0) {
+            if (existing.proposalNote) filesToRemove.push(existing.proposalNote);
+            proposalPath = await uploadToStorage(proposalFile, "proposal");
+        } else if (deleteProposal) {
+            if (existing.proposalNote) filesToRemove.push(existing.proposalNote);
+            proposalPath = null;
         }
-        if (newPresentationPath && existing.presentationMaterial) {
-            filesToDelete.push(existing.presentationMaterial);
+
+        // Logika Update Presentation
+        if (presentationFile && presentationFile.size > 0) {
+            if (existing.presentationMaterial) filesToRemove.push(existing.presentationMaterial);
+            presentationPath = await uploadToStorage(presentationFile, "presentation");
+        } else if (deletePresentation) {
+            if (existing.presentationMaterial) filesToRemove.push(existing.presentationMaterial);
+            presentationPath = null;
         }
 
-        if (filesToDelete.length > 0) {
-            await deleteFromStorage(filesToDelete);
-        }
+        // Cleanup File Usang
+        if (filesToRemove.length > 0) await deleteFromStorage(filesToRemove);
 
-        // ✅ Update dengan tipe partial dari NewAgenda
+        // Eksekusi Update ke Database
         await db.update(agendas).set({
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
+            priority: formData.get("priority") as string, // ✅ Update Prioritas
             deadline: new Date(formData.get("deadline") as string),
+            director: formData.get("director") as string, // ✅ Update Multi-Select String
+            initiator: formData.get("initiator") as string,
+            support: formData.get("support") as string,
             contactPerson: formData.get("contactPerson") as string,
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
-            proposalNote: newProposalPath || existing.proposalNote,
-            presentationMaterial: newPresentationPath || existing.presentationMaterial,
+            proposalNote: proposalPath,
+            presentationMaterial: presentationPath,
+            notRequiredFiles: formData.get("notRequiredFiles") as string, // ✅ Simpan status dokumen
             updatedAt: new Date(),
         }).where(eq(agendas.id, id));
 
@@ -165,16 +183,13 @@ export async function deleteBulkRakordirAction(ids: string[]) {
             if (item.proposalNote) filesToDelete.push(item.proposalNote);
             if (item.presentationMaterial) filesToDelete.push(item.presentationMaterial);
 
-            // ✅ Fix Error TS2345: Memastikan argument JSON.parse adalah string
             if (item.supportingDocuments && typeof item.supportingDocuments === 'string') {
                 try {
                     const parsed = JSON.parse(item.supportingDocuments);
                     if (Array.isArray(parsed)) {
                         filesToDelete.push(...parsed.map(String));
                     }
-                } catch {
-                    // ignore error
-                }
+                } catch { /* ignore error */ }
             }
         });
 
@@ -188,5 +203,34 @@ export async function deleteBulkRakordirAction(ids: string[]) {
         const msg = error instanceof Error ? error.message : "Gagal hapus massal"
         console.error("[ACTION-DELETE-ERROR]", msg)
         return { success: false, error: msg }
+    }
+}
+
+/**
+ * ACTION: DELETE SINGLE RAKORDIR
+ */
+export async function deleteRakordirAction(id: string) {
+    console.log(`[DEBUG-ACTION] Menghapus Agenda Rakordir ID: ${id}`);
+    try {
+        const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
+        if (!existing) throw new Error("Agenda tidak ditemukan");
+
+        // Kumpulkan file untuk dihapus
+        const filesToDelete: string[] = [];
+        if (existing.proposalNote) filesToDelete.push(existing.proposalNote);
+        if (existing.presentationMaterial) filesToDelete.push(existing.presentationMaterial);
+
+        // Hapus file dari storage
+        if (filesToDelete.length > 0) await deleteFromStorage(filesToDelete);
+
+        // Hapus dari database
+        await db.delete(agendas).where(eq(agendas.id, id));
+
+        revalidatePath("/agenda/rakordir");
+        return { success: true };
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : "Gagal menghapus agenda";
+        console.error("[ACTION-DELETE-ERROR]", msg);
+        return { success: false, error: msg };
     }
 }

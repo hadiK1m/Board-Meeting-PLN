@@ -47,6 +47,7 @@ export async function createAgendaAction(formData: FormData) {
 
     try {
         const uploadedUrls: Partial<Record<AgendaFileField, string | null>> = {}
+        // Parse string JSON dari formData menjadi Array
         const notRequiredFiles = JSON.parse(formData.get("notRequiredFiles") as string || "[]") as string[];
 
         for (const field of FILE_FIELDS) {
@@ -77,7 +78,6 @@ export async function createAgendaAction(formData: FormData) {
             (uploadedUrls[field] !== null) || notRequiredFiles.includes(field)
         );
 
-        // ✅ Menggunakan tipe NewAgenda untuk keamanan data
         const insertData: NewAgenda = {
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
@@ -90,8 +90,8 @@ export async function createAgendaAction(formData: FormData) {
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
             ...uploadedUrls,
-            supportingDocuments: JSON.stringify(supportingPaths),
-            notRequiredFiles: JSON.stringify(notRequiredFiles),
+            supportingDocuments: supportingPaths,
+            notRequiredFiles: notRequiredFiles, // Simpan sebagai Array
             status: allFilesHandled ? "DAPAT_DILANJUTKAN" : "DRAFT",
             meetingType: "RADIR",
         };
@@ -124,6 +124,8 @@ export async function updateAgendaAction(id: string, formData: FormData) {
         }
 
         const updatedUrls: Partial<Record<AgendaFileField, string | null>> = {}
+        // ✅ FIX: Parse string dari FormData menjadi Array object sebelum disimpan ke DB
+        // Ini mencegah "Double Stringify" di kolom JSONB Postgres
         const notRequiredFiles = JSON.parse(formData.get("notRequiredFiles") as string || "[]") as string[];
 
         for (const field of FILE_FIELDS) {
@@ -162,7 +164,7 @@ export async function updateAgendaAction(id: string, formData: FormData) {
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
             ...updatedUrls,
-            notRequiredFiles: JSON.stringify(notRequiredFiles),
+            notRequiredFiles: notRequiredFiles, // ✅ Kirim Array, jangan string
             status: allFilesHandled ? "DAPAT_DILANJUTKAN" : "DRAFT",
             updatedAt: new Date(),
         }).where(eq(agendas.id, id))
@@ -176,9 +178,8 @@ export async function updateAgendaAction(id: string, formData: FormData) {
     }
 }
 
-/**
- * 3. ACTION: Scheduling & Workflow
- */
+// ... (Sisa fungsi scheduleAgendaAction, getSignedFileUrl, deleteBulkAgendasAction, dll tetap sama) ...
+// (Pastikan fungsi deleteAgendaAction, cancelAgendaAction, resumeAgendaAction, rollbackAgendaAction, updateScheduledMeetingAction ada di bawah sini seperti kode asli Anda)
 export async function scheduleAgendaAction(data: UpdateMeetingData) {
     try {
         await db.update(agendas).set({
@@ -200,9 +201,6 @@ export async function scheduleAgendaAction(data: UpdateMeetingData) {
     }
 }
 
-/**
- * 4. ACTION: File Management (Signed URLs)
- */
 export async function getSignedFileUrl(path: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -216,9 +214,6 @@ export async function getSignedFileUrl(path: string) {
     return data.signedUrl;
 }
 
-/**
- * 5. ACTION: Delete Logic
- */
 export async function deleteBulkAgendasAction(ids: string[]) {
     const supabase = await createClient()
     try {
@@ -251,22 +246,16 @@ export async function deleteBulkAgendasAction(ids: string[]) {
     }
 }
 
-/**
- * ✅ FIX: Menambahkan kembali fungsi Delete Satuan (RADIR)
- * Menghapus data dari DB dan membersihkan file terkait di Storage
- */
 export async function deleteAgendaAction(id: string) {
     const supabase = await createClient()
 
     try {
-        // 1. Cari data agenda untuk mendapatkan path file lampiran
         const dataAgenda = await db.query.agendas.findFirst({
             where: eq(agendas.id, id),
         })
 
         if (!dataAgenda) return { success: false, error: "Data tidak ditemukan." }
 
-        // 2. Kumpulkan semua path file yang ada
         const filesToDelete: string[] = []
 
         FILE_FIELDS.forEach(field => {
@@ -274,7 +263,6 @@ export async function deleteAgendaAction(id: string) {
             if (typeof path === 'string' && path) filesToDelete.push(path)
         })
 
-        // Parsing dokumen pendukung
         if (dataAgenda.supportingDocuments) {
             try {
                 const extra = typeof dataAgenda.supportingDocuments === 'string'
@@ -288,7 +276,6 @@ export async function deleteAgendaAction(id: string) {
             }
         }
 
-        // 3. Hapus file dari Supabase Storage jika ada
         if (filesToDelete.length > 0) {
             const { error: storageError } = await supabase.storage
                 .from('agenda-attachments')
@@ -299,7 +286,6 @@ export async function deleteAgendaAction(id: string) {
             }
         }
 
-        // 4. Hapus data dari Database
         await db.delete(agendas).where(eq(agendas.id, id))
 
         revalidatePath("/agenda/radir")
@@ -313,21 +299,16 @@ export async function deleteAgendaAction(id: string) {
         return { success: false, error: msg }
     }
 }
-// ✅ Skema validasi menggunakan Zod untuk type safety
+
 const cancelSchema = z.object({
     id: z.string().uuid(),
     reason: z.string().min(5, "Alasan pembatalan minimal 5 karakter"),
 });
 
-/**
- * ✅ ACTION: Cancel Agenda (RADIR)
- * Mengubah status menjadi DIBATALKAN dan menyimpan alasan pembatalan
- */
 export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     console.log(`[DEBUG-ACTION] Membatalkan Agenda ID: ${data.id}`);
 
     try {
-        // Validasi input
         const validated = cancelSchema.parse(data);
 
         await db.update(agendas)
@@ -338,7 +319,6 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
             })
             .where(eq(agendas.id, validated.id));
 
-        // Revalidasi agar UI di Agenda Radir dan Agenda Siap sinkron
         revalidatePath("/agenda/radir");
         revalidatePath("/agenda-siap/radir");
 
@@ -351,10 +331,6 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     }
 }
 
-/**
- * ✅ ACTION: Resume Agenda (RADIR)
- * Memulihkan agenda yang sebelumnya DIBATALKAN kembali ke status DAPAT_DILANJUTKAN
- */
 export async function resumeAgendaAction(id: string) {
     console.log(`[DEBUG-ACTION] Memulihkan Agenda ID: ${id}`);
 
@@ -362,12 +338,11 @@ export async function resumeAgendaAction(id: string) {
         await db.update(agendas)
             .set({
                 status: "DAPAT_DILANJUTKAN",
-                cancellationReason: null, // Menghapus alasan pembatalan
+                cancellationReason: null,
                 updatedAt: new Date()
             })
             .where(eq(agendas.id, id));
 
-        // Revalidasi halaman terkait
         revalidatePath("/agenda-siap/radir");
         revalidatePath("/agenda/radir");
 
@@ -380,10 +355,6 @@ export async function resumeAgendaAction(id: string) {
     }
 }
 
-/**
- * ✅ ACTION: Lanjut Ke Agenda Siap (RADIR)
- * Digunakan untuk mengubah status draft menjadi siap dijadwalkan
- */
 export async function lanjutKeAgendaSiapAction(id: string) {
     console.log(`[DEBUG-ACTION] Meneruskan ke Agenda Siap ID: ${id}`);
 
@@ -407,11 +378,6 @@ export async function lanjutKeAgendaSiapAction(id: string) {
     }
 }
 
-/**
- * ✅ ACTION: Rollback Agenda (RADIR & RAKORDIR)
- * Menghapus data jadwal dan mengembalikan status ke 'DAPAT_DILANJUTKAN'
- * Digunakan pada modul Jadwal Rapat.
- */
 export async function rollbackAgendaAction(id: string) {
     console.log(`[DEBUG-ACTION] Melakukan Rollback Jadwal ID: ${id}`);
 
@@ -429,7 +395,6 @@ export async function rollbackAgendaAction(id: string) {
             })
             .where(eq(agendas.id, id));
 
-        // Revalidasi semua halaman yang terpengaruh oleh perubahan status
         revalidatePath("/jadwal-rapat");
         revalidatePath("/agenda-siap/radir");
         revalidatePath("/agenda-siap/rakordir");
@@ -445,21 +410,14 @@ export async function rollbackAgendaAction(id: string) {
     }
 }
 
-/**
- * ✅ ACTION: Update Scheduled Meeting (RADIR & RAKORDIR)
- * Digunakan untuk memperbarui detail jadwal rapat yang sudah ada.
- */
 export async function updateScheduledMeetingAction(data: UpdateMeetingData) {
     console.log(`[DEBUG-ACTION] Memperbarui Jadwal Rapat ID: ${data.id}`);
 
     try {
-        // 1. Validasi ID
         if (!data.id) {
             return { success: false, error: "ID Agenda tidak ditemukan" };
         }
 
-        // 2. Eksekusi Update ke Database
-        // Menggunakan mapping yang aman sesuai skema database Anda
         await db.update(agendas)
             .set({
                 executionDate: data.executionDate,
@@ -468,12 +426,11 @@ export async function updateScheduledMeetingAction(data: UpdateMeetingData) {
                 meetingMethod: data.meetingMethod,
                 meetingLocation: data.location || null,
                 meetingLink: data.link || null,
-                status: "DIJADWALKAN", // Memastikan status tetap terkunci
+                status: "DIJADWALKAN",
                 updatedAt: new Date(),
             })
             .where(eq(agendas.id, data.id));
 
-        // 3. Revalidasi semua halaman terkait agar data terbaru langsung muncul
         revalidatePath("/jadwal-rapat");
         revalidatePath("/agenda-siap/radir");
         revalidatePath("/agenda-siap/rakordir");

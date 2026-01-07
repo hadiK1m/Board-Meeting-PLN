@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { FileEdit, Loader2, X, FileText, Briefcase, Paperclip, EyeOff } from "lucide-react"
+import { FileEdit, Loader2, X, FileText, Paperclip, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
-import Select, { StylesConfig, MultiValue } from "react-select"
+import Select, { StylesConfig } from "react-select"
 import { differenceInDays } from "date-fns"
 
 import { Button } from "@/components/ui/button"
@@ -28,15 +28,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea"
 
 import { updateAgendaAction } from "@/server/actions/agenda-actions"
 import { DIREKTURE_PEMRAKARSA, PEMRAKARSA, SUPPORT, extractCode } from "@/lib/MasterData"
 
+// Interface disamakan dengan yang dikirim dari page.tsx
 interface AgendaEdit {
     id: string
     title?: string
     urgency?: string
-    deadline?: string | Date
+    deadline?: string | Date | null
     priority?: string | null
     director?: string | null
     initiator?: string | null
@@ -96,7 +98,6 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
     const [existingFiles, setExistingFiles] = useState<Record<string, string | null>>({})
     const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
 
-    // State untuk melacak file yang tidak diperlukan
     const [notRequiredFiles, setNotRequiredFiles] = useState<string[]>([])
 
     useEffect(() => {
@@ -106,6 +107,7 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
             setSelectedPemrakarsa((agenda.initiator ?? "").split(/,\s*/).filter(Boolean).map(i => ({ label: i, value: i })))
             setSelectedSupport((agenda.support ?? "").split(/,\s*/).filter(Boolean).map(s => ({ label: s, value: s })))
 
+            // ✅ INI KUNCINYA: Mengisi existingFiles dari data yang baru ditambahkan di page.tsx
             setExistingFiles({
                 legalReview: agenda.legalReview ?? null,
                 riskReview: agenda.riskReview ?? null,
@@ -116,8 +118,22 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
                 presentationMaterial: agenda.presentationMaterial ?? null,
             })
 
-            // Sinkronkan notRequiredFiles dari database
-            setNotRequiredFiles(agenda.notRequiredFiles ?? [])
+            const rawData = agenda.notRequiredFiles;
+            let finalArray: string[] = [];
+
+            if (rawData) {
+                try {
+                    let parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+                    if (typeof parsed === 'string') {
+                        parsed = JSON.parse(parsed);
+                    }
+                    finalArray = Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    console.error("Gagal parsing notRequiredFiles:", e);
+                    finalArray = Array.isArray(agenda.notRequiredFiles) ? agenda.notRequiredFiles : [];
+                }
+            }
+            setNotRequiredFiles(finalArray);
         }
     }, [agenda, open])
 
@@ -145,7 +161,6 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
         formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
         formData.set("priority", prioritas)
 
-        // Kirimkan state notRequiredFiles terbaru ke server
         formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
 
         try {
@@ -189,7 +204,7 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[95vw] sm:max-w-[800px] h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl">
+            <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
                     <DialogTitle className="text-xl font-bold flex items-center gap-2 uppercase">
                         <FileEdit className="h-5 w-5 text-[#efe62f]" /> Ubah Usulan Agenda
@@ -205,15 +220,24 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
                                     <FileText className="h-5 w-5 text-[#14a2ba]" />
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Informasi Utama</h3>
                                 </div>
+
                                 <div className="grid gap-3">
                                     <Label className="font-bold text-[#125d72]">Judul Agenda</Label>
                                     <Input name="title" defaultValue={agenda.title} required placeholder="Masukkan judul agenda rapat..." />
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Urgensi</Label>
-                                        <Input name="urgency" defaultValue={agenda.urgency} placeholder="Sangat Segera / Normal" required />
-                                    </div>
+
+                                <div className="grid gap-3">
+                                    <Label className="font-bold text-[#125d72]">Urgensi</Label>
+                                    <Textarea
+                                        name="urgency"
+                                        defaultValue={agenda.urgency || ""}
+                                        placeholder="Jelaskan urgensi pembahasan agenda ini secara mendetail..."
+                                        required
+                                        className="min-h-25 bg-[#f8fafc] border-[#e2e8f0] focus:border-[#14a2ba] focus:ring-[#14a2ba]"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="grid gap-2">
                                         <Label className="font-bold text-[#125d72]">Deadline Rapat</Label>
                                         <Input
@@ -236,7 +260,7 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
 
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
-                                    <PlusCircle className="h-5 w-5 text-[#14a2ba]" />
+                                    <FileEdit className="h-5 w-5 text-[#14a2ba]" /> {/* Just using FileEdit here as wrapper icon */}
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">PEMRAKARSA & NARAHUBUNG</h3>
                                 </div>
                                 <div className="grid gap-6">
@@ -279,7 +303,6 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
                                             <div className="flex justify-between items-center mb-2">
                                                 <Label className="text-[10px] font-black text-[#125d72] uppercase opacity-70 group-hover:opacity-100">{doc.label}</Label>
 
-                                                {/* Tombol Toggle "Dibutuhkan" jika statusnya "Tidak Diperlukan" */}
                                                 {!existingFiles[doc.id] && (
                                                     <Button
                                                         type="button"
@@ -335,7 +358,6 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
                                         </div>
                                     ))}
 
-                                    {/* DOKUMEN PENDUKUNG LAINNYA */}
                                     <div className={`p-4 rounded-lg border-2 border-dashed col-span-1 md:col-span-2 transition-all shadow-inner ${notRequiredFiles.includes('supportingDocuments') ? 'bg-slate-100 opacity-60 border-slate-300' : 'border-[#14a2ba] bg-white'}`}>
                                         <div className="flex justify-between items-center mb-3">
                                             <Label className={`text-[10px] font-black uppercase ${notRequiredFiles.includes('supportingDocuments') ? 'text-slate-400' : 'text-[#14a2ba]'}`}>
@@ -377,7 +399,3 @@ export function EditAgendaModal({ agenda, open, onOpenChange }: { agenda: Agenda
         </Dialog>
     )
 }
-
-const PlusCircle = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
-);

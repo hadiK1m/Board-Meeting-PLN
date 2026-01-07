@@ -3,7 +3,7 @@ import { uuid, text, varchar, timestamp, date, time, pgTable, jsonb } from "driz
 export const agendas = pgTable("agendas", {
     id: uuid("id").defaultRandom().primaryKey(),
     title: text("title").notNull(),
-    urgency: text("urgency").notNull(),
+    urgency: varchar("urgency", { length: 50 }),
     deadline: timestamp("deadline").notNull(),
     priority: text("priority").notNull(),
     director: text("director").notNull(),

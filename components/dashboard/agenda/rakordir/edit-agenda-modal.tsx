@@ -6,20 +6,19 @@ import {
     FileText,
     Loader2,
     X,
-    Save,
-    User,
-    Building2,
-    HardDrive,
-    EyeOff
+    Paperclip,
+    EyeOff,
 } from "lucide-react"
 import { toast } from "sonner"
-import { format } from "date-fns"
+// ✅ Import differenceInDays untuk logika prioritas
+import { format, differenceInDays } from "date-fns"
+import Image from "next/image"
+import Select, { StylesConfig } from "react-select"
 
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -40,18 +39,22 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 
 import { updateRakordirAction } from "@/server/actions/rakordir-actions"
 import { RakordirAgenda } from "./rakordir-client"
-import Image from "next/image"
-import { cn } from "@/lib/utils"
+import {
+    DIREKTURE_PEMRAKARSA,
+    PEMRAKARSA,
+    SUPPORT,
+    extractCode
+} from "@/lib/MasterData"
 
-// ✅ Menghilangkan 'any' dengan mendefinisikan interface yang lengkap
+// --- TYPES & HELPER ---
+
 interface ExtendedRakordirAgenda extends RakordirAgenda {
     position?: string | null;
     phone?: string | null;
     director?: string | null;
-    // keep same shape as base type
     initiator: string | null;
     support?: string | null;
-    // stored as JSON string or array in DB
+    priority?: string | null;
     notRequiredFiles?: string | string[] | null;
     proposalNote?: string | null;
     presentationMaterial?: string | null;
@@ -63,92 +66,168 @@ interface EditRakordirModalProps {
     onOpenChange: (open: boolean) => void
 }
 
+type Option = { label: string; value: string }
+
+// Helper: Mapping MasterData string ke Option Object
+const mapToOptions = (data: string[]) => data.map(item => ({
+    value: extractCode(item),
+    label: item
+}));
+
+const directorOptions = mapToOptions(DIREKTURE_PEMRAKARSA);
+const initiatorOptions = mapToOptions(PEMRAKARSA);
+const supportOptions = mapToOptions(SUPPORT);
+
+const selectStyles: StylesConfig<Option, true> = {
+    control: (base) => ({
+        ...base,
+        borderColor: "#d9d9d9",
+        "&:hover": { borderColor: "#14a2ba" },
+        boxShadow: "none",
+        borderRadius: "0.375rem",
+        fontSize: "0.875rem",
+        minHeight: "44px",
+    }),
+    multiValue: (base) => ({
+        ...base,
+        backgroundColor: "#e7f6f9",
+        borderRadius: "0.25rem",
+        border: "1px solid #14a2ba",
+    }),
+    multiValueLabel: (base) => ({
+        ...base,
+        color: "#125d72",
+        fontWeight: "600",
+        fontSize: "0.75rem",
+        padding: "2px 6px",
+    }),
+    multiValueRemove: (base) => ({
+        ...base,
+        color: "#125d72",
+        "&:hover": { backgroundColor: "#14a2ba", color: "white" },
+    }),
+    menu: (base) => ({
+        ...base,
+        zIndex: 9999,
+        fontSize: "0.875rem",
+    }),
+    option: (base, state) => ({
+        ...base,
+        backgroundColor: state.isSelected ? "#14a2ba" : state.isFocused ? "#e7f6f9" : "white",
+        color: state.isSelected ? "white" : "#1e293b",
+        cursor: "pointer",
+    })
+};
+
 export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirModalProps) {
     const [isPending, setIsPending] = useState(false)
-    const [isClient, setIsClient] = useState(false)
     const [judul, setJudul] = useState(agenda.title || "")
+
+    // ✅ State Prioritas
+    const [prioritas, setPrioritas] = useState<string>("Low")
+
+    // State untuk Select Options
+    const [selectedDirectors, setSelectedDirectors] = useState<Option[]>([])
+    const [selectedInitiators, setSelectedInitiators] = useState<Option[]>([])
+    const [selectedSupports, setSelectedSupports] = useState<Option[]>([])
+
     const [notRequired, setNotRequired] = useState<string[]>([])
     const [existingFiles, setExistingFiles] = useState<Record<string, string | null>>({})
     const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
 
     useEffect(() => {
-        setIsClient(true)
-        setJudul(agenda.title || "")
+        if (open) {
+            setJudul(agenda.title || "")
+            // ✅ Set Initial Priority
+            setPrioritas(agenda.priority ?? "Low")
 
-        // Logika Sinkronisasi Status Dokumen dari Database
-        if (agenda.notRequiredFiles) {
-            try {
-                const parsed = typeof agenda.notRequiredFiles === "string"
-                    ? JSON.parse(agenda.notRequiredFiles)
-                    : agenda.notRequiredFiles
-                setNotRequired(Array.isArray(parsed) ? parsed : [])
-            } catch {
+            const findOptions = (dbValue: string | null | undefined, options: Option[]) => {
+                if (!dbValue) return [];
+                const values = dbValue.split(/,\s*/).filter(Boolean);
+                return options.filter(opt => values.includes(opt.value));
+            };
+
+            setSelectedDirectors(findOptions(agenda.director, directorOptions));
+            setSelectedInitiators(findOptions(agenda.initiator, initiatorOptions));
+            setSelectedSupports(findOptions(agenda.support, supportOptions));
+
+            if (agenda.notRequiredFiles) {
+                try {
+                    const parsed = typeof agenda.notRequiredFiles === "string"
+                        ? JSON.parse(agenda.notRequiredFiles)
+                        : agenda.notRequiredFiles
+                    setNotRequired(Array.isArray(parsed) ? parsed : [])
+                } catch {
+                    setNotRequired([])
+                }
+            } else {
                 setNotRequired([])
             }
-        } else {
-            setNotRequired([])
-        }
 
-        // Inisialisasi existingFiles agar UI menampilkan file saat ini (sebelum diubah)
-        setExistingFiles({
-            proposalNote: agenda.proposalNote ?? null,
-            presentationMaterial: agenda.presentationMaterial ?? null,
-        })
-    }, [agenda])
+            setExistingFiles({
+                proposalNote: agenda.proposalNote ?? null,
+                presentationMaterial: agenda.presentationMaterial ?? null,
+            })
+        }
+    }, [agenda, open])
+
+    // ✅ LOGIKA PERHITUNGAN PRIORITAS OTOMATIS
+    const handleDeadlineChange = (val: string) => {
+        if (!val) return
+        const days = differenceInDays(new Date(val), new Date())
+        if (days <= 7) setPrioritas("High")
+        else if (days <= 14) setPrioritas("Medium")
+        else setPrioritas("Low")
+    }
 
     const toggleNotRequired = (field: string) => {
         setNotRequired(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field])
     }
 
-    if (!isClient) return null
-
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setIsPending(true)
 
-        console.log("[CLIENT-DEBUG] Memulai proses update Rakordir ID:", agenda.id)
         const formData = new FormData(event.currentTarget)
 
-        // ✅ ESLint Fix: Menggunakan 'const' karena variabel tidak di-reassign
-        console.log("[CLIENT-DEBUG-PAYLOAD] Memeriksa isi data...");
-        for (const [key, value] of formData.entries()) {
-            if (value instanceof File) {
-                console.log(`- ${key}: File [${value.name}] (${value.size} bytes)`);
-            } else {
-                console.log(`- ${key}: ${value}`);
-            }
-        }
-
         try {
-            // Sertakan status dokumen yang tidak dibutuhkan
+            // ✅ Masukkan nilai Priority dari State (bukan dari input karena inputnya visual div)
+            formData.set("priority", prioritas)
+
+            formData.set("director", selectedDirectors.map(d => d.value).join(", "))
+            formData.set("initiator", selectedInitiators.map(i => i.value).join(", "))
+            formData.set("support", selectedSupports.map(s => s.value).join(", "))
             formData.append("notRequiredFiles", JSON.stringify(notRequired))
+
+            const fileFields = ['proposalNote', 'presentationMaterial'] as const;
+
+            for (const f of fileFields) {
+                const originalPath = agenda[f];
+                const current = existingFiles[f]
+
+                if (originalPath && current === null) {
+                    formData.append(`delete_${f}`, 'true')
+                }
+            }
 
             const result = await updateRakordirAction(formData, agenda.id)
 
             if (result.success) {
-                console.log("[CLIENT-DEBUG] Server Response: SUCCESS")
                 toast.custom((t) => (
-                    // ✅ Tailwind Fix: Menggunakan min-w-87.5
-                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-87.5">
-                        <div className="shrink-0">
-                            <Image src="/logo-pln.png" alt="PLN" width={40} height={40} />
-                        </div>
+                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg">
+                        <Image src="/logo-pln.png" alt="PLN" width={40} height={40} />
                         <div className="flex-1">
-                            <h4 className="text-sm font-bold text-[#125d72]">Data Diperbarui</h4>
-                            <p className="text-xs text-slate-500 italic">Agenda Rakordir berhasil diupdate.</p>
+                            <h4 className="text-sm font-bold text-[#125d72]">Berhasil Diperbarui</h4>
+                            <p className="text-xs text-slate-500 italic">Data agenda Rakordir telah diperbarui.</p>
                         </div>
-                        <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
-                            <X className="h-4 w-4" />
-                        </button>
+                        <button onClick={() => toast.dismiss(t)}><X className="h-4 w-4 text-slate-300 hover:text-red-500" /></button>
                     </div>
                 ))
                 onOpenChange(false)
             } else {
-                console.error("[CLIENT-DEBUG] Server Response: ERROR", result.error)
                 toast.error(result.error || "Gagal memperbarui data")
             }
-        } catch (error) {
-            console.error("[CLIENT-DEBUG] Critical Exception:", error)
+        } catch {
             toast.error("Terjadi kesalahan koneksi")
         } finally {
             setIsPending(false)
@@ -157,27 +236,22 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                // ✅ Tailwind Fix: Menggunakan sm:max-w-200
-                className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white"
-            >
+            <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
-                    <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2 uppercase">
                         <FileEdit className="h-5 w-5 text-[#efe62f]" /> Edit Usulan Rakordir
                     </DialogTitle>
-                    <DialogDescription className="text-[#e7f6f9]/90 italic font-medium">
-                        Ubah informasi agenda Rakordir. Kosongkan lampiran jika tidak ingin mengganti file lama.
-                    </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
                     <ScrollArea className="flex-1 h-0 px-8 py-6 bg-white">
                         <div className="grid gap-10 pb-10">
 
+                            {/* SECTION 1: INFORMASI UTAMA */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <FileText className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-widest">Informasi Utama</h3>
+                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Informasi Utama</h3>
                                 </div>
                                 <div className="grid gap-3">
                                     <Label className="font-bold text-[#125d72]">Judul Agenda</Label>
@@ -186,16 +260,14 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                         value={judul}
                                         onChange={(e) => setJudul(e.target.value)}
                                         required
-                                        className="font-semibold"
+                                        placeholder="Masukkan judul agenda rakordir..."
                                     />
-                                    <div className="p-3 bg-[#e7f6f9] border-l-4 border-[#14a2ba] rounded-sm italic text-sm text-[#125d72]">
-                                        Preview: &quot;Laporan tentang {judul}&quot;
-                                    </div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* ✅ GRID 3 KOLOM DENGAN URUTAN & LOGIKA BARU */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="grid gap-2">
                                         <Label className="font-bold text-[#125d72]">Urgensi</Label>
-                                        <Input name="urgency" defaultValue={agenda.urgency || ""} required />
+                                        <Input name="urgency" defaultValue={agenda.urgency || ""} placeholder="Contoh: Segera" required />
                                     </div>
                                     <div className="grid gap-2">
                                         <Label className="font-bold text-[#125d72]">Deadline Rapat</Label>
@@ -203,63 +275,88 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                             name="deadline"
                                             type="date"
                                             defaultValue={agenda.deadline ? format(new Date(agenda.deadline), "yyyy-MM-dd") : ""}
+                                            onChange={(e) => handleDeadlineChange(e.target.value)}
                                             required
                                         />
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* SECTION: PEMRAKARSA & SUPPORT */}
-                            <div className="space-y-6 mt-8">
-                                <div className="flex items-center gap-2 border-b pb-2">
-                                    <Building2 className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-bold text-[#125d72] uppercase text-xs">Struktur Pemrakarsa</h3>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="grid gap-2">
-                                        <Label className="font-bold italic text-xs">Direktur Pemrakarsa</Label>
-                                        <Input name="director" defaultValue={agenda.director || ""} placeholder="Contoh: Direktur Utama" />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label className="font-bold italic text-xs">Divisi Pemrakarsa</Label>
-                                        <Input name="initiator" defaultValue={agenda.initiator || ""} placeholder="Contoh: Divisi Hukum" />
-                                    </div>
-                                    <div className="grid gap-2 md:col-span-2">
-                                        <Label className="font-bold italic text-xs text-blue-600">Support (Divisi Terkait)</Label>
-                                        <Input name="support" defaultValue={agenda.support || ""} placeholder="Contoh: Divisi Risiko, Divisi Keuangan" />
+                                        <Label className="font-bold text-[#125d72]">Prioritas</Label>
+                                        {/* Tampilan Visual Prioritas (Bukan Input Edit) */}
+                                        <div className="h-10 flex items-center px-4 border-2 rounded-md bg-[#f8fafc] font-black italic text-xs">
+                                            <span className={prioritas === 'High' ? 'text-red-600' : prioritas === 'Medium' ? 'text-orange-500' : 'text-green-600'}>
+                                                {prioritas}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
+                            {/* SECTION 2: PEMRAKARSA & NARAHUBUNG (DIGABUNG) */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
-                                    <User className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-widest">Pemrakarsa & Narahubung</h3>
+                                    <PlusCircle className="h-5 w-5 text-[#14a2ba]" />
+                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">PEMRAKARSA & NARAHUBUNG</h3>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid gap-6">
+                                    {/* 1. Direktur Pemrakarsa (Full Width) */}
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Nama PIC</Label>
-                                        <Input name="contactPerson" defaultValue={agenda.contactPerson || ""} required />
+                                        <Label className="font-bold text-[#125d72]">Direktur Pemrakarsa</Label>
+                                        <Select
+                                            isMulti
+                                            styles={selectStyles}
+                                            options={directorOptions}
+                                            value={selectedDirectors}
+                                            onChange={(v) => setSelectedDirectors(v as Option[])}
+                                        />
                                     </div>
+                                    {/* 2. Divisi Pemrakarsa (Full Width) */}
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Jabatan PIC</Label>
-                                        <Input name="position" defaultValue={agenda.position || ""} required />
+                                        <Label className="font-bold text-[#125d72]">Divisi Pemrakarsa</Label>
+                                        <Select
+                                            isMulti
+                                            styles={selectStyles}
+                                            options={initiatorOptions}
+                                            value={selectedInitiators}
+                                            onChange={(v) => setSelectedInitiators(v as Option[])}
+                                        />
                                     </div>
+                                    {/* 3. Support (Full Width) */}
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">No HP</Label>
-                                        <Input name="phone" defaultValue={agenda.phone || ""} required />
+                                        <Label className="font-bold text-[#125d72]">Support</Label>
+                                        <Select
+                                            isMulti
+                                            styles={selectStyles}
+                                            options={supportOptions}
+                                            value={selectedSupports}
+                                            onChange={(v) => setSelectedSupports(v as Option[])}
+                                        />
+                                    </div>
+                                    {/* 4. Narahubung (3 Columns) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="grid gap-2">
+                                            <Label className="font-bold text-[#125d72]">Narahubung</Label>
+                                            <Input name="contactPerson" defaultValue={agenda.contactPerson || ""} required />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label className="font-bold text-[#125d72]">Jabatan</Label>
+                                            <Input name="position" defaultValue={agenda.position || ""} required />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label className="font-bold text-[#125d72]">No HP/WA</Label>
+                                            <Input name="phone" defaultValue={agenda.phone || ""} required />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* SECTION: MANAJEMEN DOKUMEN */}
+                            {/* SECTION 3: LAMPIRAN */}
                             <div className="space-y-6">
-                                <div className="flex items-center gap-2 border-b pb-2">
-                                    <HardDrive className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-bold text-[#125d72] uppercase text-xs">Update Lampiran</h3>
+                                <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
+                                    <Paperclip className="h-5 w-5 text-[#14a2ba]" />
+                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Lampiran Dokumen (PDF)</h3>
                                 </div>
 
-                                <div className="grid gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {[
                                         { id: "proposalNote", label: "ND Usulan Agenda" },
                                         { id: "presentationMaterial", label: "Materi Presentasi" }
@@ -298,7 +395,7 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                                                 <AlertDialogHeader>
                                                                     <AlertDialogTitle>Hapus lampiran?</AlertDialogTitle>
                                                                     <AlertDialogDescription>
-                                                                        File akan dihapus dari bucket dan database ketika Anda menekan &quot;Ya, hapus&quot;. Tindakan ini tidak dapat dibatalkan setelah disimpan.
+                                                                        File akan dihapus dari bucket dan database. Tindakan ini tidak dapat dibatalkan setelah disimpan.
                                                                     </AlertDialogDescription>
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
@@ -360,15 +457,12 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                         <Button
                             type="submit"
                             disabled={isPending}
-                            // ✅ Tailwind Fix: Menggunakan min-w-50
-                            className={cn(
-                                "bg-[#125d72] hover:bg-[#14a2ba] text-white font-bold px-8 shadow-lg min-w-50"
-                            )}
+                            className="bg-[#14a2ba] hover:bg-[#125d72] text-white font-bold px-8 shadow-lg min-w-45"
                         >
                             {isPending ? (
                                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</>
                             ) : (
-                                <><Save className="mr-2 h-4 w-4" /> Simpan Perubahan</>
+                                "Simpan Perubahan"
                             )}
                         </Button>
                     </DialogFooter>
@@ -377,3 +471,8 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
         </Dialog>
     )
 }
+
+// Custom Icon untuk menyamakan dengan Referensi
+const PlusCircle = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
+);

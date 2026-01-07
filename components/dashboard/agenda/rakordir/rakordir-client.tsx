@@ -43,6 +43,17 @@ import {
 } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+// ✅ Import komponen Alert Dialog
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogAction,
+    AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -50,9 +61,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DetailAgendaSheet } from "./detail-agenda-sheet"
 import { AddRakordirDialog } from "./add-agenda-dialog"
 import { EditRakordirModal } from "./edit-agenda-modal"
-import { deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
+import { deleteRakordirAction } from "@/server/actions/rakordir-actions"
 import { toast } from "sonner"
 import Image from "next/image"
+import { deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
 
 export interface RakordirAgenda {
     id: string
@@ -69,8 +81,6 @@ interface RakordirClientProps {
 }
 
 export function RakordirClient({ initialData }: RakordirClientProps) {
-    // ✅ Fix Hydration: avoid using a window-based useState initializer which differs between server and client.
-    // Use an effect-mounted flag so initial server and first client render match (both false), then enable client UI.
     const [isClient, setIsClient] = useState(false)
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
@@ -83,12 +93,16 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [detailOpen, setDetailOpen] = useState(false)
     const [selectedDetail, setSelectedDetail] = useState<RakordirAgenda | null>(null)
-    // ✅ Edit modal state
+
+    // Edit modal state
     const [editOpen, setEditOpen] = useState(false)
     const [selectedEdit, setSelectedEdit] = useState<RakordirAgenda | null>(null)
 
-    // set mounted flag on client only to avoid SSR/CSR content mismatch
-    // defer state update to avoid synchronous setState inside effect (lint/React guidance)
+    // ✅ Delete Single Item State
+    const [deleteOpen, setDeleteOpen] = useState(false)
+    const [selectedDeleteId, setSelectedDeleteId] = useState<string | null>(null)
+    const [isPending, setIsPending] = useState(false)
+
     useEffect(() => {
         const id = setTimeout(() => setIsClient(true), 0)
         return () => clearTimeout(id)
@@ -103,6 +117,28 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
         console.log("[DEBUG-CLIENT] Opening Edit for ID:", agenda.id)
         setSelectedEdit(agenda)
         setEditOpen(true)
+    }
+
+    // ✅ Handler untuk Hapus Single Agenda
+    async function handleDelete() {
+        if (!selectedDeleteId) return;
+        setIsPending(true);
+
+        try {
+            const result = await deleteRakordirAction(selectedDeleteId);
+            if (result.success) {
+                toast.success("Agenda berhasil dihapus");
+                setDeleteOpen(false);
+            } else {
+                toast.error(result.error || "Gagal menghapus agenda");
+            }
+        } catch (error) {
+            console.error("Delete error:", error);
+            toast.error("Terjadi kesalahan sistem");
+        } finally {
+            setIsPending(false);
+            setSelectedDeleteId(null);
+        }
     }
 
     const filteredData = useMemo(() => {
@@ -170,7 +206,6 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
         }
     }
 
-    // ✅ Hydration Guard: Return null until client is ready
     if (!isClient) return null
 
     return (
@@ -270,6 +305,7 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center w-10"><Lock className="h-3 w-3 mx-auto text-slate-300" /></TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Urgensi</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Deadline</TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Pemrakarsa</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center">Status</TableHead>
                                 <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Aksi</TableHead>
                             </TableRow>
@@ -289,11 +325,22 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center">{isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}</TableCell>
-                                        <TableCell><Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase">{agenda.urgency || "NORMAL"}</Badge></TableCell>
+                                        <TableCell className="max-w-[110px]">
+                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center rounded-2xl">
+                                                <span className="line-clamp-3 whitespace-normal">
+                                                    {agenda.urgency}
+                                                </span>
+                                            </Badge>
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2 text-slate-600 font-bold text-xs">
                                                 <CalendarIcon className="h-3.5 w-3.5 text-[#14a2ba]" />
                                                 {agenda.deadline ? format(new Date(agenda.deadline), "dd/MM/yyyy") : "-"}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="py-5 max-w-70">
+                                            <div className="space-y-1">
+                                                <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs italic">{agenda.initiator}</p>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center">
@@ -302,7 +349,13 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <ActionButtons onSelectDetail={() => handleOpenDetail(agenda)} onSelectEdit={() => handleOpenEdit(agenda)} status={agenda.status} />
+                                            <ActionButtons
+                                                onSelectDetail={() => handleOpenDetail(agenda)}
+                                                onSelectEdit={() => handleOpenEdit(agenda)}
+                                                // ✅ Trigger Dialog Hapus
+                                                onSelectDelete={() => { setSelectedDeleteId(agenda.id); setDeleteOpen(true); }}
+                                                status={agenda.status}
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 )
@@ -322,7 +375,13 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                 </div>
                                 <div className="flex items-center justify-between mb-4 ml-6">
                                     <Badge className="bg-[#125d72] text-[10px] font-bold px-3">{agenda.status || "DRAFT"}</Badge>
-                                    <ActionButtons onSelectDetail={() => handleOpenDetail(agenda)} onSelectEdit={() => handleOpenEdit(agenda)} status={agenda.status} />
+                                    <ActionButtons
+                                        onSelectDetail={() => handleOpenDetail(agenda)}
+                                        onSelectEdit={() => handleOpenEdit(agenda)}
+                                        // ✅ Trigger Dialog Hapus
+                                        onSelectDelete={() => { setSelectedDeleteId(agenda.id); setDeleteOpen(true); }}
+                                        status={agenda.status}
+                                    />
                                 </div>
                                 <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight italic">{agenda.title}</h3>
                                 <div className="grid grid-cols-2 gap-4 border-t pt-5">
@@ -348,7 +407,6 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
 
             <DetailAgendaSheet agenda={selectedDetail} open={detailOpen} onOpenChange={setDetailOpen} />
 
-            {/* Edit Modal */}
             {selectedEdit && (
                 <EditRakordirModal
                     key={selectedEdit.id}
@@ -357,11 +415,47 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                     onOpenChange={setEditOpen}
                 />
             )}
+
+            {/* ✅ AlertDialog untuk Konfirmasi Hapus */}
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tindakan ini akan menghapus agenda secara permanen beserta seluruh lampiran file yang terkait.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleDelete();
+                            }}
+                            disabled={isPending}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                            {isPending ? "Menghapus..." : "Ya, Hapus Agenda"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
 
-function ActionButtons({ onSelectDetail, onSelectEdit, status }: { onSelectDetail?: () => void, onSelectEdit?: () => void, status?: string | null }) {
+// ✅ Update Interface Props ActionButtons
+function ActionButtons({
+    onSelectDetail,
+    onSelectEdit,
+    onSelectDelete,
+    status
+}: {
+    onSelectDetail?: () => void,
+    onSelectEdit?: () => void,
+    onSelectDelete?: () => void,
+    status?: string | null
+}) {
     const isLocked = status === "DIJADWALKAN" || status === "SELESAI"
 
     return (
@@ -379,6 +473,16 @@ function ActionButtons({ onSelectDetail, onSelectEdit, status }: { onSelectDetai
                 {!isLocked && onSelectEdit && (
                     <DropdownMenuItem onClick={onSelectEdit} className="py-3 rounded-lg font-bold text-slate-600 cursor-pointer">
                         <FileEdit className="mr-3 h-4 w-4 text-[#14a2ba]" /> Ubah Data
+                    </DropdownMenuItem>
+                )}
+
+                {/* ✅ Menu Hapus */}
+                {!isLocked && onSelectDelete && (
+                    <DropdownMenuItem
+                        onClick={onSelectDelete}
+                        className="py-3 rounded-lg font-bold cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                    >
+                        <Trash2 className="mr-3 h-4 w-4 text-red-500" /> Hapus Agenda
                     </DropdownMenuItem>
                 )}
 

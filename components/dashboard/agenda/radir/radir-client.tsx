@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
     MoreHorizontal,
     Trash2,
@@ -72,6 +72,8 @@ interface RadirClientProps {
 }
 
 export function RadirClient({ data }: RadirClientProps) {
+    // ✅ FIX: Tambahkan state isClient untuk menangani Hydration Mismatch
+    const [isClient, setIsClient] = useState(false)
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
@@ -87,6 +89,12 @@ export function RadirClient({ data }: RadirClientProps) {
     const [selectedDetail, setSelectedDetail] = useState<AgendaRadir | null>(null)
     const [editOpen, setEditOpen] = useState(false)
     const [selectedEdit, setSelectedEdit] = useState<AgendaRadir | null>(null)
+
+    // ✅ FIX: useEffect untuk memastikan render hanya terjadi di client setelah mounting
+    useEffect(() => {
+        const id = setTimeout(() => setIsClient(true), 0)
+        return () => clearTimeout(id)
+    }, [])
 
     const handleOpenDetail = (agenda: AgendaRadir) => {
         setSelectedDetail(agenda)
@@ -166,6 +174,9 @@ export function RadirClient({ data }: RadirClientProps) {
             toast.error(res.error || "Gagal menghapus data")
         }
     }
+
+    // ✅ FIX: Return null jika belum di-render di client (mencegah error hydration)
+    if (!isClient) return null
 
     return (
         <div className="space-y-6">
@@ -314,9 +325,12 @@ export function RadirClient({ data }: RadirClientProps) {
                                         <TableCell className="text-center">
                                             {isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}
                                         </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase">
-                                                {agenda.urgency}
+                                        {/* ✅ Membatasi Lebar Kolom Urgensi */}
+                                        <TableCell className="max-w-[120px]">
+                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center rounded-2xl">
+                                                <span className="line-clamp-3 whitespace-normal">
+                                                    {agenda.urgency}
+                                                </span>
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
@@ -382,7 +396,7 @@ export function RadirClient({ data }: RadirClientProps) {
                                     </div>
                                     <div className="space-y-1 text-right">
                                         <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Urgensi</p>
-                                        <p className="text-xs font-black text-[#14a2ba] uppercase">{agenda.urgency}</p>
+                                        <p className="text-xs font-black text-[#14a2ba] uppercase line-clamp-1" title={agenda.urgency || ""}>{agenda.urgency}</p>
                                     </div>
                                 </div>
                                 <Button

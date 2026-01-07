@@ -68,7 +68,7 @@ interface DetailAgendaSheetProps {
 }
 
 export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
-    // ✅ Logic Parsing Dokument Pendukung yang aman
+    // Logic Parsing Dokument Pendukung yang aman
     const extraDocs: string[] = React.useMemo(() => {
         const raw = agenda?.supporting_documents || agenda?.supportingDocuments
         if (!raw || raw === "[]") return []
@@ -76,7 +76,6 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
             const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
             return Array.isArray(parsed) ? parsed : []
         } catch {
-            // ✅ Fix: Menghapus 'e' yang tidak terpakai
             return []
         }
     }, [agenda])
@@ -133,13 +132,35 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                     </SheetDescription>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 h-full bg-slate-50 border-t">
+                {/* ✅ PERBAIKAN DI SINI: ganti h-full dengan min-h-0 */}
+                <ScrollArea className="flex-1 min-h-0 bg-slate-50 border-t">
                     <div className="p-6 md:p-8 space-y-6 md:space-y-8 pb-32">
                         {/* SECTION 1: INFO CARDS */}
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <InfoCard label="Urgensi" icon={Briefcase} content={<Badge variant="outline" className="border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px]">{agenda.urgency}</Badge>} />
-                            <InfoCard label="Deadline" icon={Calendar} content={<p className="text-xs md:text-sm font-black text-[#125d72]">{agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy", { locale: id }) : "-"}</p>} />
-                            <InfoCard label="Prioritas" icon={Info} content={<div className={cn("text-[10px] font-black italic px-2 py-0.5 rounded border w-fit", agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200')}>{agenda.priority ?? 'Low'}</div>} />
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {/* ✅ URGENSI: Full Width (col-span-full) agar teks panjang muat */}
+                            <div className="col-span-1 md:col-span-2">
+                                <InfoCard
+                                    label="Urgensi"
+                                    icon={Briefcase}
+                                    content={
+                                        <Badge variant="outline" className="border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-1.5 h-auto w-full block rounded-1xl">
+                                            {agenda.urgency}
+                                        </Badge>
+                                    }
+                                />
+                            </div>
+
+                            <InfoCard
+                                label="Deadline"
+                                icon={Calendar}
+                                content={<p className="text-xs md:text-sm font-black text-[#125d72]">{agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy", { locale: id }) : "-"}</p>}
+                            />
+
+                            <InfoCard
+                                label="Prioritas"
+                                icon={Info}
+                                content={<div className={cn("text-[10px] font-black italic px-2 py-0.5 rounded border w-fit", agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200')}>{agenda.priority ?? 'Low'}</div>}
+                            />
                         </div>
 
                         {/* SECTION 2: PEMRAKARSA */}
@@ -154,9 +175,9 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
 
                         {/* SECTION 3: NARAHUBUNG */}
                         <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-b pb-2">Narahubung  </h4>
+                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-b pb-2">Narahubung</h4>
                             <div className="grid gap-4 p-5 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-                                <DetailItem label="Nama  " value={agenda.contact_person || agenda.contactPerson} icon={<User className="h-4 w-4" />} />
+                                <DetailItem label="Nama" value={agenda.contact_person || agenda.contactPerson} icon={<User className="h-4 w-4" />} />
                                 <DetailItem label="Jabatan" value={agenda.position} icon={<Briefcase className="h-4 w-4" />} />
                                 <DetailItem label="No. WhatsApp" value={agenda.phone} icon={<Phone className="h-4 w-4" />} />
                             </div>
@@ -202,11 +223,13 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
 
 function InfoCard({ label, icon: Icon, content }: { label: string, icon: LucideIcon, content: React.ReactNode }) {
     return (
-        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-100 shadow-sm flex flex-row md:flex-col justify-between md:justify-start items-center md:items-start gap-2">
+        <div className="p-3 md:p-4 rounded-xl bg-white border border-slate-100 shadow-sm flex flex-col justify-between items-start gap-2 h-full">
             <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <Icon className="h-3 w-3 text-[#14a2ba]" /> {label}
             </p>
-            {content}
+            <div className="w-full">
+                {content}
+            </div>
         </div>
     )
 }
@@ -217,8 +240,7 @@ function DetailItem({ label, value, icon }: { label: string, value: string | nul
             <div className="mt-1 text-[#14a2ba] opacity-70 shrink-0">{icon}</div>
             <div className="min-w-0 flex-1">
                 <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{label}</p>
-                {/* ✅ Perbaikan 3: wrap-break-word sesuai linter */}
-                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight wrap-break-word">{value || "-"}</p>
+                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight break-words">{value || "-"}</p>
             </div>
         </div>
     )
