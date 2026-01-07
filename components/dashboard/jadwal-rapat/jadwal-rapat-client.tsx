@@ -80,23 +80,22 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
     const [selectedEdit, setSelectedEdit] = useState<AgendaReady | null>(null)
     const [editOpen, setEditOpen] = useState(false)
 
+    // Filter untuk tabel utama (yang sudah dijadwalkan)
     const filteredData = useMemo(() => {
-        return data.filter(item => {
-            const matchesSearch = item.status === "DIJADWALKAN" &&
-                item.title.toLowerCase().includes(searchTerm.toLowerCase());
-
-            // ✅ Tambahkan Logika Filter Jenis Rapat
-            const isRakordir = item.title.toLowerCase().includes("rakordir");
-            const matchesType = meetingTypeFilter === "all" ||
-                (meetingTypeFilter === "rakordir" ? isRakordir : !isRakordir);
-
-            return matchesSearch && matchesType;
-        });
-    }, [data, searchTerm, meetingTypeFilter])
+        return data.filter(item => item.status === "DIJADWALKAN")
+    }, [data])
 
     const availableAgendas = useMemo(() => {
-        return data.filter(item => item.status === "DAPAT_DILANJUTKAN")
-    }, [data])
+        return data.filter(item => {
+            // Normalisasi status: ubah ke All Caps dan ganti spasi jadi underscore untuk pengecekan aman
+            const normalizedStatus = item.status?.toUpperCase().replace(/\s/g, '_');
+
+            return (
+                normalizedStatus === "DAPAT_DILANJUTKAN" ||
+                item.status === "Dapat Dilanjutkan"
+            );
+        });
+    }, [data]);
 
     // ✅ FITUR BATALKAN JADWAL (ROLLBACK)
     const handleRollback = async (id: string, title: string) => {
@@ -112,7 +111,7 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
             } else {
                 toast.error(res.error)
             }
-        } catch (err) {
+        } catch {
             toast.error("Terjadi kesalahan sistem")
         }
     }

@@ -7,6 +7,16 @@ import { revalidatePath } from "next/cache"
 import { eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
+interface UpdateMeetingData {
+    id: string
+    executionDate: string
+    startTime: string
+    endTime: string
+    meetingMethod: string
+    location?: string
+    link?: string
+}
+
 // Definisikan tipe untuk field file agar type-safe
 type AgendaFileField =
     | "legalReview"
@@ -381,33 +391,53 @@ export async function scheduleAgendaAction(data: {
     }
 }
 
-export async function updateScheduledMeetingAction(data: {
-    id: string;
-    executionDate: string;
-    startTime: string;
-    endTime: string;
-    meetingMethod: string;
-    location?: string;
-    link?: string;
-}) {
+export async function updateScheduledMeetingAction(data: UpdateMeetingData) {
     try {
+        // 1. Validasi ID
+        if (!data.id) {
+            return { success: false, error: "ID Agenda tidak ditemukan" }
+        }
+
+        // 2. Eksekusi Update ke Database
         await db.update(agendas)
             .set({
+                // Data Jadwal
                 executionDate: data.executionDate,
                 startTime: data.startTime,
-                endTime: data.endTime,
+                endTime: data.endTime || "Selesai",
+
+                // Data Metode & Lokasi
                 meetingMethod: data.meetingMethod,
-                meetingLocation: data.location,
-                meetingLink: data.link,
+                meetingLocation: data.location || null,
+                meetingLink: data.link || null,
+
+                // Perubahan Status Utama
+                status: "DIJADWALKAN",
+
+                // Audit Trail
                 updatedAt: new Date(),
             })
             .where(eq(agendas.id, data.id));
 
+        // 3. Bersihkan Cache Next.js agar data terbaru langsung muncul di dashboard
+        // Revalidasi halaman Jadwal Rapat
         revalidatePath("/jadwal-rapat");
-        return { success: true };
+
+        // Revalidasi halaman Agenda Siap (karena data berpindah/status berubah)
+        revalidatePath("/agenda-siap/radir");
+        revalidatePath("/agenda-siap/rakordir");
+
+        return {
+            success: true,
+            message: "Agenda berhasil dijadwalkan"
+        };
+
     } catch (error) {
-        console.error("Update Schedule Error:", error);
-        return { success: false, error: "Gagal memperbarui jadwal rapat" };
+        console.error("❌ Error in updateScheduledMeetingAction:", error);
+        return {
+            success: false,
+            error: "Terjadi kesalahan pada server saat memperbarui jadwal"
+        };
     }
 }
 
@@ -432,5 +462,42 @@ export async function rollbackAgendaAction(id: string) {
     } catch (error) {
         console.error("Rollback Error:", error);
         return { success: false, error: "Gagal membatalkan jadwal" };
+    }
+}
+
+export async function lanjutKeAgendaSiapAction(id: string) {
+    try {
+        await db.update(agendas)
+            .set({ status: "DAPAT_DILANJUTKAN", updatedAt: new Date() })
+            .where(eq(agendas.id, id));
+
+        // ✅ WAJIB: Beritahu Next.js bahwa data di halaman jadwal rapat sudah berubah
+        revalidatePath("/jadwal-rapat");
+        revalidatePath("/agenda-siap/radir");
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Gagal memproses data" };
+    }
+}
+
+export async function createRakordirAction(formData: any) {
+    try {
+        await db.insert(agendas).values({
+            title: formData.title,
+            urgency: "Sangat Segera",
+            deadline: new Date(formData.deadline),
+            initiator: formData.initiator,
+            contact_person: formData.contactPerson,
+            phone: formData.phone,
+            meetingType: "RAKORDIR", // ✅ Kunci utama pemisah
+            status: "DAPAT_DILANJUTKAN"
+        })
+
+        revalidatePath("/agenda/rakordir")
+        return { success: true }
+    } catch (error) {
+        console.error(error)
+        return { success: false }
     }
 }

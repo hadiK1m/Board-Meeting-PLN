@@ -1,7 +1,20 @@
 "use client"
 
-import { useState } from "react"
-import { Calendar as CalendarIcon, Clock, MapPin, Link as LinkIcon, AlertCircle, Send, RotateCcw } from "lucide-react"
+import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
+import Select, { MultiValue } from "react-select"
+import {
+    CalendarPlus,
+    Calendar as CalendarIcon,
+    Clock,
+    MapPin,
+    Link as LinkIcon,
+    RotateCcw,
+    Save,
+    Info,
+    Layers
+} from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,23 +27,32 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-    Select,
+    Select as ShadcnSelect,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select"
-// ✅ Import cn yang sempat tertinggal
 import { cn } from "@/lib/utils"
-import { scheduleAgendaAction } from "@/server/actions/agenda-actions"
-import { AgendaReady } from "./jadwal-rapat-client"
+import { updateScheduledMeetingAction } from "@/server/actions/agenda-actions"
+import { type AgendaReady } from "./jadwal-rapat-client"
 
-export function ScheduleMeetingDialog({ availableAgendas }: { availableAgendas: AgendaReady[] }) {
+interface ScheduleMeetingDialogProps {
+    availableAgendas: AgendaReady[]
+}
+
+interface AgendaOption {
+    value: string;
+    label: string;
+    initiator: string;
+}
+
+export function ScheduleMeetingDialog({ availableAgendas }: ScheduleMeetingDialogProps) {
+    const router = useRouter()
     const [open, setOpen] = useState(false)
-    const [step, setStep] = useState<1 | 2>(1)
-    const [selectedAgenda, setSelectedAgenda] = useState<AgendaReady | null>(null)
+    const [isPending, setIsPending] = useState(false)
 
-    // Form States
+    const [selectedOptions, setSelectedOptions] = useState<MultiValue<AgendaOption>>([])
     const [date, setDate] = useState("")
     const [startTime, setStartTime] = useState("")
     const [endTime, setEndTime] = useState("Selesai")
@@ -38,7 +60,19 @@ export function ScheduleMeetingDialog({ availableAgendas }: { availableAgendas: 
     const [method, setMethod] = useState("OFFLINE")
     const [location, setLocation] = useState("")
     const [link, setLink] = useState("")
-    const [isPending, setIsPending] = useState(false)
+
+    const options: AgendaOption[] = useMemo(() => {
+        return availableAgendas.map(a => ({
+            value: a.id,
+            label: a.title,
+            initiator: a.initiator || "-"
+        }))
+    }, [availableAgendas])
+
+    const handleOpenChange = (newOpen: boolean) => {
+        if (newOpen) router.refresh()
+        setOpen(newOpen)
+    }
 
     const toggleEndTimeMode = () => {
         if (!isManualTime) {
@@ -50,179 +84,205 @@ export function ScheduleMeetingDialog({ availableAgendas }: { availableAgendas: 
         }
     }
 
-    const handleSchedule = async () => {
-        if (!selectedAgenda || !date || !startTime) {
-            toast.error("Mohon lengkapi data jadwal utama");
+    const handleSubmit = async () => {
+        if (selectedOptions.length === 0 || !date || !startTime) {
+            toast.error("Mohon lengkapi Agenda, Tanggal, dan Jam Mulai");
             return;
         }
 
         setIsPending(true)
-        try {
-            const res = await scheduleAgendaAction({
-                id: selectedAgenda.id,
-                executionDate: date,
-                startTime,
-                endTime: endTime || "Selesai",
-                meetingMethod: method,
-                location,
-                link
-            })
 
-            if (res.success) {
-                toast.success("Rapat Berhasil Dijadwalkan");
+        try {
+            const results = await Promise.all(
+                selectedOptions.map(option =>
+                    updateScheduledMeetingAction({
+                        id: option.value,
+                        executionDate: date,
+                        startTime,
+                        endTime: endTime || "Selesai",
+                        meetingMethod: method,
+                        location: location,
+                        link: link
+                    })
+                )
+            )
+
+            const isAllSuccess = results.every(r => r.success)
+
+            if (isAllSuccess) {
+                // ✅ CUSTOM TOAST: Sesuai dengan tampilan sukses input agenda
+                toast.custom((t) => (
+                    <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-2xl border border-emerald-100 min-w-[350px] animate-in slide-in-from-bottom-5">
+                        <div className="bg-[#125d72] p-2 rounded-lg shrink-0 shadow-lg">
+                            <Image
+                                src="/logo-pln.png"
+                                alt="PLN"
+                                width={24}
+                                height={30}
+                                className="object-contain"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <p className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em]">Sistem Board Meeting</p>
+                            <p className="text-sm font-bold text-slate-800 leading-tight">Berhasil Ditetapkan!</p>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                                {selectedOptions.length} Agenda telah dijadwalkan secara resmi.
+                            </p>
+                        </div>
+                    </div>
+                ), { duration: 4000 });
+
                 setOpen(false);
-                resetForm();
+                setSelectedOptions([]);
+                setDate("");
+                setStartTime("");
+                setEndTime("Selesai");
+                setIsManualTime(false);
+                setLocation("");
+                setLink("");
+
+                router.refresh();
             } else {
-                toast.error(res.error || "Gagal menjadwalkan rapat");
+                toast.error("Gagal memperbarui beberapa agenda.");
             }
         } catch (err) {
-            console.error(err);
-            toast.error("Terjadi kesalahan sistem");
+            console.error(err)
+            toast.error("Terjadi kesalahan sistem.");
         } finally {
             setIsPending(false)
         }
     }
 
-    const resetForm = () => {
-        setStep(1);
-        setSelectedAgenda(null);
-        setDate("");
-        setStartTime("");
-        setEndTime("Selesai");
-        setIsManualTime(false);
-        setMethod("OFFLINE");
-        setLocation("");
-        setLink("");
-    }
-
     return (
-        <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) resetForm(); }}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
-                <Button className="bg-[#14a2ba] hover:bg-[#125d72] text-white font-bold shadow-lg gap-2 transition-all active:scale-95">
-                    <CalendarIcon className="h-4 w-4" /> Jadwalkan Agenda
+                <Button className="bg-[#14a2ba] hover:bg-[#118a9e] text-white font-bold shadow-lg shadow-cyan-100 transition-all active:scale-95">
+                    <CalendarPlus className="mr-2 h-4 w-4" /> Jadwalkan Rapat
                 </Button>
             </DialogTrigger>
-            <DialogContent className={step === 1 ? "sm:max-w-xl" : "sm:max-w-2xl"}>
+            <DialogContent className="sm:max-w-2xl border-none shadow-2xl overflow-visible">
                 <DialogHeader>
-                    <DialogTitle className="text-[#125d72] font-bold text-xl flex items-center gap-2">
-                        {step === 1 ? "Pilih Agenda" : "Setting Agenda (Jadwalkan Rapat)"}
+                    <DialogTitle className="text-[#125d72] font-extrabold text-2xl flex items-center gap-2">
+                        <Layers className="h-6 w-6 text-[#14a2ba]" />
+                        Penetapan Jadwal Rapat
                     </DialogTitle>
                 </DialogHeader>
 
-                {step === 1 ? (
-                    <div className="space-y-4 mt-4">
-                        <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold">
-                            <AlertCircle className="h-4 w-4" />
-                            Pilih salah satu agenda yang sudah divalidasi untuk dijadwalkan
-                        </div>
-                        <div className="max-h-80 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
-                            {availableAgendas.length > 0 ? availableAgendas.map((a) => (
-                                <button
-                                    key={a.id}
-                                    onClick={() => { setSelectedAgenda(a); setStep(2); }}
-                                    className="w-full text-left p-4 border rounded-xl hover:bg-slate-50 hover:border-[#14a2ba] transition-all group border-slate-100 flex justify-between items-center"
-                                >
-                                    <div>
-                                        <h4 className="font-bold text-[#125d72] text-sm uppercase group-hover:text-[#14a2ba] leading-tight">{a.title}</h4>
-                                        <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">Unit: {a.initiator}</p>
-                                    </div>
-                                    <Send className="h-4 w-4 text-slate-300 group-hover:text-[#14a2ba]" />
-                                </button>
-                            )) : (
-                                <div className="text-center py-12 text-slate-400 text-sm border-2 border-dashed rounded-2xl border-slate-100">
-                                    Tidak ada agenda berstatus &quot;Dapat Dilanjutkan&quot;
-                                </div>
-                            )}
+                <div className="grid grid-cols-2 gap-5 mt-4">
+                    <div className="col-span-2 space-y-2">
+                        <Label className="text-[#125d72] font-bold flex justify-between items-center text-xs uppercase tracking-wider">
+                            <span className="flex items-center gap-2"><Info className="h-3.5 w-3.5" /> Pilih Satu atau Beberapa Agenda</span>
+                        </Label>
+                        <Select
+                            isMulti
+                            options={options}
+                            value={selectedOptions}
+                            onChange={(val) => setSelectedOptions(val)}
+                            placeholder="Cari judul agenda..."
+                            className="text-sm"
+                            styles={{
+                                control: (base) => ({
+                                    ...base,
+                                    borderRadius: '0.75rem',
+                                    padding: '4px',
+                                    borderColor: '#e2e8f0',
+                                    backgroundColor: '#f8fafc',
+                                    '&:hover': { borderColor: '#14a2ba' }
+                                }),
+                                multiValue: (base) => ({
+                                    ...base,
+                                    backgroundColor: '#e7f6f9',
+                                    borderRadius: '6px',
+                                }),
+                                multiValueLabel: (base) => ({
+                                    ...base,
+                                    color: '#125d72',
+                                    fontWeight: 'bold',
+                                    fontSize: '10px',
+                                }),
+                            }}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Tanggal Pelaksanaan</Label>
+                        <div className="relative">
+                            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 pl-10 focus-visible:ring-[#14a2ba]" />
+                            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         </div>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-2 gap-5 mt-4">
-                        <div className="col-span-2 p-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Agenda Terpilih:</p>
-                            <p className="text-sm font-black text-[#125d72] uppercase leading-tight mt-1">{selectedAgenda?.title}</p>
-                        </div>
 
+                    <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-2">
-                            <Label className="text-[#125d72] font-bold">Tanggal Pelaksanaan</Label>
-                            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 focus:ring-[#14a2ba]" />
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Mulai</Label>
+                            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-11 focus-visible:ring-[#14a2ba]" />
                         </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-2">
-                                <Label className="text-[#125d72] font-bold">Waktu Mulai</Label>
-                                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-11" />
+                        <div className="space-y-2">
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Selesai</Label>
+                            <div className="relative">
+                                <Input
+                                    type={isManualTime ? "time" : "text"}
+                                    value={endTime}
+                                    readOnly={!isManualTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className={cn("h-11 pr-10 font-semibold transition-all", !isManualTime && "bg-slate-100 text-slate-500 border-dashed")}
+                                />
+                                <button type="button" onClick={toggleEndTimeMode} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#125d72]">
+                                    {isManualTime ? <RotateCcw className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                                </button>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[#125d72] font-bold">Waktu Selesai</Label>
-                                <div className="relative">
-                                    <Input
-                                        type={isManualTime ? "time" : "text"}
-                                        value={endTime}
-                                        readOnly={!isManualTime}
-                                        onChange={(e) => setEndTime(e.target.value)}
-                                        className={cn("h-11 pr-10 font-semibold", !isManualTime && "bg-slate-50 text-slate-500 cursor-not-allowed")}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={toggleEndTimeMode}
-                                        className={cn(
-                                            "absolute right-3 top-1/2 -translate-y-1/2 transition-all p-1 rounded-md",
-                                            isManualTime ? "text-[#14a2ba] bg-blue-50 hover:bg-blue-100" : "text-slate-400 hover:text-[#125d72]"
-                                        )}
-                                        title={isManualTime ? "Ganti ke 'Selesai'" : "Atur Jam Spesifik"}
-                                    >
-                                        {isManualTime ? <RotateCcw className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="col-span-2 space-y-2">
-                            <Label className="text-[#125d72] font-bold">Metode Rapat</Label>
-                            <Select value={method} onValueChange={setMethod}>
-                                <SelectTrigger className="h-11">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="OFFLINE">OFFLINE (Tatap Muka)</SelectItem>
-                                    <SelectItem value="ONLINE">ONLINE (Virtual / Zoom)</SelectItem>
-                                    <SelectItem value="HYBRID">HYBRID (Offline & Online)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {(method === "OFFLINE" || method === "HYBRID") && (
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-[#125d72] font-bold">Lokasi Ruangan / Tempat</Label>
-                                <div className="relative">
-                                    <MapPin className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                                    <Input className="pl-10 h-11" placeholder="Contoh: Ruang Rapat Lt. 3" value={location} onChange={(e) => setLocation(e.target.value)} />
-                                </div>
-                            </div>
-                        )}
-
-                        {(method === "ONLINE" || method === "HYBRID") && (
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-[#125d72] font-bold">Link Meeting Online</Label>
-                                <div className="relative">
-                                    <LinkIcon className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                                    <Input className="pl-10 h-11" placeholder="https://zoom.us/j/..." value={link} onChange={(e) => setLink(e.target.value)} />
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="col-span-2 pt-4 flex gap-3">
-                            <Button variant="ghost" onClick={() => setStep(1)} className="flex-1 h-12 font-bold">Kembali</Button>
-                            <Button
-                                onClick={handleSchedule}
-                                disabled={isPending}
-                                className="flex-2 bg-[#125d72] hover:bg-[#05252b] text-white font-bold h-12 shadow-lg"
-                            >
-                                {isPending ? "Memproses..." : "Jadwalkan Rapat Sekarang"}
-                            </Button>
                         </div>
                     </div>
-                )}
+
+                    <div className="col-span-2 space-y-2">
+                        <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Metode Rapat</Label>
+                        <ShadcnSelect value={method} onValueChange={setMethod}>
+                            <SelectTrigger className="h-11 focus:ring-[#14a2ba]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="OFFLINE">OFFLINE (Tatap Muka)</SelectItem>
+                                <SelectItem value="ONLINE">ONLINE (Virtual / Zoom)</SelectItem>
+                                <SelectItem value="HYBRID">HYBRID (Campuran)</SelectItem>
+                            </SelectContent>
+                        </ShadcnSelect>
+                    </div>
+
+                    {(method === "OFFLINE" || method === "HYBRID") && (
+                        <div className="col-span-2 space-y-2 animate-in fade-in slide-in-from-top-1">
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Lokasi Ruangan</Label>
+                            <div className="relative">
+                                <Input placeholder="Contoh: Ruang Rapat Lt. 3" className="h-11 pl-10 focus-visible:ring-[#14a2ba]" value={location} onChange={(e) => setLocation(e.target.value)} />
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            </div>
+                        </div>
+                    )}
+
+                    {(method === "ONLINE" || method === "HYBRID") && (
+                        <div className="col-span-2 space-y-2 animate-in fade-in slide-in-from-top-1">
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Tautan / Link Meeting</Label>
+                            <div className="relative">
+                                <Input placeholder="https://zoom.us/j/..." className="h-11 pl-10 focus-visible:ring-[#14a2ba]" value={link} onChange={(e) => setLink(e.target.value)} />
+                                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="col-span-2 pt-6 flex gap-3">
+                        <Button variant="ghost" type="button" onClick={() => setOpen(false)} className="flex-1 h-12 font-bold text-slate-500">Batal</Button>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={isPending}
+                            className="flex-2 bg-[#125d72] hover:bg-[#05252b] text-white font-extrabold h-12 shadow-lg active:scale-[0.98] transition-all"
+                        >
+                            {isPending ? "Memproses..." : (
+                                <span className="flex items-center gap-2">
+                                    <Save className="h-4 w-4" /> Tetapkan Jadwal
+                                </span>
+                            )}
+                        </Button>
+                    </div>
+                </div>
             </DialogContent>
         </Dialog>
     )

@@ -37,6 +37,7 @@ export const agendas = pgTable("agendas", {
     meetingMethod: varchar("meeting_method", { length: 50 }), // OFFLINE, ONLINE, HYBRID
     meetingLocation: text("meeting_location"),
     meetingLink: text("meeting_link"),
+    meetingType: text("meeting_type").default("RADIR"),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

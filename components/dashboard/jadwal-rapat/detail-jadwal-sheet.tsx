@@ -124,9 +124,9 @@ export function DetailJadwalSheet({ agenda, open, onOpenChange }: DetailJadwalSh
 
                         {/* SECTION 4: NARAHUBUNG */}
                         <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-b pb-2">Narahubung (PIC)</h4>
+                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-b pb-2">Narahubung  </h4>
                             <div className="grid gap-4 p-6 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-                                <DetailItem label="Nama PIC" value={agenda.contactPerson} icon={User} />
+                                <DetailItem label="Nama  " value={agenda.contactPerson} icon={User} />
                                 <DetailItem label="Jabatan" value={agenda.position} icon={Briefcase} />
                                 <DetailItem label="No. WhatsApp" value={agenda.phone} icon={Phone} />
                             </div>

@@ -1,9 +1,13 @@
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
-import { or, eq } from "drizzle-orm";
-// ✅ Import Wrapper yang baru dibuat
+import { or, eq, desc as drizzleDesc } from "drizzle-orm";
+// ✅ Import Wrapper biasa, jangan pakai dynamic di sini
 import { JadwalRapatWrapper } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-wrapper";
 import { type AgendaReady } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-client";
+
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata = {
     title: "Jadwal Rapat | Board Meeting PLN",
@@ -13,18 +17,19 @@ export default async function JadwalRapatPage() {
     const allData = await db.query.agendas.findMany({
         where: or(
             eq(agendas.status, "DAPAT_DILANJUTKAN"),
+            eq(agendas.status, "Dapat Dilanjutkan"),
             eq(agendas.status, "DIJADWALKAN")
         ),
-        orderBy: (agendas, { desc }) => [desc(agendas.updatedAt)],
+        orderBy: [drizzleDesc(agendas.updatedAt)],
     });
 
     const formattedData: AgendaReady[] = allData.map((agenda) => ({
         id: agenda.id,
-        title: agenda.title,
-        urgency: agenda.urgency,
-        deadline: new Date(agenda.deadline),
-        initiator: agenda.initiator,
-        status: agenda.status,
+        title: agenda.title ?? "Tanpa Judul",
+        urgency: agenda.urgency ?? "Normal",
+        deadline: agenda.deadline ? new Date(agenda.deadline) : new Date(),
+        initiator: agenda.initiator ?? "-",
+        status: agenda.status ?? "",
         director: agenda.director ?? null,
         support: agenda.support ?? null,
         contactPerson: agenda.contactPerson ?? null,
@@ -44,9 +49,11 @@ export default async function JadwalRapatPage() {
     }));
 
     return (
-        <main className="p-1">
-            {/* ✅ Gunakan Wrapper untuk menghindari Hydration Error & Build Error */}
-            <JadwalRapatWrapper data={formattedData} />
+        <main className="p-5 bg-slate-50/50 min-h-screen">
+            <div className=" mx-auto">
+                {/* ✅ Kirim data ke Wrapper */}
+                <JadwalRapatWrapper data={formattedData} />
+            </div>
         </main>
     );
 }
