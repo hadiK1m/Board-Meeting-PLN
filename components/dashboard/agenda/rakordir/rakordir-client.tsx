@@ -325,8 +325,8 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center">{isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}</TableCell>
-                                        <TableCell className="max-w-[110px]">
-                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center rounded-2xl">
+                                        <TableCell className="max-w-27.5">
+                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center">
                                                 <span className="line-clamp-3 whitespace-normal">
                                                     {agenda.urgency}
                                                 </span>

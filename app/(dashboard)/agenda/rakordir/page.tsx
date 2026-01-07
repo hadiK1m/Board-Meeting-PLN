@@ -1,11 +1,12 @@
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
 import { desc, eq, and, isNull } from "drizzle-orm";
-import { RakordirClient, RakordirAgenda } from "@/components/dashboard/agenda/rakordir/rakordir-client";
+import { RakordirClient, type RakordirAgenda } from "@/components/dashboard/agenda/rakordir/rakordir-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function RakordirPage() {
+    // 1. Ambil data
     const rawAgendas = await db.query.agendas.findMany({
         where: and(
             eq(agendas.meetingType, "RAKORDIR"),
@@ -16,70 +17,78 @@ export default async function RakordirPage() {
 
     // Helper: normalisasi supporting_documents ke string[] | null
     const normalizeSupporting = (raw: unknown): string[] | null => {
-        if (raw === undefined || raw === null) return null
-        // already array
-        if (Array.isArray(raw)) return raw.map(String)
+        if (raw === undefined || raw === null) return null;
+        if (Array.isArray(raw)) return raw.map(String);
 
-        // handle common string cases
         if (typeof raw === 'string') {
-            const s = raw.trim()
-            if (s === '' || s === 'null') return null
-            if (s === '[]' || s === '"[]"') return []
+            const s = raw.trim();
+            if (s === '' || s === 'null') return null;
+            if (s === '[]' || s === '"[]"') return [];
             try {
-                let parsed: unknown = JSON.parse(s)
-                // double encoded
+                let parsed: unknown = JSON.parse(s);
+                // Handle double encoded string if necessary
                 if (typeof parsed === 'string') {
                     try {
-                        parsed = JSON.parse(parsed)
+                        parsed = JSON.parse(parsed);
                     } catch {
-                        // leave as-is
+                        // ignore, keep as string
                     }
                 }
-                if (Array.isArray(parsed)) return (parsed as unknown[]).map(String)
+                if (Array.isArray(parsed)) return (parsed as unknown[]).map(String);
             } catch {
-                // not json, maybe a single path string
-                return [s]
+                return [s];
             }
         }
+        return null;
+    };
 
-        return null
-    }
+    // ✅ Final mapping: Menggunakan Type Intersection untuk menghindari 'any'
+    const formattedAgendas: RakordirAgenda[] = rawAgendas.map((data) => {
+        // Kita casting 'data' agar TypeScript tahu bahwa properti snake_case mungkin ada (untuk fallback)
+        // meskipun Drizzle Schema mungkin mendefinisikannya sebagai camelCase.
+        const item = data as typeof data & {
+            contact_person?: string | null;
+            proposal_note?: string | null;
+            presentation_material?: string | null;
+            supporting_documents?: unknown;
+            created_at?: Date | string | null;
+            updated_at?: Date | string | null;
+        };
 
-    // ✅ Final mapping: map snake_case DB columns to client-facing props
-    const formattedAgendas: RakordirAgenda[] = rawAgendas.map((item: any) => ({
-        ...item,
-        id: item.id,
-        title: item.title,
-        urgency: item.urgency,
-        deadline: item.deadline ? new Date(item.deadline).toISOString() : null,
-        status: item.status,
-        initiator: item.initiator,
-        director: item.director ?? item.director,
-        support: item.support ?? item.support,
-        priority: item.priority ?? item.priority,
-        position: item.position ?? item.position,
-        phone: item.phone ?? item.phone,
+        return {
+            id: item.id,
+            title: item.title,
+            urgency: item.urgency,
+            // Konversi date ke string ISO
+            deadline: item.deadline ? new Date(item.deadline).toISOString() : null,
+            status: item.status,
+            initiator: item.initiator,
 
-        // Mapping field Narahubung (Database: contact_person)
-        contactPerson: item.contact_person || item.contactPerson,
+            // Gunakan || null atau fallback string "-" jika data wajib
+            director: item.director || null,
+            support: item.support || null,
+            priority: item.priority || null,
+            position: item.position || null,
+            phone: item.phone || null,
 
-        // Mapping Lampiran (Database: snake_case) - normalized to array|null
-        proposalNote: item.proposal_note ?? item.proposalNote ?? null,
-        presentationMaterial: item.presentation_material ?? item.presentationMaterial ?? null,
-        supportingDocuments: normalizeSupporting(item.supporting_documents ?? item.supportingDocuments ?? null),
+            // Mapping field Narahubung (Prioritas camelCase, fallback ke snake_case)
+            contactPerson: item.contactPerson || item.contact_person || null,
 
-        // Timestamps (snake_case)
-        createdAt: item.created_at ? new Date(item.created_at).toISOString() : null,
-        updatedAt: item.updated_at ? new Date(item.updated_at).toISOString() : null,
-    }));
+            // Mapping Lampiran
+            proposalNote: item.proposalNote || item.proposal_note || null,
+            presentationMaterial: item.presentationMaterial || item.presentation_material || null,
+            supportingDocuments: normalizeSupporting(item.supportingDocuments || item.supporting_documents), // normalizeSupporting return string[] | null, tapi interface mungkin butuh string[]? Sesuaikan di bawah jika perlu.
+
+            // Timestamps (Opsional, jika interface RakordirAgenda membutuhkannya)
+            // createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : (item.created_at ? new Date(item.created_at).toISOString() : null),
+        };
+    });
 
     return (
         <main className="p-4 md:p-8 bg-slate-50/50 min-h-screen">
-            <div className=" space-y-6">
-
-                {/* ✅ Error TS2322 hilang karena formattedAgendas sudah sesuai tipe RakordirAgenda[] */}
+            <div className="space-y-6">
                 <RakordirClient initialData={formattedAgendas} />
             </div>
         </main>
     );
-} 
+}

@@ -27,7 +27,7 @@ import {
     SidebarMenuItem,
     useSidebar,
 } from "@/components/ui/sidebar"
-import { signOutAction } from "@/server/actions/auth-actions" // Pastikan import ini benar
+import { signOutAction } from "@/server/actions/auth-actions"
 
 export function NavUser({
     user,
@@ -42,6 +42,7 @@ export function NavUser({
 
     // Helper untuk mendapatkan inisial (Misal: "Admin Board" -> "AB")
     const getInitials = (name: string) => {
+        if (!name) return "US"; // Default jika nama kosong
         return name
             .split(" ")
             .map((n) => n[0])
@@ -59,9 +60,16 @@ export function NavUser({
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <Avatar className="h-8 w-8 rounded-lg">
+                            <Avatar className="h-8 w-8 rounded-lg bg-slate-100 border border-slate-200">
+                                {/* Jika src valid & ada, gambar muncul.
+                                    Jika 404, komponen ini hidden otomatis.
+                                */}
                                 <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
+
+                                {/* Fallback muncul saat gambar gagal load */}
+                                <AvatarFallback className="rounded-lg bg-[#14a2ba] text-white font-bold text-xs">
+                                    {getInitials(user.name)}
+                                </AvatarFallback>
                             </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{user.name}</span>
@@ -78,9 +86,11 @@ export function NavUser({
                     >
                         <DropdownMenuLabel className="p-0 font-normal">
                             <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                <Avatar className="h-8 w-8 rounded-lg">
+                                <Avatar className="h-8 w-8 rounded-lg border border-slate-200">
                                     <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
+                                    <AvatarFallback className="rounded-lg bg-[#14a2ba] text-white font-bold text-xs">
+                                        {getInitials(user.name)}
+                                    </AvatarFallback>
                                 </Avatar>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
                                     <span className="truncate font-medium">{user.name}</span>
@@ -90,7 +100,6 @@ export function NavUser({
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
 
-                        {/* Menu Akun & Notifikasi */}
                         <DropdownMenuGroup>
                             <DropdownMenuItem>
                                 <BadgeCheck className="mr-2 h-4 w-4" />
@@ -104,7 +113,6 @@ export function NavUser({
 
                         <DropdownMenuSeparator />
 
-                        {/* Tombol Logout */}
                         <DropdownMenuItem
                             onClick={() => signOutAction()}
                             className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"

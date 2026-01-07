@@ -171,7 +171,7 @@ export function AddRakordirDialog() {
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-[95vw] sm:max-w-[800px] h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
+            <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
                     <DialogTitle className="text-xl font-bold flex items-center gap-2 uppercase tracking-tight">
                         <PlusCircle className="h-5 w-5 text-[#efe62f]" /> Form Usulan Agenda Rakordir

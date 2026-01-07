@@ -138,7 +138,7 @@ export function AddAgendaModal() {
             const result = await createAgendaAction(formData)
             if (result.success) {
                 toast.custom((t) => (
-                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-[350px]">
+                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-87.5">
                         <div className="shrink-0">
                             <Image src="/logo-pln.png" alt="PLN" width={40} height={40} className="object-contain" />
                         </div>
@@ -174,7 +174,7 @@ export function AddAgendaModal() {
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-[95vw] sm:max-w-[800px] h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
+            <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
                     <DialogTitle className="text-xl font-bold flex items-center gap-2">
                         <PlusCircle className="h-5 w-5 text-[#efe62f]" /> Form Usulan Agenda Radir
@@ -311,7 +311,7 @@ export function AddAgendaModal() {
                         <Button
                             type="submit"
                             disabled={isPending}
-                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-[220px] transition-all`}
+                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all`}
                         >
                             {isPending ? (
                                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</>

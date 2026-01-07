@@ -111,8 +111,9 @@ export function ScheduleMeetingDialog({ availableAgendas }: ScheduleMeetingDialo
 
             if (isAllSuccess) {
                 // ✅ CUSTOM TOAST: Sesuai dengan tampilan sukses input agenda
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 toast.custom((t) => (
-                    <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-2xl border border-emerald-100 min-w-[350px] animate-in slide-in-from-bottom-5">
+                    <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-2xl border border-emerald-100 min-w-87.5 animate-in slide-in-from-bottom-5">
                         <div className="bg-[#125d72] p-2 rounded-lg shrink-0 shadow-lg">
                             <Image
                                 src="/logo-pln.png"

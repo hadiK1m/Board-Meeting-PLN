@@ -147,7 +147,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                                         <Badge
                                             variant="outline"
                                             // ✅ Styling agar teks panjang bisa wrap ke bawah
-                                            className=" rounded-1xl border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-2 h-auto w-full block break-words"
+                                            className=" rounded-1xl border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-2 h-auto w-full block wrap-break-word"
                                         >
                                             {agenda.urgency || "NORMAL"}
                                         </Badge>
@@ -248,7 +248,7 @@ function DetailItem({ label, value, icon }: { label: string, value: string | nul
             <div className="mt-1 text-[#14a2ba] opacity-50 shrink-0 group-hover:opacity-100 transition-opacity">{icon}</div>
             <div className="min-w-0 flex-1">
                 <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{label}</p>
-                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight break-words uppercase">
+                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight wrap-break-word uppercase">
                     {value || "-"}
                 </p>
             </div>

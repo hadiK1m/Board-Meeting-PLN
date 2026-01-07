@@ -2,10 +2,9 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import Image from "next/image" // ✅ Import Next Image
+// import Image from "next/image" // Tidak lagi dibutuhkan untuk avatar di sini, kecuali untuk logo tim
 import {
     BookOpen,
-    Settings2,
     LayoutDashboard,
     CalendarCheck,
 } from "lucide-react"
@@ -21,16 +20,17 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar"
 
+// Data dummy
 const data = {
     user: {
         name: "Admin Board",
         email: "admin@pln.co.id",
-        avatar: "/avatars/01.png",
+        avatar: "/avatars/01.png", // Path ini akan 404, tapi akan di-handle oleh Fallback
     },
     teams: [
         {
             name: "PT PLN (Persero)",
-            logo: "/logo-pln.png", // ✅ Path folder public
+            logo: "/logo-pln.png",
             plan: "Board Meeting",
         },
     ],
@@ -70,15 +70,13 @@ function SidebarBase({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return (
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
-                {/* ✅ TeamSwitcher perlu diupdate untuk menerima string path logo.
-                  Saya tetap menggunakan TeamSwitcher agar fitur menu dropdown tim tetap ada.
-                */}
                 <TeamSwitcher teams={data.teams} />
             </SidebarHeader>
             <SidebarContent>
                 <NavMain items={data.navMain} />
             </SidebarContent>
             <SidebarFooter>
+                {/* NavUser akan menangani fallback avatar */}
                 <NavUser user={data.user} />
             </SidebarFooter>
             <SidebarRail />
@@ -89,4 +87,4 @@ function SidebarBase({ ...props }: React.ComponentProps<typeof Sidebar>) {
 export const AppSidebar = dynamic(() => Promise.resolve(SidebarBase), {
     ssr: false,
     loading: () => <div className="w-(--sidebar-width) bg-sidebar border-r flex flex-col h-screen" />
-})
+})  

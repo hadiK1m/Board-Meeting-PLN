@@ -240,7 +240,7 @@ function DetailItem({ label, value, icon }: { label: string, value: string | nul
             <div className="mt-1 text-[#14a2ba] opacity-70 shrink-0">{icon}</div>
             <div className="min-w-0 flex-1">
                 <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{label}</p>
-                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight break-words">{value || "-"}</p>
+                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight wrap-break-word">{value || "-"}</p>
             </div>
         </div>
     )
