@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
     MoreHorizontal,
     Trash2,
@@ -69,8 +69,9 @@ interface RakordirClientProps {
 }
 
 export function RakordirClient({ initialData }: RakordirClientProps) {
-    // ✅ Fix Hydration & ESLint Cascading Render: derive isClient from environment to avoid setState in effect
-    const [isClient] = useState<boolean>(() => typeof window !== "undefined")
+    // ✅ Fix Hydration: avoid using a window-based useState initializer which differs between server and client.
+    // Use an effect-mounted flag so initial server and first client render match (both false), then enable client UI.
+    const [isClient, setIsClient] = useState(false)
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
@@ -85,6 +86,13 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
     // ✅ Edit modal state
     const [editOpen, setEditOpen] = useState(false)
     const [selectedEdit, setSelectedEdit] = useState<RakordirAgenda | null>(null)
+
+    // set mounted flag on client only to avoid SSR/CSR content mismatch
+    // defer state update to avoid synchronous setState inside effect (lint/React guidance)
+    useEffect(() => {
+        const id = setTimeout(() => setIsClient(true), 0)
+        return () => clearTimeout(id)
+    }, [])
 
     const handleOpenDetail = (agenda: RakordirAgenda) => {
         setSelectedDetail(agenda)

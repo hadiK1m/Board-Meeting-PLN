@@ -4,11 +4,13 @@ import { useState, useEffect } from "react"
 import {
     FileEdit,
     FileText,
-    Paperclip,
     Loader2,
     X,
     Save,
-    User
+    User,
+    Building2,
+    HardDrive,
+    EyeOff
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -22,6 +24,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogAction,
+    AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -35,6 +47,14 @@ import { cn } from "@/lib/utils"
 interface ExtendedRakordirAgenda extends RakordirAgenda {
     position?: string | null;
     phone?: string | null;
+    director?: string | null;
+    // keep same shape as base type
+    initiator: string | null;
+    support?: string | null;
+    // stored as JSON string or array in DB
+    notRequiredFiles?: string | string[] | null;
+    proposalNote?: string | null;
+    presentationMaterial?: string | null;
 }
 
 interface EditRakordirModalProps {
@@ -47,11 +67,38 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
     const [isPending, setIsPending] = useState(false)
     const [isClient, setIsClient] = useState(false)
     const [judul, setJudul] = useState(agenda.title || "")
+    const [notRequired, setNotRequired] = useState<string[]>([])
+    const [existingFiles, setExistingFiles] = useState<Record<string, string | null>>({})
+    const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
 
     useEffect(() => {
         setIsClient(true)
         setJudul(agenda.title || "")
+
+        // Logika Sinkronisasi Status Dokumen dari Database
+        if (agenda.notRequiredFiles) {
+            try {
+                const parsed = typeof agenda.notRequiredFiles === "string"
+                    ? JSON.parse(agenda.notRequiredFiles)
+                    : agenda.notRequiredFiles
+                setNotRequired(Array.isArray(parsed) ? parsed : [])
+            } catch {
+                setNotRequired([])
+            }
+        } else {
+            setNotRequired([])
+        }
+
+        // Inisialisasi existingFiles agar UI menampilkan file saat ini (sebelum diubah)
+        setExistingFiles({
+            proposalNote: agenda.proposalNote ?? null,
+            presentationMaterial: agenda.presentationMaterial ?? null,
+        })
     }, [agenda])
+
+    const toggleNotRequired = (field: string) => {
+        setNotRequired(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field])
+    }
 
     if (!isClient) return null
 
@@ -73,6 +120,9 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
         }
 
         try {
+            // Sertakan status dokumen yang tidak dibutuhkan
+            formData.append("notRequiredFiles", JSON.stringify(notRequired))
+
             const result = await updateRakordirAction(formData, agenda.id)
 
             if (result.success) {
@@ -159,6 +209,28 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                 </div>
                             </div>
 
+                            {/* SECTION: PEMRAKARSA & SUPPORT */}
+                            <div className="space-y-6 mt-8">
+                                <div className="flex items-center gap-2 border-b pb-2">
+                                    <Building2 className="h-5 w-5 text-[#14a2ba]" />
+                                    <h3 className="font-bold text-[#125d72] uppercase text-xs">Struktur Pemrakarsa</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold italic text-xs">Direktur Pemrakarsa</Label>
+                                        <Input name="director" defaultValue={agenda.director || ""} placeholder="Contoh: Direktur Utama" />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold italic text-xs">Divisi Pemrakarsa</Label>
+                                        <Input name="initiator" defaultValue={agenda.initiator || ""} placeholder="Contoh: Divisi Hukum" />
+                                    </div>
+                                    <div className="grid gap-2 md:col-span-2">
+                                        <Label className="font-bold italic text-xs text-blue-600">Support (Divisi Terkait)</Label>
+                                        <Input name="support" defaultValue={agenda.support || ""} placeholder="Contoh: Divisi Risiko, Divisi Keuangan" />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <User className="h-5 w-5 text-[#14a2ba]" />
@@ -180,21 +252,100 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                 </div>
                             </div>
 
+                            {/* SECTION: MANAJEMEN DOKUMEN */}
                             <div className="space-y-6">
-                                <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
-                                    <Paperclip className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-widest">Update Lampiran (Opsional)</h3>
+                                <div className="flex items-center gap-2 border-b pb-2">
+                                    <HardDrive className="h-5 w-5 text-[#14a2ba]" />
+                                    <h3 className="font-bold text-[#125d72] uppercase text-xs">Update Lampiran</h3>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="p-4 border rounded-xl bg-slate-50">
-                                        <Label className="text-[10px] font-black text-[#125d72] uppercase">ND Usulan Agenda (Baru)</Label>
-                                        <Input name="proposalNote" type="file" accept=".pdf" className="mt-2 bg-white" />
-                                        <p className="text-[9px] text-slate-400 mt-1 italic">*Biarkan kosong jika tidak ingin mengubah file</p>
-                                    </div>
-                                    <div className="p-4 border rounded-xl bg-slate-50">
-                                        <Label className="text-[10px] font-black text-[#125d72] uppercase">Materi Presentasi (Baru)</Label>
-                                        <Input name="presentationMaterial" type="file" accept=".pdf" className="mt-2 bg-white" />
-                                        <p className="text-[9px] text-slate-400 mt-1 italic">*Biarkan kosong jika tidak ingin mengubah file</p>
+
+                                <div className="grid gap-4">
+                                    {[
+                                        { id: "proposalNote", label: "ND Usulan Agenda" },
+                                        { id: "presentationMaterial", label: "Materi Presentasi" }
+                                    ].map((doc) => (
+                                        <div key={doc.id} className={`p-4 rounded-lg border transition-all group shadow-sm ${notRequired.includes(doc.id) ? 'bg-slate-100 opacity-60' : 'bg-[#fcfcfc] hover:bg-[#e7f6f9]/30'}`}>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <Label className="text-[10px] font-black text-[#125d72] uppercase opacity-70 group-hover:opacity-100">{doc.label}</Label>
+
+                                                {!existingFiles[doc.id] && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className={`h-6 text-[9px] px-2 ${notRequired.includes(doc.id) ? 'bg-red-50 text-red-600 border-red-200' : 'text-slate-500'}`}
+                                                        onClick={() => toggleNotRequired(doc.id)}
+                                                    >
+                                                        <EyeOff className="h-3 w-3 mr-1" />
+                                                        {notRequired.includes(doc.id) ? "Dibutuhkan" : "Tidak Diperlukan"}
+                                                    </Button>
+                                                )}
+                                            </div>
+
+                                            {existingFiles[doc.id] ? (
+                                                <div className="flex items-center justify-between p-2 border rounded bg-slate-50 mt-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="w-4 h-4 text-blue-500" />
+                                                        <span className="text-sm truncate max-w-50">{existingFiles[doc.id]!.split('/').pop()}</span>
+                                                    </div>
+                                                    <>
+                                                        <button type="button" onClick={() => setConfirmDeleteField(doc.id)} className="p-1 hover:bg-red-100 rounded text-red-500">
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+
+                                                        <AlertDialog open={confirmDeleteField === doc.id} onOpenChange={(open) => { if (!open) setConfirmDeleteField(null) }}>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Hapus lampiran?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        File akan dihapus dari bucket dan database ketika Anda menekan &quot;Ya, hapus&quot;. Tindakan ini tidak dapat dibatalkan setelah disimpan.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel onClick={() => setConfirmDeleteField(null)}>Batal</AlertDialogCancel>
+                                                                    <AlertDialogAction className="bg-red-500 text-white hover:bg-red-600" onClick={() => { setExistingFiles(prev => ({ ...prev, [doc.id]: null })); setConfirmDeleteField(null); }}>
+                                                                        Ya, hapus
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {!notRequired.includes(doc.id) ? (
+                                                        <Input name={doc.id} type="file" accept=".pdf" className="h-9 text-[10px] mt-2 file:mr-2.5 file:pr-1.5 file:pl-1.5 file:bg-[#14a2ba] file:text-white file:border-none file:rounded-md cursor-pointer" />
+                                                    ) : (
+                                                        <div className="h-9 flex items-center text-[10px] italic text-slate-400">Dokumen ditandai tidak diperlukan</div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    <div className={`p-4 rounded-lg border-2 border-dashed col-span-1 md:col-span-2 transition-all shadow-inner ${notRequired.includes('supportingDocuments') ? 'bg-slate-100 opacity-60 border-slate-300' : 'border-[#14a2ba] bg-white'}`}>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <Label className={`text-[10px] font-black uppercase ${notRequired.includes('supportingDocuments') ? 'text-slate-400' : 'text-[#14a2ba]'}`}>
+                                                Dokumen Pendukung (Multi-File)
+                                            </Label>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className={`h-6 text-[9px] px-2 ${notRequired.includes('supportingDocuments') ? 'bg-red-50 text-red-600 border-red-200' : 'text-[#14a2ba] border-[#14a2ba]/30 hover:bg-[#14a2ba] hover:text-white'}`}
+                                                onClick={() => toggleNotRequired('supportingDocuments')}
+                                            >
+                                                <EyeOff className="h-3 w-3 mr-1" />
+                                                {notRequired.includes('supportingDocuments') ? "Dibutuhkan" : "Tidak Diperlukan"}
+                                            </Button>
+                                        </div>
+                                        {!notRequired.includes('supportingDocuments') ? (
+                                            <Input name="supportingDocuments" type="file" multiple accept=".pdf" className="h-9 text-[10px] mt-2 file:rounded-md file:pr-1.5 file:pl-1.5 file:bg-[#125d72] file:text-white cursor-pointer" />
+                                        ) : (
+                                            <div className="py-2 text-[10px] italic text-slate-400 text-center">
+                                                Dokumen pendukung tambahan ditandai tidak diperlukan.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
