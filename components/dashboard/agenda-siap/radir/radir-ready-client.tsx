@@ -46,6 +46,7 @@ import { DetailAgendaSheet } from "./detail-agenda-sheet"
 import { CancelAgendaDialog } from "./cancel-agenda-dialog"
 import { resumeAgendaAction } from "@/server/actions/agenda-actions"
 
+// ✅ Pastikan interface ini match dengan output di page.tsx
 export interface AgendaReady {
     id: string
     title: string
@@ -84,7 +85,7 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
 
     const filteredData = useMemo(() => {
         return data
-            .filter(item => item.status.toLowerCase() !== "draft")
+            .filter(item => (item.status || "").toLowerCase() !== "draft")
             .filter((item) => {
                 const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     item.initiator.toLowerCase().includes(searchTerm.toLowerCase())
@@ -136,7 +137,7 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
             </div>
 
             <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-wrap items-center gap-4">
-                <div className="relative flex-1 min-w-75"> {/* ✅ Fix: Canonical min-w-75 */}
+                <div className="relative flex-1 min-w-75">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Cari agenda siap..."
@@ -182,7 +183,7 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
                     <Table>
                         <TableHeader className="bg-[#f8fafc] border-b">
                             <TableRow>
-                                <TableHead className="w-100 text-[#125d72] font-extrabold uppercase text-[11px] pl-6"> {/* ✅ Fix: Canonical w-100 */}
+                                <TableHead className="w-100 text-[#125d72] font-extrabold uppercase text-[11px] pl-6">
                                     Agenda Rapat
                                 </TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] text-center">Status</TableHead>
@@ -284,7 +285,8 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
             )}
 
             <DetailAgendaSheet
-                agenda={selectedDetail}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                agenda={selectedDetail as any}
                 open={detailOpen}
                 onOpenChange={setDetailOpen}
             />

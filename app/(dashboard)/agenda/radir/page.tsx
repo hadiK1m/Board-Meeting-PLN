@@ -17,17 +17,17 @@ export default async function RadirPage() {
 
     // 2. Mapping data lengkap termasuk FILE
     const formattedData: AgendaRadir[] = rawData.map((item) => {
-        // Casting untuk memastikan TypeScript mengenali kolom
+        // ✅ FIX: Gunakan 'unknown' atau union type daripada 'any' untuk menghindari ESLint error
         const typedItem = item as typeof item & {
-            notRequiredFiles?: any;
-            supportingDocuments?: any;
+            notRequiredFiles?: unknown;
+            supportingDocuments?: unknown;
         };
 
         return {
             id: typedItem.id,
             title: typedItem.title || "Tanpa Judul",
             urgency: typedItem.urgency || "Normal",
-            priority: typedItem.priority || "Low", // Tambahkan Priority
+            priority: typedItem.priority || "Low",
             initiator: typedItem.initiator || "Unit Pemrakarsa",
             status: typedItem.status || "DRAFT",
             deadline: typedItem.deadline ? new Date(typedItem.deadline).toISOString() : null,
@@ -39,7 +39,7 @@ export default async function RadirPage() {
             phone: typedItem.phone || "-",
             contactPerson: typedItem.contactPerson || "-",
 
-            // ✅ FILES (Sangat Penting agar muncul di Edit/Detail)
+            // FILES
             legalReview: typedItem.legalReview || null,
             riskReview: typedItem.riskReview || null,
             complianceReview: typedItem.complianceReview || null,
@@ -48,9 +48,9 @@ export default async function RadirPage() {
             proposalNote: typedItem.proposalNote || null,
             presentationMaterial: typedItem.presentationMaterial || null,
 
-            // ✅ Array/JSON Data
-            supportingDocuments: typedItem.supportingDocuments || [],
-            notRequiredFiles: typedItem.notRequiredFiles || [],
+            // ✅ Cast ke array string atau array kosong
+            supportingDocuments: (typedItem.supportingDocuments as string[]) || [],
+            notRequiredFiles: (typedItem.notRequiredFiles as string[]) || [],
         };
     });
 

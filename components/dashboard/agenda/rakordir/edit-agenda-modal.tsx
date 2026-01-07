@@ -8,9 +8,9 @@ import {
     X,
     Paperclip,
     EyeOff,
+    PlusCircle // Pastikan icon ini ada atau gunakan icon lain jika PlusCircle custom component di bawah
 } from "lucide-react"
 import { toast } from "sonner"
-// ✅ Import differenceInDays untuk logika prioritas
 import { format, differenceInDays } from "date-fns"
 import Image from "next/image"
 import Select, { StylesConfig } from "react-select"
@@ -36,6 +36,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+// ✅ Import Textarea
+import { Textarea } from "@/components/ui/textarea"
 
 import { updateRakordirAction } from "@/server/actions/rakordir-actions"
 import { RakordirAgenda } from "./rakordir-client"
@@ -263,12 +265,21 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                         placeholder="Masukkan judul agenda rakordir..."
                                     />
                                 </div>
-                                {/* ✅ GRID 3 KOLOM DENGAN URUTAN & LOGIKA BARU */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Urgensi</Label>
-                                        <Input name="urgency" defaultValue={agenda.urgency || ""} placeholder="Contoh: Segera" required />
-                                    </div>
+
+                                {/* ✅ UPDATE: Urgensi Full Width dengan Textarea */}
+                                <div className="grid gap-3">
+                                    <Label className="font-bold text-[#125d72]">Urgensi</Label>
+                                    <Textarea
+                                        name="urgency"
+                                        defaultValue={agenda.urgency || ""}
+                                        placeholder="Jelaskan urgensi..."
+                                        required
+                                        className="min-h-25 bg-[#f8fafc] border-[#e2e8f0] focus:border-[#14a2ba] focus:ring-[#14a2ba]"
+                                    />
+                                </div>
+
+                                {/* ✅ UPDATE: Grid 2 Kolom untuk Deadline & Prioritas */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="grid gap-2">
                                         <Label className="font-bold text-[#125d72]">Deadline Rapat</Label>
                                         <Input
@@ -294,7 +305,8 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                             {/* SECTION 2: PEMRAKARSA & NARAHUBUNG (DIGABUNG) */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
-                                    <PlusCircle className="h-5 w-5 text-[#14a2ba]" />
+                                    {/* Gunakan icon PlusCircle atau icon lain yang sesuai */}
+                                    <FileEdit className="h-5 w-5 text-[#14a2ba]" />
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">PEMRAKARSA & NARAHUBUNG</h3>
                                 </div>
                                 <div className="grid gap-6">
@@ -343,7 +355,8 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                         </div>
                                         <div className="grid gap-2">
                                             <Label className="font-bold text-[#125d72]">No HP/WA</Label>
-                                            <Input name="phone" defaultValue={agenda.phone || ""} required />
+                                            {/* ✅ UPDATE: Tipe input menjadi number */}
+                                            <Input name="phone" type="number" defaultValue={agenda.phone || ""} required />
                                         </div>
                                     </div>
                                 </div>
@@ -471,8 +484,3 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
         </Dialog>
     )
 }
-
-// Custom Icon untuk menyamakan dengan Referensi
-const PlusCircle = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
-);
