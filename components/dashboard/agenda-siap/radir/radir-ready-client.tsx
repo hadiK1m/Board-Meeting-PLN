@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useState, useMemo } from "react"
 import {
     Search,
@@ -10,7 +11,9 @@ import {
     Info,
     MoreHorizontal,
     Play,
-    Phone // Import icon phone
+    Phone,
+    Calendar as CalendarIcon, // Icon Kalender
+    X
 } from "lucide-react"
 
 import {
@@ -39,15 +42,23 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar" // Pastikan komponen Calendar ada
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
+import { id as localeID } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { DateRange } from "react-day-picker"
 
 import { DetailAgendaSheet } from "./detail-agenda-sheet"
 import { CancelAgendaDialog } from "./cancel-agenda-dialog"
 import { resumeAgendaAction } from "@/server/actions/agenda-actions"
 
-// ✅ Update Interface: Tambahkan position & phone
+// ✅ Interface Updated
 export interface AgendaReady {
     id: string
     title: string
@@ -59,8 +70,8 @@ export interface AgendaReady {
     cancellationReason?: string | null
     director?: string | null
     support?: string | null
-    position?: string | null // Tambah ini
-    phone?: string | null    // Tambah ini
+    position?: string | null
+    phone?: string | null
     legalReview?: string | null
     riskReview?: string | null
     complianceReview?: string | null
@@ -76,10 +87,9 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
-    const [dateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-        from: undefined,
-        to: undefined,
-    })
+
+    // ✅ State untuk Filter Tanggal
+    const [date, setDate] = useState<DateRange | undefined>(undefined)
 
     const [detailOpen, setDetailOpen] = useState(false)
     const [selectedDetail, setSelectedDetail] = useState<AgendaReady | null>(null)
@@ -92,16 +102,20 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
                     item.initiator.toLowerCase().includes(searchTerm.toLowerCase())
                 const matchesStatus = statusFilter === "all" || item.status === statusFilter
 
+                // ✅ Logika Filter Tanggal
                 let matchesDate = true
-                if (dateRange.from && dateRange.to) {
-                    matchesDate = isWithinInterval(new Date(item.deadline), {
-                        start: startOfDay(dateRange.from),
-                        end: endOfDay(dateRange.to),
-                    })
+                if (date?.from) {
+                    const itemDate = new Date(item.deadline)
+                    // Jika hanya 'from' yang dipilih (tanggal tunggal) atau range lengkap
+                    const start = startOfDay(date.from)
+                    const end = date.to ? endOfDay(date.to) : endOfDay(date.from)
+
+                    matchesDate = isWithinInterval(itemDate, { start, end })
                 }
+
                 return matchesSearch && matchesStatus && matchesDate
             })
-    }, [data, searchTerm, statusFilter, dateRange])
+    }, [data, searchTerm, statusFilter, date])
 
     const handleOpenDetail = (agenda: AgendaReady) => {
         setSelectedDetail(agenda)
@@ -128,28 +142,33 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div className="space-y-1">
-                    <h1 className="text-3xl font-extrabold tracking-tight text-[#125d72]">Radir Siap</h1>
-                    <p className="text-slate-500 font-medium">Manajemen agenda yang telah divalidasi</p>
+                <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">
+                    <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
+                        Radir Siap
+                    </h1>
+                    <p className="text-slate-500 font-medium">Manajemen agenda rapat direksi yang telah divalidasi</p>
                 </div>
                 <Button variant="outline" className="border-slate-200 text-slate-600 font-bold shadow-sm">
                     <Download className="mr-2 h-4 w-4" /> Export Agenda
                 </Button>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-wrap items-center gap-4">
-                <div className="relative flex-1 min-w-75">
+            {/* --- FILTER BAR --- */}
+            <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-col md:flex-row items-start md:items-center gap-4">
+                {/* Search Input */}
+                <div className="relative flex-1 w-full md:min-w-62.5">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Cari agenda siap..."
-                        className="pl-10 h-11 bg-slate-50 border-none"
+                        className="pl-10 h-11 bg-slate-50 border-none focus-visible:ring-[#14a2ba]"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
 
+                {/* Status Filter */}
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-56 h-11">
+                    <SelectTrigger className="w-full md:w-45 h-11 border-slate-200">
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -161,24 +180,79 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
                     </SelectContent>
                 </Select>
 
-                <div className="flex bg-slate-100 p-1 rounded-lg">
+                {/* ✅ Date Picker Filter */}
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                id="date"
+                                variant={"outline"}
+                                className={cn(
+                                    "w-full md:w-60 h-11 justify-start text-left font-normal border-slate-200",
+                                    !date && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4 text-[#14a2ba]" />
+                                {date?.from ? (
+                                    date.to ? (
+                                        <>
+                                            {format(date.from, "dd MMM", { locale: localeID })} -{" "}
+                                            {format(date.to, "dd MMM yyyy", { locale: localeID })}
+                                        </>
+                                    ) : (
+                                        format(date.from, "dd MMMM yyyy", { locale: localeID })
+                                    )
+                                ) : (
+                                    <span>Filter Tanggal</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={date?.from}
+                                selected={date}
+                                onSelect={setDate}
+                                numberOfMonths={2}
+                                locale={localeID}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Tombol Reset Tanggal */}
+                    {date && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDate(undefined)}
+                            className="h-11 w-11 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
                     <Button
                         variant={viewMode === "table" ? "secondary" : "ghost"}
                         size="sm" onClick={() => setViewMode("table")}
-                        className={cn("h-9", viewMode === "table" && "bg-white text-[#14a2ba]")}
+                        className={cn("h-9 w-9 p-0", viewMode === "table" && "bg-white text-[#14a2ba] shadow-sm")}
                     >
                         <List className="h-4 w-4" />
                     </Button>
                     <Button
                         variant={viewMode === "grid" ? "secondary" : "ghost"}
                         size="sm" onClick={() => setViewMode("grid")}
-                        className={cn("h-9", viewMode === "grid" && "bg-white text-[#14a2ba]")}
+                        className={cn("h-9 w-9 p-0", viewMode === "grid" && "bg-white text-[#14a2ba] shadow-sm")}
                     >
                         <LayoutGrid className="h-4 w-4" />
                     </Button>
                 </div>
             </div>
 
+            {/* --- CONTENT --- */}
             {viewMode === "table" ? (
                 <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                     <Table>
@@ -204,104 +278,115 @@ export function RadirReadyClient({ data }: RadirReadyClientProps) {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredData.map((agenda) => (
-                                <TableRow key={agenda.id} className="hover:bg-slate-50/50 group border-b last:border-0">
+                            {filteredData.length > 0 ? (
+                                filteredData.map((agenda) => (
+                                    <TableRow key={agenda.id} className="hover:bg-slate-50/50 group border-b last:border-0">
 
-                                    {/* ✅ Perbaikan Kolom Agenda: Max Width & Line Clamp */}
-                                    <TableCell className="py-5 pl-6 align-top">
-                                        <div className="space-y-1 max-w-87.5">
-                                            <p
-                                                className="font-bold text-[#125d72] uppercase text-xs tracking-tight line-clamp-2 leading-snug"
-                                                title={agenda.title}
-                                            >
-                                                {agenda.title}
-                                            </p>
-                                            <span className="text-[10px] text-slate-400 font-medium block mt-1">
-                                                DEADLINE: {format(new Date(agenda.deadline), "dd/MM/yyyy")}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    {/* ✅ Perbaikan Kolom Narahubung */}
-                                    <TableCell className="align-top py-5">
-                                        <div className="flex flex-col gap-0.5">
-                                            <span className="text-xs font-bold text-slate-700">
-                                                {agenda.contactPerson}
-                                            </span>
-                                            <span className="text-[10px] text-slate-500 uppercase font-medium">
-                                                {agenda.position || "-"}
-                                            </span>
-                                            {agenda.phone && (
-                                                <a
-                                                    href={`https://wa.me/${agenda.phone.replace(/[^0-9]/g, '')}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-[10px] text-emerald-600 font-bold hover:underline inline-flex items-center gap-1 mt-1 bg-emerald-50 w-fit px-1.5 py-0.5 rounded"
+                                        {/* Agenda & Deadline */}
+                                        <TableCell className="py-5 pl-6 align-top">
+                                            <div className="space-y-1 max-w-87.5">
+                                                <p
+                                                    className="font-bold text-[#125d72] uppercase text-xs tracking-tight line-clamp-2 leading-snug"
+                                                    title={agenda.title}
                                                 >
-                                                    <Phone className="h-2.5 w-2.5" />
-                                                    {agenda.phone}
-                                                </a>
-                                            )}
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell className="text-center align-top py-5">
-                                        <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
-                                            agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-[#125d72] text-white hover:bg-[#0e4b5d]")}>
-                                            {agenda.status.replace(/_/g, ' ')}
-                                        </Badge>
-                                    </TableCell>
-
-                                    <TableCell className="pl-6 align-top py-5">
-                                        {agenda.cancellationReason ? (
-                                            <div className="flex items-start gap-2 max-w-xs bg-red-50 p-2 rounded-md border border-red-100">
-                                                <Info className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
-                                                <p className="text-[10px] text-red-600 italic leading-snug">
-                                                    {agenda.cancellationReason}
+                                                    {agenda.title}
                                                 </p>
+                                                <span className="text-[10px] text-slate-400 font-medium block mt-1">
+                                                    DEADLINE: {format(new Date(agenda.deadline), "dd/MM/yyyy")}
+                                                </span>
                                             </div>
-                                        ) : <span className="text-slate-300 text-[11px]">-</span>}
-                                    </TableCell>
+                                        </TableCell>
 
-                                    <TableCell className="text-right pr-6 align-top py-5">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 w-8 p-0 rounded-full hover:bg-slate-100">
-                                                    <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" className="w-52 p-2 rounded-xl shadow-2xl border-none">
-                                                <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Aksi Agenda</DropdownMenuLabel>
-                                                <DropdownMenuItem
-                                                    onClick={() => handleOpenDetail(agenda)}
-                                                    className="rounded-lg py-2.5 cursor-pointer font-bold text-[#125d72]"
-                                                >
-                                                    <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
-                                                </DropdownMenuItem>
-
-                                                <DropdownMenuSeparator />
-
-                                                {agenda.status === "DIBATALKAN" ? (
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleResume(agenda.id, agenda.title)}
-                                                        className="rounded-lg py-2.5 cursor-pointer font-bold text-green-600 focus:bg-green-50 focus:text-green-600"
+                                        {/* Narahubung */}
+                                        <TableCell className="align-top py-5">
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-xs font-bold text-slate-700">
+                                                    {agenda.contactPerson}
+                                                </span>
+                                                <span className="text-[10px] text-slate-500 uppercase font-medium">
+                                                    {agenda.position || "-"}
+                                                </span>
+                                                {agenda.phone && (
+                                                    <a
+                                                        href={`https://wa.me/${agenda.phone.replace(/[^0-9]/g, '')}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-[10px] text-emerald-600 font-bold hover:underline inline-flex items-center gap-1 mt-1 bg-emerald-50 w-fit px-1.5 py-0.5 rounded"
                                                     >
-                                                        <Play className="mr-3 h-4 w-4" /> Lanjutkan Agenda
-                                                    </DropdownMenuItem>
-                                                ) : (
-                                                    <div className="p-1">
-                                                        <CancelAgendaDialog
-                                                            agendaId={agenda.id}
-                                                            agendaTitle={agenda.title}
-                                                            variant="dropdown"
-                                                        />
-                                                    </div>
+                                                        <Phone className="h-2.5 w-2.5" />
+                                                        {agenda.phone}
+                                                    </a>
                                                 )}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                            </div>
+                                        </TableCell>
+
+                                        {/* Status */}
+                                        <TableCell className="text-center align-top py-5">
+                                            <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
+                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-[#125d72] text-white hover:bg-[#0e4b5d]")}>
+                                                {agenda.status.replace(/_/g, ' ')}
+                                            </Badge>
+                                        </TableCell>
+
+                                        {/* Catatan */}
+                                        <TableCell className="pl-6 align-top py-5">
+                                            {agenda.cancellationReason ? (
+                                                <div className="flex items-start gap-2 max-w-xs bg-red-50 p-2 rounded-md border border-red-100">
+                                                    <Info className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
+                                                    <p className="text-[10px] text-red-600 italic leading-snug">
+                                                        {agenda.cancellationReason}
+                                                    </p>
+                                                </div>
+                                            ) : <span className="text-slate-300 text-[11px]">-</span>}
+                                        </TableCell>
+
+                                        {/* Opsi */}
+                                        <TableCell className="text-right pr-6 align-top py-5">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0 rounded-full hover:bg-slate-100">
+                                                        <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-52 p-2 rounded-xl shadow-2xl border-none">
+                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Aksi Agenda</DropdownMenuLabel>
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleOpenDetail(agenda)}
+                                                        className="rounded-lg py-2.5 cursor-pointer font-bold text-[#125d72]"
+                                                    >
+                                                        <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
+                                                    </DropdownMenuItem>
+
+                                                    <DropdownMenuSeparator />
+
+                                                    {agenda.status === "DIBATALKAN" ? (
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleResume(agenda.id, agenda.title)}
+                                                            className="rounded-lg py-2.5 cursor-pointer font-bold text-green-600 focus:bg-green-50 focus:text-green-600"
+                                                        >
+                                                            <Play className="mr-3 h-4 w-4" /> Lanjutkan Agenda
+                                                        </DropdownMenuItem>
+                                                    ) : (
+                                                        <div className="p-1">
+                                                            <CancelAgendaDialog
+                                                                agendaId={agenda.id}
+                                                                agendaTitle={agenda.title}
+                                                                variant="dropdown"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-32 text-center text-slate-400 text-xs italic">
+                                        Data tidak ditemukan.
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            )}
                         </TableBody>
                     </Table>
                 </div>

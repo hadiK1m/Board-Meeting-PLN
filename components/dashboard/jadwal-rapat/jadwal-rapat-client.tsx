@@ -82,14 +82,37 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
 
     // Filter untuk tabel utama (yang sudah dijadwalkan)
     const filteredData = useMemo(() => {
-        return data.filter(item => item.status === "DIJADWALKAN")
-    }, [data])
+        return data.filter(item => {
+            // 1. Filter Wajib: Status harus DIJADWALKAN
+            const isScheduled = item.status === "DIJADWALKAN";
+            if (!isScheduled) return false;
+
+            // 2. Filter Search: Mencocokkan Judul atau Initiator
+            const matchesSearch =
+                item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item.initiator || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+            // 3. Filter Jenis Rapat (Dropdown)
+            // Menggunakan logika deteksi string "rakordir" pada judul (konsisten dengan handleCopyWA)
+            const isRakordir = item.title.toLowerCase().includes("rakordir");
+            let matchesType = true;
+
+            if (meetingTypeFilter === "radir") {
+                // Jika pilih RADIR, tampilkan yang TIDAK mengandung kata "rakordir"
+                matchesType = !isRakordir;
+            } else if (meetingTypeFilter === "rakordir") {
+                // Jika pilih RAKORDIR, tampilkan yang mengandung kata "rakordir"
+                matchesType = isRakordir;
+            }
+            // Jika "all", matchesType tetap true
+
+            return matchesSearch && matchesType;
+        })
+    }, [data, searchTerm, meetingTypeFilter])
 
     const availableAgendas = useMemo(() => {
         return data.filter(item => {
-            // Normalisasi status: ubah ke All Caps dan ganti spasi jadi underscore untuk pengecekan aman
             const normalizedStatus = item.status?.toUpperCase().replace(/\s/g, '_');
-
             return (
                 normalizedStatus === "DAPAT_DILANJUTKAN" ||
                 item.status === "Dapat Dilanjutkan"
@@ -97,7 +120,6 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
         });
     }, [data]);
 
-    // ✅ FITUR BATALKAN JADWAL (ROLLBACK)
     const handleRollback = async (id: string, title: string) => {
         if (!confirm(`Apakah Anda yakin ingin membatalkan jadwal untuk agenda "${title}"? Agenda akan dikembalikan ke status 'Dapat Dilanjutkan'.`)) {
             return
@@ -116,7 +138,6 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
         }
     }
 
-    // ✅ FITUR GENERATE & COPY WHATSAPP
     const handleCopyWA = () => {
         const selectedAgendas = filteredData.filter(item => selectedIds.includes(item.id))
         if (selectedAgendas.length === 0) return
@@ -202,7 +223,6 @@ _SEKPER PLN_`
 
     return (
         <div className="space-y-6">
-            {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="space-y-1">
                     <h1 className="text-3xl font-extrabold tracking-tight text-[#125d72]">Jadwal Rapat</h1>
@@ -221,7 +241,6 @@ _SEKPER PLN_`
                 </div>
             </div>
 
-            {/* Filter Bar */}
             <div className="bg-white p-2 rounded-xl border shadow-sm flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 min-w-75">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -248,7 +267,6 @@ _SEKPER PLN_`
                 </div>
             </div>
 
-            {/* View Mode: Table */}
             {viewMode === "table" ? (
                 <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                     <Table>
@@ -257,7 +275,8 @@ _SEKPER PLN_`
                                 <TableHead className="w-12 px-6">
                                     <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                <TableHead className="text-[#125d72] font-black uppercase text-[11px]">Agenda & Waktu</TableHead>
+                                {/* ✅ FIX: Lebar kolom dibatasi 40% dan min-width 300px */}
+                                <TableHead className="w-[40%] min-w-75 text-[#125d72] font-black uppercase text-[11px]">Agenda & Waktu</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Metode</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Status</TableHead>
                                 <TableHead className="text-right text-[#125d72] font-black uppercase text-[11px] pr-6">Opsi</TableHead>
@@ -271,7 +290,13 @@ _SEKPER PLN_`
                                     </TableCell>
                                     <TableCell className="py-5">
                                         <div className="space-y-1">
-                                            <p className="font-bold text-[#125d72] uppercase text-xs tracking-tight">{agenda.title}</p>
+                                            {/* ✅ FIX: Tambahkan line-clamp-2 untuk membatasi baris dan title untuk tooltip native */}
+                                            <p
+                                                className="font-bold text-[#125d72] uppercase text-xs tracking-tight line-clamp-2 max-w-2xl"
+                                                title={agenda.title}
+                                            >
+                                                {agenda.title}
+                                            </p>
                                             <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
                                                 <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3 text-[#14a2ba]" /> {agenda.executionDate}</span>
                                                 <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-[#14a2ba]" /> {agenda.startTime} - {agenda.endTime}</span>

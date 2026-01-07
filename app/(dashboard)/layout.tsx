@@ -1,18 +1,11 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
+import { HeaderBreadcrumb } from "@/components/dashboard/header-breadcrumb" // <--- Import komponen baru
 import {
     SidebarInset,
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 
 export default function DashboardLayout({
     children,
@@ -27,19 +20,10 @@ export default function DashboardLayout({
                     <div className="flex items-center gap-2">
                         <SidebarTrigger className="-ml-1" />
                         <Separator orientation="vertical" className="mr-2 h-4" />
-                        <Breadcrumb>
-                            <BreadcrumbList>
-                                <BreadcrumbItem className="hidden md:block">
-                                    <BreadcrumbLink href="/dashboard">
-                                        Dashboard
-                                    </BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block" />
-                                <BreadcrumbItem>
-                                    <BreadcrumbPage className="font-bold text-[#125d72]">Agenda Radir</BreadcrumbPage>
-                                </BreadcrumbItem>
-                            </BreadcrumbList>
-                        </Breadcrumb>
+
+                        {/* Implementasi Breadcrumb Dinamis */}
+                        <HeaderBreadcrumb />
+
                     </div>
                 </header>
                 <div className="flex flex-1 flex-col gap-4 p-4 pt-0 bg-slate-50/50">

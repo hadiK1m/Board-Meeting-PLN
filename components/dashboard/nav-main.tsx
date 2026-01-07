@@ -1,9 +1,7 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { ChevronRight, type LucideIcon } from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
 import {
     Collapsible,
     CollapsibleContent,
@@ -19,51 +17,64 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import Link from "next/link" // Pastikan import Link jika menggunakan Next.js
 
-interface SubItem {
-    title: string
-    url: string
-}
-
+// Definisi tipe data untuk props (sesuaikan jika berbeda)
 interface NavItem {
     title: string
     url: string
     icon?: LucideIcon
     isActive?: boolean
-    items?: SubItem[]
+    items?: { // Submenu bersifat opsional
+        title: string
+        url: string
+    }[]
 }
 
-export function NavMain({
-    items,
-}: {
-    items: NavItem[]
-}) {
-    const pathname = usePathname()
+export function NavMain({ items }: { items: NavItem[] }) {
+    // 1. PERBAIKAN STATE: Lazy Initialization
+    // Membaca localStorage langsung saat inisialisasi state, bukan di useEffect
+    const [openStates, setOpenStates] = useState<Record<string, boolean>>(() => {
+        // Cek apakah kode berjalan di browser (penting untuk Next.js)
+        if (typeof window !== "undefined") {
+            const savedState = localStorage.getItem("sidebar-menu-state")
+            if (savedState) {
+                return JSON.parse(savedState)
+            }
+        }
+        return {} // Default jika tidak ada save
+    })
+
+    // Effect hanya untuk MENYIMPAN perubahan ke localStorage
+    useEffect(() => {
+        if (Object.keys(openStates).length > 0) {
+            localStorage.setItem("sidebar-menu-state", JSON.stringify(openStates))
+        }
+    }, [openStates])
+
+    const toggleOpen = (title: string) => {
+        setOpenStates((prev) => ({
+            ...prev,
+            [title]: !prev[title],
+        }))
+    }
 
     return (
         <SidebarGroup>
-            <SidebarGroupLabel>Menu Utama</SidebarGroupLabel>
+            <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => {
-                    // Cek apakah URL saat ini adalah bagian dari sub-item grup ini
-                    const hasActiveChild = item.items?.some((subItem) => pathname === subItem.url)
-                    // Cek apakah menu utama itu sendiri aktif (untuk menu tanpa sub-item)
-                    const isParentActive = pathname === item.url
+                    // 2. LOGIKA UI: Cek apakah item punya submenu
+                    const hasSubmenu = item.items && item.items.length > 0
 
-                    // Kondisi menu tetap terbuka jika ada anak yang aktif
-                    const shouldBeOpen = item.isActive || hasActiveChild
-
-                    // KONDISI 1: Jika menu TIDAK memiliki anak (e.g. Dashboard, Jadwal Rapat)
-                    if (!item.items || item.items.length === 0) {
+                    // JIKA TIDAK ADA SUBMENU (Contoh: Dashboard, Jadwal Rapat)
+                    // Render link biasa tanpa panah/collapsible
+                    if (!hasSubmenu) {
                         return (
                             <SidebarMenuItem key={item.title}>
-                                <SidebarMenuButton
-                                    asChild
-                                    tooltip={item.title}
-                                    isActive={isParentActive}
-                                >
+                                <SidebarMenuButton asChild tooltip={item.title}>
                                     <Link href={item.url}>
-                                        {item.icon && <item.icon className="size-4" />}
+                                        {item.icon && <item.icon />}
                                         <span>{item.title}</span>
                                     </Link>
                                 </SidebarMenuButton>
@@ -71,19 +82,22 @@ export function NavMain({
                         )
                     }
 
-                    // KONDISI 2: Jika menu MEMILIKI anak (e.g. Usulan Agenda, Daftar Agenda Siap)
+                    // JIKA ADA SUBMENU
+                    // Render dengan Collapsible dan Panah
                     return (
                         <Collapsible
                             key={item.title}
                             asChild
-                            defaultOpen={shouldBeOpen}
+                            open={openStates[item.title]} // Menggunakan state dari localStorage
+                            onOpenChange={() => toggleOpen(item.title)}
                             className="group/collapsible"
                         >
                             <SidebarMenuItem>
                                 <CollapsibleTrigger asChild>
-                                    <SidebarMenuButton tooltip={item.title} isActive={hasActiveChild}>
-                                        {item.icon && <item.icon className="size-4" />}
+                                    <SidebarMenuButton tooltip={item.title}>
+                                        {item.icon && <item.icon />}
                                         <span>{item.title}</span>
+                                        {/* Tanda panah hanya muncul di sini */}
                                         <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                                     </SidebarMenuButton>
                                 </CollapsibleTrigger>
@@ -91,10 +105,7 @@ export function NavMain({
                                     <SidebarMenuSub>
                                         {item.items?.map((subItem) => (
                                             <SidebarMenuSubItem key={subItem.title}>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={pathname === subItem.url}
-                                                >
+                                                <SidebarMenuSubButton asChild>
                                                     <Link href={subItem.url}>
                                                         <span>{subItem.title}</span>
                                                     </Link>

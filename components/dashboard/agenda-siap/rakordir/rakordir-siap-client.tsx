@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useState, useMemo } from "react"
 import {
     Search,
@@ -10,7 +11,9 @@ import {
     Info,
     MoreHorizontal,
     Play,
-    Phone
+    Phone,
+    Calendar as CalendarIcon,
+    X
 } from "lucide-react"
 
 import {
@@ -39,16 +42,24 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
+import { id as localeID } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { DateRange } from "react-day-picker"
 
-// Menggunakan komponen sheet & dialog yang sama (Reusable) atau sesuaikan path jika ada duplikat khusus rakordir
+// Menggunakan komponen sheet & dialog yang sama dengan Radir (Reusable)
 import { DetailAgendaSheet } from "../radir/detail-agenda-sheet"
 import { CancelAgendaDialog } from "../radir/cancel-agenda-dialog"
 import { resumeAgendaAction } from "@/server/actions/agenda-actions"
 
-// ✅ Interface disesuaikan dengan kebutuhan Rakordir (tapi struktur sama dengan Radir)
+// ✅ Interface disesuaikan dengan kebutuhan Rakordir
 export interface AgendaReady {
     id: string
     title: string
@@ -82,10 +93,9 @@ export default function RakordirSiapClient({ data }: RakordirSiapClientProps) {
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
-    const [dateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-        from: undefined,
-        to: undefined,
-    })
+
+    // ✅ State Filter Tanggal
+    const [date, setDate] = useState<DateRange | undefined>(undefined)
 
     const [detailOpen, setDetailOpen] = useState(false)
     const [selectedDetail, setSelectedDetail] = useState<AgendaReady | null>(null)
@@ -98,16 +108,18 @@ export default function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                     item.initiator.toLowerCase().includes(searchTerm.toLowerCase())
                 const matchesStatus = statusFilter === "all" || item.status === statusFilter
 
+                // ✅ Logika Filter Tanggal
                 let matchesDate = true
-                if (dateRange.from && dateRange.to) {
-                    matchesDate = isWithinInterval(new Date(item.deadline), {
-                        start: startOfDay(dateRange.from),
-                        end: endOfDay(dateRange.to),
-                    })
+                if (date?.from) {
+                    const itemDate = new Date(item.deadline)
+                    const start = startOfDay(date.from)
+                    const end = date.to ? endOfDay(date.to) : endOfDay(date.from)
+                    matchesDate = isWithinInterval(itemDate, { start, end })
                 }
+
                 return matchesSearch && matchesStatus && matchesDate
             })
-    }, [data, searchTerm, statusFilter, dateRange])
+    }, [data, searchTerm, statusFilter, date])
 
     const handleOpenDetail = (agenda: AgendaReady) => {
         setSelectedDetail(agenda)
@@ -135,29 +147,33 @@ export default function RakordirSiapClient({ data }: RakordirSiapClientProps) {
         <div className="space-y-6">
             {/* --- HEADER --- */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div className="space-y-1">
-                    <h1 className="text-3xl font-extrabold tracking-tight text-[#125d72]">Rakordir Siap</h1>
-                    <p className="text-slate-500 font-medium">Manajemen agenda Rakordir yang telah divalidasi</p>
+                <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">
+                    <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
+                        Rakordir Siap
+                    </h1>
+                    <p className="text-slate-500 font-medium">Manajemen agenda rapat koordinasi direksi yang telah divalidasi</p>
                 </div>
                 <Button variant="outline" className="border-slate-200 text-slate-600 font-bold shadow-sm">
                     <Download className="mr-2 h-4 w-4" /> Export Agenda
                 </Button>
             </div>
 
-            {/* --- FILTERS --- */}
-            <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-wrap items-center gap-4">
-                <div className="relative flex-1 min-w-75">
+            {/* --- FILTER BAR --- */}
+            <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-col md:flex-row items-start md:items-center gap-4">
+                {/* Search Input */}
+                <div className="relative flex-1 w-full md:min-w-62.5">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Cari agenda rakordir..."
-                        className="pl-10 h-11 bg-slate-50 border-none"
+                        className="pl-10 h-11 bg-slate-50 border-none focus-visible:ring-[#14a2ba]"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
 
+                {/* Status Filter */}
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-56 h-11">
+                    <SelectTrigger className="w-full md:w-45 h-11 border-slate-200">
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -169,18 +185,72 @@ export default function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                     </SelectContent>
                 </Select>
 
-                <div className="flex bg-slate-100 p-1 rounded-lg">
+                {/* ✅ Date Picker Filter */}
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                id="date"
+                                variant={"outline"}
+                                className={cn(
+                                    "w-full md:w-60 h-11 justify-start text-left font-normal border-slate-200",
+                                    !date && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4 text-[#14a2ba]" />
+                                {date?.from ? (
+                                    date.to ? (
+                                        <>
+                                            {format(date.from, "dd MMM", { locale: localeID })} -{" "}
+                                            {format(date.to, "dd MMM yyyy", { locale: localeID })}
+                                        </>
+                                    ) : (
+                                        format(date.from, "dd MMMM yyyy", { locale: localeID })
+                                    )
+                                ) : (
+                                    <span>Filter Tanggal</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={date?.from}
+                                selected={date}
+                                onSelect={setDate}
+                                numberOfMonths={2}
+                                locale={localeID}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Tombol Reset Tanggal */}
+                    {date && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDate(undefined)}
+                            className="h-11 w-11 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
                     <Button
                         variant={viewMode === "table" ? "secondary" : "ghost"}
                         size="sm" onClick={() => setViewMode("table")}
-                        className={cn("h-9", viewMode === "table" && "bg-white text-[#14a2ba]")}
+                        className={cn("h-9 w-9 p-0", viewMode === "table" && "bg-white text-[#14a2ba] shadow-sm")}
                     >
                         <List className="h-4 w-4" />
                     </Button>
                     <Button
                         variant={viewMode === "grid" ? "secondary" : "ghost"}
                         size="sm" onClick={() => setViewMode("grid")}
-                        className={cn("h-9", viewMode === "grid" && "bg-white text-[#14a2ba]")}
+                        className={cn("h-9 w-9 p-0", viewMode === "grid" && "bg-white text-[#14a2ba] shadow-sm")}
                     >
                         <LayoutGrid className="h-4 w-4" />
                     </Button>
@@ -374,7 +444,7 @@ export default function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                 </div>
             )}
 
-            {/* Reuse Detail Sheet (Pastikan DetailAgendaSheet support field Rakordir) */}
+            {/* Reuse Detail Sheet */}
             <DetailAgendaSheet
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 agenda={selectedDetail as any}
