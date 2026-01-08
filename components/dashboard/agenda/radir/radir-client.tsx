@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react"
 import {
     MoreHorizontal,
     Trash2,
-    FileEdit,
     Eye,
     Search,
     Calendar as CalendarIcon,
@@ -12,8 +11,12 @@ import {
     List,
     ChevronRight,
     Download,
-    X,
-    Lock
+    Lock,
+    FileJson,
+    FileEdit,
+    User,
+    Building2,
+    X
 } from "lucide-react"
 
 import {
@@ -28,8 +31,8 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,37 +46,47 @@ import {
 } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
 import { cn } from "@/lib/utils"
 
 import { Checkbox } from "@/components/ui/checkbox"
-import { DeleteAction } from "./delete-action"
-import { DetailAgendaSheet } from "./detail-agenda-sheet"
-import { EditAgendaModal } from "./edit-agenda-modal"
-import { AddAgendaModal } from "./add-agenda-modal"
-import { deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
 import { toast } from "sonner"
 import Image from "next/image"
+import * as XLSX from "xlsx"
 
-// ✅ Export agar dapat di-import dari server component
+// Import komponen & action
+import { DeleteAction } from "./delete-radir-action"
+import { DetailRadirSheet } from "./detail-radir-sheet"
+import { EditRadirModal } from "./edit-radir-modal"
+import { AddRadirModal } from "./add-radir-modal"
+import { Agenda } from "@/db/schema/agendas"
+import { deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
+
 export interface AgendaRadir {
     id: string
     title: string
     urgency: string | null
-    deadline: string | null // gunakan ISO string dari server atau null
+    deadline: string | Date | null
     initiator: string | null
+    director: string | null
+    priority: string | null
     status: string | null
     contactPerson: string | null
+    phone: string | null
 }
 
 interface RadirClientProps {
-    data: AgendaRadir[]
+    data?: AgendaRadir[]
 }
 
-export function RadirClient({ data }: RadirClientProps) {
-    // ✅ FIX: Tambahkan state isClient untuk menangani Hydration Mismatch
-    const [isClient, setIsClient] = useState(false)
+export function RadirClient({ data = [] }: RadirClientProps) {
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        const rafId = requestAnimationFrame(() => setMounted(true));
+        return () => cancelAnimationFrame(rafId);
+    }, [])
+
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
@@ -82,19 +95,15 @@ export function RadirClient({ data }: RadirClientProps) {
         to: undefined,
     })
 
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [selectedAgenda, setSelectedAgenda] = useState<{ id: string, title: string } | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [detailOpen, setDetailOpen] = useState(false)
     const [selectedDetail, setSelectedDetail] = useState<AgendaRadir | null>(null)
+
     const [editOpen, setEditOpen] = useState(false)
     const [selectedEdit, setSelectedEdit] = useState<AgendaRadir | null>(null)
 
-    // ✅ FIX: useEffect untuk memastikan render hanya terjadi di client setelah mounting
-    useEffect(() => {
-        const id = setTimeout(() => setIsClient(true), 0)
-        return () => clearTimeout(id)
-    }, [])
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [itemToDelete, setItemToDelete] = useState<{ id: string, title: string } | null>(null)
 
     const handleOpenDetail = (agenda: AgendaRadir) => {
         setSelectedDetail(agenda)
@@ -106,39 +115,42 @@ export function RadirClient({ data }: RadirClientProps) {
         setEditOpen(true)
     }
 
+    const onSelectDelete = (id: string, title: string) => {
+        setItemToDelete({ id, title })
+        setDeleteDialogOpen(true)
+    }
+
     const filteredData = useMemo(() => {
         return data.filter((item) => {
-            // safe string handling for nullable fields
             const title = (item.title || "").toLowerCase()
             const initiator = (item.initiator || "").toLowerCase()
-            const matchesSearch = title.includes(searchTerm.toLowerCase()) || initiator.includes(searchTerm.toLowerCase())
-            const matchesStatus = statusFilter === "all" || (item.status || "").toUpperCase() === statusFilter.toUpperCase()
+            const director = (item.director || "").toLowerCase()
+
+            const matchesSearch = title.includes(searchTerm.toLowerCase()) ||
+                initiator.includes(searchTerm.toLowerCase()) ||
+                director.includes(searchTerm.toLowerCase())
+
+            const itemStatus = item.status || "DRAFT"
+            const matchesStatus = statusFilter === "all" || itemStatus.toUpperCase() === statusFilter.toUpperCase()
 
             let matchesDate = true
-            if (dateRange.from && dateRange.to) {
-                if (!item.deadline) {
-                    matchesDate = false
-                } else {
-                    const itemDate = new Date(item.deadline)
-                    matchesDate = isWithinInterval(itemDate, {
-                        start: startOfDay(dateRange.from),
-                        end: endOfDay(dateRange.to),
-                    })
-                }
+            if (dateRange.from && dateRange.to && item.deadline) {
+                const itemDate = new Date(item.deadline)
+                matchesDate = isWithinInterval(itemDate, {
+                    start: startOfDay(dateRange.from),
+                    end: endOfDay(dateRange.to),
+                })
             }
-
             return matchesSearch && matchesStatus && matchesDate
         })
     }, [data, searchTerm, statusFilter, dateRange])
 
+    // ✅ LOGIKA SELESAI/JADWAL: Sekarang bisa select semua item tanpa filter status
     const toggleSelectAll = () => {
-        // Hanya izinkan select all untuk data yang TIDAK dikunci jika ingin melakukan bulk delete
-        const deletableItems = filteredData.filter(item => item.status !== "DIJADWALKAN" && item.status !== "SELESAI")
-
-        if (selectedIds.length === deletableItems.length && deletableItems.length > 0) {
+        if (selectedIds.length === filteredData.length && filteredData.length > 0) {
             setSelectedIds([])
         } else {
-            setSelectedIds(deletableItems.map(item => item.id))
+            setSelectedIds(filteredData.map(item => item.id))
         }
     }
 
@@ -148,35 +160,66 @@ export function RadirClient({ data }: RadirClientProps) {
         )
     }
 
-    const handleBulkDelete = async () => {
-        if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.length} agenda terpilih?`)) return
+    // ✅ LOGIKA BARU: Cek apakah ada item tercentang yang statusnya terkunci (Radir)
+    const hasLockedItemInSelection = useMemo(() => {
+        const selectedItems = data.filter(item => selectedIds.includes(item.id));
+        return selectedItems.some(item => item.status === "DIJADWALKAN" || item.status === "SELESAI");
+    }, [selectedIds, data]);
 
+    const handleExport = () => {
+        if (selectedIds.length === 0) return;
+        const selectedData = data.filter(item => selectedIds.includes(item.id));
+
+        const excelData = selectedData.map((item, index) => ({
+            No: index + 1,
+            "Judul Agenda": item.title,
+            Prioritas: item.priority || "Low",
+            Urgensi: item.urgency || "-",
+            Deadline: item.deadline ? format(new Date(item.deadline), "dd/MM/yyyy") : "-",
+            Direktur: item.director || "-",
+            Pemrakarsa: item.initiator || "-",
+            PIC: item.contactPerson || "-",
+            WhatsApp: item.phone || "-",
+            Status: item.status || "DRAFT"
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Agenda Radir");
+
+        worksheet["!cols"] = [
+            { wch: 5 }, { wch: 50 }, { wch: 10 }, { wch: 15 }, { wch: 15 },
+            { wch: 25 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }
+        ];
+
+        const fileName = `Export_Agenda_Radir_${format(new Date(), "ddMMyy_HHmm")}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+        toast.success(`${selectedIds.length} data berhasil diekspor.`);
+    }
+
+    const handleBulkDelete = async () => {
+        if (hasLockedItemInSelection) {
+            toast.error("Gagal: Seleksi mengandung agenda yang sudah dijadwalkan/selesai.");
+            return;
+        }
+        if (!confirm(`Hapus ${selectedIds.length} agenda Radir terpilih?`)) return
         const res = await deleteBulkAgendasAction(selectedIds)
         if (res.success) {
             toast.custom((t) => (
                 <div className="flex items-center gap-4 bg-white border-l-4 border-orange-500 p-4 shadow-2xl rounded-lg min-w-87.5">
-                    <div className="shrink-0">
-                        <Image src="/logo-pln.png" alt="PLN" width={40} height={40} className="object-contain" />
-                    </div>
+                    <Image src="/logo-pln.png" alt="PLN" width={40} height={40} />
                     <div className="flex-1">
-                        <h4 className="text-sm font-bold text-[#125d72]">Data Massal Dihapus</h4>
-                        <p className="text-xs text-slate-500 italic uppercase truncate max-w-50">
-                            {selectedIds.length} Agenda Berhasil dibersihkan.
-                        </p>
+                        <h4 className="text-sm font-bold text-[#125d72]">Bulk Delete Berhasil</h4>
+                        <p className="text-xs text-slate-500">{selectedIds.length} data telah dihapus.</p>
                     </div>
-                    <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
-                        <X className="h-4 w-4" />
-                    </button>
+                    <button onClick={() => toast.dismiss(t)}><X className="h-4 w-4 text-slate-300" /></button>
                 </div>
             ))
             setSelectedIds([])
-        } else {
-            toast.error(res.error || "Gagal menghapus data")
         }
     }
 
-    // ✅ FIX: Return null jika belum di-render di client (mencegah error hydration)
-    if (!isClient) return null
+    if (!mounted) return null
 
     return (
         <div className="space-y-6">
@@ -186,21 +229,52 @@ export function RadirClient({ data }: RadirClientProps) {
                         <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
                             Agenda Radir
                         </h1>
-                        <p className="text-slate-500 font-medium">Halaman Manajemen Usulan Rapat Direksi</p>
+                        <p className="text-slate-500 font-medium italic text-sm">Manajemen Usulan Rapat Direksi</p>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3">
-                    {selectedIds.length > 0 && (
-                        <div className="flex items-center gap-2 mr-2 animate-in fade-in slide-in-from-right-2">
-                            <Button variant="destructive" size="sm" className="font-bold shadow-md" onClick={handleBulkDelete}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
+                    {selectedIds.length > 0 ? (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 transition-all">
+                            {/* ✅ TOMBOL HAPUS: Sembunyi otomatis jika ada item terkunci */}
+                            {!hasLockedItemInSelection && (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={handleBulkDelete}
+                                    className="font-bold shadow-md h-11 px-5 rounded-xl uppercase text-[10px]"
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
+                                </Button>
+                            )}
+
+                            {/* ✅ PEMBERITAHUAN LOCK: Muncul jika tombol hapus sembunyi */}
+                            {hasLockedItemInSelection && (
+                                <div className="flex items-center bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg gap-2 mr-2">
+                                    <Lock className="h-3 w-3 text-amber-600" />
+                                    <span className="text-[9px] font-bold text-amber-700 uppercase">Hapus dikunci (Ada agenda terjadwal)</span>
+                                </div>
+                            )}
+
+                            <Button
+                                variant="outline"
+                                onClick={handleExport}
+                                className="border-[#14a2ba] text-[#14a2ba] hover:bg-[#14a2ba] hover:text-white font-bold shadow-sm h-11 px-5 rounded-xl uppercase text-[10px]"
+                            >
+                                <Download className="mr-2 h-4 w-4" /> Export ({selectedIds.length})
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedIds([])}
+                                className="text-slate-400 hover:text-red-500"
+                            >
+                                <X className="h-4 w-4" />
                             </Button>
                         </div>
+                    ) : (
+                        <AddRadirModal />
                     )}
-                    <Button variant="outline" className="hidden md:flex border-slate-200 text-slate-600 font-bold shadow-sm">
-                        <Download className="mr-2 h-4 w-4" /> Export Data
-                    </Button>
-                    <AddAgendaModal />
                 </div>
             </div>
 
@@ -209,7 +283,7 @@ export function RadirClient({ data }: RadirClientProps) {
                     <div className="relative flex-1 min-w-75">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
-                            placeholder="Cari agenda atau unit pemrakarsa..."
+                            placeholder="Cari judul, pengusul, atau direktur..."
                             className="pl-10 h-11 bg-slate-50 border-none ring-0 focus-visible:ring-1 focus-visible:ring-[#14a2ba]"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -226,7 +300,7 @@ export function RadirClient({ data }: RadirClientProps) {
                                             {format(dateRange.from, "dd/MM/yy")} - {format(dateRange.to, "dd/MM/yy")}
                                         </span>
                                     ) : (format(dateRange.from, "dd/MM/yy"))
-                                ) : (<span className="text-slate-500">Filter Tanggal</span>)}
+                                ) : (<span className="text-slate-500 text-xs">Filter Tanggal</span>)}
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="end">
@@ -247,28 +321,16 @@ export function RadirClient({ data }: RadirClientProps) {
                         <SelectContent>
                             <SelectItem value="all">Semua Status</SelectItem>
                             <SelectItem value="DRAFT">Draft</SelectItem>
-                            <SelectItem value="DAPAT_DILANJUTKAN">Dapat Dilanjutkan</SelectItem>
-                            <SelectItem value="DIBATALKAN">Dibatalkan</SelectItem>
                             <SelectItem value="DIJADWALKAN">Dijadwalkan</SelectItem>
                             <SelectItem value="SELESAI">Selesai</SelectItem>
                         </SelectContent>
                     </Select>
 
                     <div className="flex bg-slate-100 p-1 rounded-lg ml-auto">
-                        <Button
-                            variant={viewMode === "table" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setViewMode("table")}
-                            className={cn("h-9 w-10 p-0 shadow-none", viewMode === "table" && "shadow-sm bg-white text-[#14a2ba]")}
-                        >
+                        <Button variant={viewMode === "table" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("table")} className={cn("h-9 w-10 p-0 shadow-none", viewMode === "table" && "shadow-sm bg-white text-[#14a2ba]")}>
                             <List className="h-4 w-4" />
                         </Button>
-                        <Button
-                            variant={viewMode === "grid" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setViewMode("grid")}
-                            className={cn("h-9 w-10 p-0 shadow-none", viewMode === "grid" && "shadow-sm bg-white text-[#14a2ba]")}
-                        >
+                        <Button variant={viewMode === "grid" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("grid")} className={cn("h-9 w-10 p-0 shadow-none", viewMode === "grid" && "shadow-sm bg-white text-[#14a2ba]")}>
                             <LayoutGrid className="h-4 w-4" />
                         </Button>
                     </div>
@@ -280,21 +342,16 @@ export function RadirClient({ data }: RadirClientProps) {
                     <Table>
                         <TableHeader className="bg-[#f8fafc] border-b">
                             <TableRow>
-                                <TableHead className="w-12.5 px-4">
-                                    <Checkbox
-                                        checked={selectedIds.length === filteredData.filter(i => i.status !== "DIJADWALKAN").length && filteredData.length > 0}
-                                        onCheckedChange={toggleSelectAll}
-                                    />
+                                <TableHead className="w-12.5 px-4 text-center">
+                                    <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                <TableHead className="w-70 text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Agenda Rapat</TableHead>
-                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center w-10">
-                                    <Lock className="h-3 w-3 mx-auto text-slate-300" />
-                                </TableHead>
-                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Urgensi</TableHead>
+                                <TableHead className="w-80 text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest px-6">Agenda Radir</TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center w-10"><Lock className="h-3 w-3 mx-auto text-slate-300" /></TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center">Prioritas</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Deadline</TableHead>
-                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Pemrakarsa</TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Direktur Pemrakarsa</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center">Status</TableHead>
-                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Aksi</TableHead>
+                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest pr-6">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -302,60 +359,62 @@ export function RadirClient({ data }: RadirClientProps) {
                                 const isLocked = agenda.status === "DIJADWALKAN" || agenda.status === "SELESAI"
                                 return (
                                     <TableRow key={agenda.id} className={cn("hover:bg-slate-50/50 group border-b last:border-0", selectedIds.includes(agenda.id) && "bg-blue-50/40", isLocked && "bg-slate-50/30")}>
-                                        <TableCell className="px-4">
-                                            {!isLocked && (
-                                                <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
-                                            )}
+                                        <TableCell className="px-4 text-center">
+                                            {/* ✅ SEKARANG SEMUA BARIS BISA DI SELECT */}
+                                            <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
                                         </TableCell>
-                                        <TableCell className="py-5 max-w-70">
+                                        <TableCell className="py-5 px-6 max-w-80">
                                             <div className="space-y-1">
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs tracking-tight">
-                                                            {agenda.title}
-                                                        </p>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top" className="max-w-80 whitespace-normal text-sm">
-                                                        {agenda.title}
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter"> : {agenda.contactPerson}</span>
+                                                <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs italic tracking-tighter">{agenda.title}</p>
+                                                <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1 uppercase tracking-widest"><FileJson className="h-3 w-3" /> {agenda.contactPerson || "No PIC"}</span>
                                             </div>
                                         </TableCell>
+                                        <TableCell className="text-center">{isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}</TableCell>
+
                                         <TableCell className="text-center">
-                                            {isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}
+                                            <div className={cn(
+                                                "text-[9px] font-black italic px-2 py-0.5 rounded border inline-block uppercase tracking-tighter",
+                                                agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' :
+                                                    agenda.priority === 'Medium' ? 'text-orange-500 bg-orange-50 border-orange-200' :
+                                                        'text-green-600 bg-green-50 border-green-200'
+                                            )}>
+                                                {agenda.priority ?? 'Low'}
+                                            </div>
                                         </TableCell>
-                                        {/* ✅ Membatasi Lebar Kolom Urgensi */}
-                                        <TableCell className="max-w-30">
-                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center">
-                                                <span className="line-clamp-3 whitespace-normal">
-                                                    {agenda.urgency}
-                                                </span>
-                                            </Badge>
-                                        </TableCell>
+
                                         <TableCell>
-                                            <div className="flex items-center gap-2 text-slate-600 font-bold text-xs">
+                                            <div className="flex items-center gap-2 text-slate-600 font-bold text-xs tracking-tighter">
                                                 <CalendarIcon className="h-3.5 w-3.5 text-[#14a2ba]" />
                                                 {agenda.deadline ? format(new Date(agenda.deadline), "dd/MM/yyyy") : "-"}
                                             </div>
                                         </TableCell>
-                                        <TableCell>
-                                            <span className="text-xs font-bold text-slate-700">{agenda.initiator}</span>
+
+                                        <TableCell className="max-w-60">
+                                            <div className="flex items-center gap-2">
+                                                <div className="bg-[#14a2ba]/10 p-1.5 rounded-lg shrink-0">
+                                                    <User className="h-3.5 w-3.5 text-[#14a2ba]" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-black text-[#125d72] uppercase truncate leading-none mb-1">{agenda.director || "-"}</p>
+                                                    <div className="flex items-center gap-1">
+                                                        <Building2 className="h-2.5 w-2.5 text-slate-400" />
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase truncate">{agenda.initiator}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </TableCell>
+
                                         <TableCell className="text-center">
-                                            <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase", agenda.status === "Draft" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
-                                                {agenda.status}
+                                            <Badge className={cn("text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter", agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
+                                                {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <ActionButtons
+                                        <TableCell className="text-right pr-6">
+                                            <ActionMenu
                                                 agenda={agenda}
                                                 onSelectDetail={() => handleOpenDetail(agenda)}
                                                 onSelectEdit={() => handleOpenEdit(agenda)}
-                                                onSelectDelete={(id, title) => {
-                                                    setSelectedAgenda({ id, title });
-                                                    setDeleteDialogOpen(true);
-                                                }}
+                                                onSelectDelete={onSelectDelete}
                                             />
                                         </TableCell>
                                     </TableRow>
@@ -369,42 +428,42 @@ export function RadirClient({ data }: RadirClientProps) {
                     {filteredData.map((agenda) => {
                         const isLocked = agenda.status === "DIJADWALKAN" || agenda.status === "SELESAI"
                         return (
-                            <div key={agenda.id} className={cn("bg-white border-2 rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all group relative", selectedIds.includes(agenda.id) ? "border-[#14a2ba] bg-blue-50/20" : "border-transparent", isLocked && "opacity-90")}>
+                            <div key={agenda.id} className={cn("bg-white border-2 rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all group relative", selectedIds.includes(agenda.id) ? "border-[#14a2ba] bg-blue-50/20" : "border-transparent")}>
                                 <div className="absolute top-4 left-4 z-10">
-                                    {!isLocked && <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />}
-                                    {isLocked && <Lock className="h-3 w-3 text-amber-500" />}
+                                    <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
+                                    {isLocked && <Lock className="h-3 w-3 text-amber-500 mt-2" />}
                                 </div>
                                 <div className="flex items-center justify-between mb-4 ml-6">
-                                    <Badge className="bg-[#125d72] text-[10px] font-bold px-3">{agenda.status}</Badge>
-                                    <ActionButtons
+                                    <Badge className="bg-[#125d72] text-[10px] font-bold px-3 uppercase tracking-widest">{agenda.status || "DRAFT"}</Badge>
+                                    <ActionMenu
                                         agenda={agenda}
                                         onSelectDetail={() => handleOpenDetail(agenda)}
                                         onSelectEdit={() => handleOpenEdit(agenda)}
-                                        onSelectDelete={(id, title) => {
-                                            setSelectedAgenda({ id, title });
-                                            setDeleteDialogOpen(true);
-                                        }}
+                                        onSelectDelete={onSelectDelete}
                                     />
                                 </div>
-                                <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight">
-                                    {agenda.title}
-                                </h3>
+                                <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight italic">{agenda.title}</h3>
                                 <div className="grid grid-cols-2 gap-4 border-t pt-5">
                                     <div className="space-y-1">
                                         <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Deadline</p>
-                                        <p className="text-xs font-black text-slate-700 italic">{agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy") : "-"}</p>
+                                        <p className="text-xs font-black text-slate-700 italic">
+                                            {agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy") : "-"}
+                                        </p>
                                     </div>
                                     <div className="space-y-1 text-right">
-                                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Urgensi</p>
-                                        <p className="text-xs font-black text-[#14a2ba] uppercase line-clamp-1" title={agenda.urgency || ""}>{agenda.urgency}</p>
+                                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Prioritas</p>
+                                        <div className={cn(
+                                            "text-[10px] font-black italic px-2 py-0.5 rounded border inline-block uppercase",
+                                            agenda.priority === 'High' ? 'text-red-600 border-red-200' :
+                                                agenda.priority === 'Medium' ? 'text-orange-500 border-orange-200' :
+                                                    'text-green-600 border-green-200'
+                                        )}>
+                                            {agenda.priority || "Low"}
+                                        </div>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => handleOpenDetail(agenda)}
-                                    className="w-full mt-6 bg-slate-50 text-[#125d72] font-black text-[11px] uppercase tracking-widest hover:bg-[#14a2ba] hover:text-white transition-colors py-6 rounded-xl group-hover:shadow-lg"
-                                >
-                                    Lihat Detail Usulan <ChevronRight className="ml-2 h-4 w-4" />
+                                <Button onClick={() => handleOpenDetail(agenda)} className="w-full mt-6 bg-slate-50 text-[#125d72] font-black text-[11px] uppercase tracking-widest hover:bg-[#14a2ba] hover:text-white transition-colors py-6 rounded-xl group-hover:shadow-lg">
+                                    Lihat Detail Radir <ChevronRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </div>
                         )
@@ -412,40 +471,58 @@ export function RadirClient({ data }: RadirClientProps) {
                 </div>
             )}
 
-            {selectedAgenda && (
-                <DeleteAction
-                    id={selectedAgenda.id}
-                    title={selectedAgenda.title}
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
+            {selectedDetail && (
+                <DetailRadirSheet
+                    agenda={{
+                        ...(selectedDetail as unknown as Agenda),
+                        urgency: selectedDetail.urgency ?? "Normal",
+                        deadline: selectedDetail.deadline ?? new Date(),
+                        supportingDocuments: (selectedDetail as unknown as Agenda).supportingDocuments as string | null,
+                        notRequiredFiles: (selectedDetail as unknown as Agenda).notRequiredFiles as string[] | null
+                    }}
+                    open={detailOpen}
+                    onOpenChange={setDetailOpen}
                 />
             )}
-            <DetailAgendaSheet
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                agenda={selectedDetail as any}
-                open={detailOpen}
-                onOpenChange={setDetailOpen}
-            />
+
             {selectedEdit && (
-                <EditAgendaModal
+                <EditRadirModal
                     key={selectedEdit.id}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    agenda={selectedEdit as any}
+                    agenda={selectedEdit as unknown as Agenda}
                     open={editOpen}
                     onOpenChange={setEditOpen}
+                />
+            )}
+
+            {itemToDelete && (
+                <DeleteAction
+                    id={itemToDelete.id}
+                    title={itemToDelete.title}
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
                 />
             )}
         </div>
     )
 }
 
-function ActionButtons({ agenda, onSelectDelete, onSelectDetail, onSelectEdit }: { agenda: AgendaRadir, onSelectDelete: (id: string, title: string) => void, onSelectDetail?: () => void, onSelectEdit?: () => void }) {
+function ActionMenu({
+    agenda,
+    onSelectDetail,
+    onSelectEdit,
+    onSelectDelete
+}: {
+    agenda: AgendaRadir,
+    onSelectDetail: () => void,
+    onSelectEdit: () => void,
+    onSelectDelete: (id: string, title: string) => void
+}) {
     const isLocked = agenda.status === "DIJADWALKAN" || agenda.status === "SELESAI"
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-9 w-9 p-0 rounded-full hover:bg-slate-100">
+                <Button variant="ghost" className="h-9 w-9 p-0 rounded-full hover:bg-slate-100 transition-colors">
                     <MoreHorizontal className="h-4 w-4 text-slate-500" />
                 </Button>
             </DropdownMenuTrigger>
@@ -461,20 +538,20 @@ function ActionButtons({ agenda, onSelectDelete, onSelectDetail, onSelectEdit }:
                         </DropdownMenuItem>
                         <DropdownMenuSeparator className="my-2" />
                         <DropdownMenuItem
-                            className="py-3 rounded-lg font-bold text-red-600 focus:bg-red-50 focus:text-red-600"
+                            className="py-3 rounded-lg font-bold text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
                             onSelect={(e) => {
                                 e.preventDefault();
                                 onSelectDelete(agenda.id, agenda.title);
                             }}
                         >
-                            <Trash2 className="mr-3 h-4 w-4" /> Hapus Agenda
+                            <Trash2 className="mr-3 h-4 w-4 text-red-500" /> Hapus Agenda
                         </DropdownMenuItem>
                     </>
                 )}
 
                 {isLocked && (
-                    <div className="px-3 py-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg flex items-center gap-2 mt-2">
-                        <Lock className="h-3 w-3" /> Agenda Terkunci (Dijadwalkan)
+                    <div className="px-3 py-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg flex items-center gap-2 mt-2 font-bold uppercase tracking-tighter">
+                        <Lock className="h-3 w-3" /> Agenda Terkunci
                     </div>
                 )}
             </DropdownMenuContent>

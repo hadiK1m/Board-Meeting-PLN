@@ -14,7 +14,9 @@ import {
     X,
     Lock,
     FileJson,
-    FileEdit
+    FileEdit,
+    User,
+    Building2
 } from "lucide-react"
 
 import {
@@ -30,6 +32,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,7 +46,6 @@ import {
 } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-// ✅ Import komponen Alert Dialog
 import {
     AlertDialog,
     AlertDialogContent,
@@ -58,22 +60,28 @@ import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
 import { cn } from "@/lib/utils"
 
 import { Checkbox } from "@/components/ui/checkbox"
-import { DetailAgendaSheet } from "./detail-agenda-sheet"
-import { AddRakordirDialog } from "./add-agenda-dialog"
-import { EditRakordirModal } from "./edit-agenda-modal"
 import { deleteRakordirAction } from "@/server/actions/rakordir-actions"
 import { toast } from "sonner"
 import Image from "next/image"
 import { deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
+import * as XLSX from "xlsx"
+
+import { DetailRakordirSheet } from "./detail-rakordir-sheet"
+import { AddRakordirModal } from "./add-rakordir-modal"
+import { EditRakordirModal } from "./edit-rakordir-modal"
+import { Agenda } from "@/db/schema/agendas"
 
 export interface RakordirAgenda {
     id: string
     title: string
     urgency: string | null
-    deadline: string | null
+    deadline: string | Date | null
     initiator: string | null
+    director: string | null
+    priority: string | null
     status: string | null
     contactPerson: string | null
+    phone: string | null
 }
 
 interface RakordirClientProps {
@@ -81,7 +89,13 @@ interface RakordirClientProps {
 }
 
 export function RakordirClient({ initialData }: RakordirClientProps) {
-    const [isClient, setIsClient] = useState(false)
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        const rafId = requestAnimationFrame(() => setMounted(true));
+        return () => cancelAnimationFrame(rafId);
+    }, [])
+
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
@@ -94,19 +108,12 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
     const [detailOpen, setDetailOpen] = useState(false)
     const [selectedDetail, setSelectedDetail] = useState<RakordirAgenda | null>(null)
 
-    // Edit modal state
     const [editOpen, setEditOpen] = useState(false)
     const [selectedEdit, setSelectedEdit] = useState<RakordirAgenda | null>(null)
 
-    // ✅ Delete Single Item State
     const [deleteOpen, setDeleteOpen] = useState(false)
     const [selectedDeleteId, setSelectedDeleteId] = useState<string | null>(null)
     const [isPending, setIsPending] = useState(false)
-
-    useEffect(() => {
-        const id = setTimeout(() => setIsClient(true), 0)
-        return () => clearTimeout(id)
-    }, [])
 
     const handleOpenDetail = (agenda: RakordirAgenda) => {
         setSelectedDetail(agenda)
@@ -114,16 +121,109 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
     }
 
     const handleOpenEdit = (agenda: RakordirAgenda) => {
-        console.log("[DEBUG-CLIENT] Opening Edit for ID:", agenda.id)
         setSelectedEdit(agenda)
         setEditOpen(true)
     }
 
-    // ✅ Handler untuk Hapus Single Agenda
+    const filteredData = useMemo(() => {
+        return initialData.filter((item) => {
+            const title = (item.title || "").toLowerCase()
+            const initiator = (item.initiator || "").toLowerCase()
+            const director = (item.director || "").toLowerCase()
+
+            const matchesSearch = title.includes(searchTerm.toLowerCase()) ||
+                initiator.includes(searchTerm.toLowerCase()) ||
+                director.includes(searchTerm.toLowerCase())
+
+            const itemStatus = item.status || "DRAFT"
+            const matchesStatus = statusFilter === "all" || itemStatus.toUpperCase() === statusFilter.toUpperCase()
+
+            let matchesDate = true
+            if (dateRange.from && dateRange.to && item.deadline) {
+                const itemDate = new Date(item.deadline)
+                matchesDate = isWithinInterval(itemDate, {
+                    start: startOfDay(dateRange.from),
+                    end: endOfDay(dateRange.to),
+                })
+            }
+            return matchesSearch && matchesStatus && matchesDate
+        })
+    }, [initialData, searchTerm, statusFilter, dateRange])
+
+    // ✅ LOGIKA BARU: Select All sekarang mencakup semua item yang difilter
+    const toggleSelectAll = () => {
+        if (selectedIds.length === filteredData.length && filteredData.length > 0) {
+            setSelectedIds([])
+        } else {
+            setSelectedIds(filteredData.map(item => item.id))
+        }
+    }
+
+    const toggleSelectOne = (id: string) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        )
+    }
+
+    // ✅ LOGIKA BARU: Cek apakah ada item tercentang yang statusnya terkunci
+    const hasLockedItemInSelection = useMemo(() => {
+        const selectedItems = initialData.filter(item => selectedIds.includes(item.id));
+        return selectedItems.some(item => item.status === "DIJADWALKAN" || item.status === "SELESAI");
+    }, [selectedIds, initialData]);
+
+    const handleExport = () => {
+        if (selectedIds.length === 0) return;
+        const selectedData = initialData.filter(item => selectedIds.includes(item.id));
+
+        const excelData = selectedData.map((item, index) => ({
+            No: index + 1,
+            "Judul Agenda": item.title,
+            Prioritas: item.priority || "Low",
+            Urgensi: item.urgency || "-",
+            Deadline: item.deadline ? format(new Date(item.deadline), "dd/MM/yyyy") : "-",
+            Direktur: item.director || "-",
+            Pemrakarsa: item.initiator || "-",
+            PIC: item.contactPerson || "-",
+            WhatsApp: item.phone || "-",
+            Status: item.status || "DRAFT"
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Agenda Rakordir");
+
+        const fileName = `Export_Rakordir_${format(new Date(), "ddMMyy_HHmm")}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+        toast.success(`${selectedIds.length} data Rakordir diekspor.`);
+    }
+
+    const handleBulkDelete = async () => {
+        if (hasLockedItemInSelection) {
+            toast.error("Tidak dapat menghapus. Beberapa agenda terpilih sudah dijadwalkan atau selesai.");
+            return;
+        }
+        if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.length} agenda Rakordir terpilih?`)) return
+        const res = await deleteBulkAgendasAction(selectedIds)
+        if (res.success) {
+            toast.custom((t) => (
+                <div className="flex items-center gap-4 bg-white border-l-4 border-orange-500 p-4 shadow-2xl rounded-lg min-w-87.5">
+                    <Image src="/logo-pln.png" alt="PLN" width={40} height={40} />
+                    <div className="flex-1">
+                        <h4 className="text-sm font-bold text-[#125d72]">Data Rakordir Dihapus</h4>
+                        <p className="text-xs text-slate-500 italic uppercase">
+                            {selectedIds.length} Agenda Berhasil dibersihkan.
+                        </p>
+                    </div>
+                    <button onClick={() => toast.dismiss(t)}><X className="h-4 w-4 text-slate-300" /></button>
+                </div>
+            ))
+            setSelectedIds([])
+        }
+    }
+
     async function handleDelete() {
         if (!selectedDeleteId) return;
         setIsPending(true);
-
         try {
             const result = await deleteRakordirAction(selectedDeleteId);
             if (result.success) {
@@ -141,72 +241,7 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
         }
     }
 
-    const filteredData = useMemo(() => {
-        return initialData.filter((item) => {
-            const itemDate = item.deadline ? new Date(item.deadline) : null
-            const title = item.title || ""
-            const initiator = item.initiator || ""
-
-            const matchesSearch = title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                initiator.toLowerCase().includes(searchTerm.toLowerCase())
-
-            const itemStatus = item.status || "DRAFT"
-            const matchesStatus = statusFilter === "all" || itemStatus.toUpperCase() === statusFilter.toUpperCase()
-
-            let matchesDate = true
-            if (dateRange.from && dateRange.to && itemDate) {
-                matchesDate = isWithinInterval(itemDate, {
-                    start: startOfDay(dateRange.from),
-                    end: endOfDay(dateRange.to),
-                })
-            }
-            return matchesSearch && matchesStatus && matchesDate
-        })
-    }, [initialData, searchTerm, statusFilter, dateRange])
-
-    const toggleSelectAll = () => {
-        const deletableItems = filteredData.filter(item => item.status !== "DIJADWALKAN" && item.status !== "SELESAI")
-        if (selectedIds.length === deletableItems.length && deletableItems.length > 0) {
-            setSelectedIds([])
-        } else {
-            setSelectedIds(deletableItems.map(item => item.id))
-        }
-    }
-
-    const toggleSelectOne = (id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-        )
-    }
-
-    const handleBulkDelete = async () => {
-        if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.length} agenda Rakordir terpilih?`)) return
-
-        const res = await deleteBulkAgendasAction(selectedIds)
-        if (res.success) {
-            toast.custom((t) => (
-                <div className="flex items-center gap-4 bg-white border-l-4 border-orange-500 p-4 shadow-2xl rounded-lg min-w-87.5">
-                    <div className="shrink-0">
-                        <Image src="/logo-pln.png" alt="PLN" width={40} height={40} className="object-contain" />
-                    </div>
-                    <div className="flex-1">
-                        <h4 className="text-sm font-bold text-[#125d72]">Data Rakordir Dihapus</h4>
-                        <p className="text-xs text-slate-500 italic uppercase truncate max-w-50">
-                            {selectedIds.length} Agenda Berhasil dibersihkan.
-                        </p>
-                    </div>
-                    <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
-            ))
-            setSelectedIds([])
-        } else {
-            toast.error(res.error || "Gagal menghapus data")
-        }
-    }
-
-    if (!isClient) return null
+    if (!mounted) return null
 
     return (
         <div className="space-y-6">
@@ -216,28 +251,62 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                         <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
                             Agenda Rakordir
                         </h1>
-                        <p className="text-slate-500 font-medium">Manajemen Usulan Rapat Koordinasi Direksi</p>
+                        <p className="text-slate-500 font-medium italic text-sm">Manajemen Usulan Rapat Koordinasi Direksi</p>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3">
-                    {selectedIds.length > 0 && (
-                        <Button variant="destructive" size="sm" className="font-bold shadow-md animate-in fade-in zoom-in" onClick={handleBulkDelete}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
-                        </Button>
+                    {selectedIds.length > 0 ? (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 transition-all">
+                            {/* ✅ LOGIKA TOMBOL HAPUS: Hanya muncul jika TIDAK ADA item terkunci di dalam seleksi */}
+                            {!hasLockedItemInSelection && (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={handleBulkDelete}
+                                    className="font-bold shadow-md h-11 px-5 rounded-xl uppercase text-[10px]"
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
+                                </Button>
+                            )}
+
+                            {/* ✅ Logika Pemberitahuan Jika Ada Item Terkunci */}
+                            {hasLockedItemInSelection && (
+                                <div className="hidden md:flex items-center bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg gap-2 mr-2">
+                                    <Lock className="h-3 w-3 text-amber-600" />
+                                    <span className="text-[9px] font-bold text-amber-700 uppercase">Hapus dinonaktifkan (Ada agenda terkunci)</span>
+                                </div>
+                            )}
+
+                            <Button
+                                variant="outline"
+                                onClick={handleExport}
+                                className="border-[#14a2ba] text-[#14a2ba] hover:bg-[#14a2ba] hover:text-white font-bold shadow-sm h-11 px-5 rounded-xl uppercase text-[10px]"
+                            >
+                                <Download className="mr-2 h-4 w-4" /> Export ({selectedIds.length})
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedIds([])}
+                                className="text-slate-400 hover:text-red-500"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ) : (
+                        <AddRakordirModal />
                     )}
-                    <Button variant="outline" className="hidden md:flex border-slate-200 text-slate-600 font-bold shadow-sm">
-                        <Download className="mr-2 h-4 w-4" /> Export Data
-                    </Button>
-                    <AddRakordirDialog />
                 </div>
             </div>
 
+            {/* Filter Section (Tetap Sama) */}
             <div className="bg-white p-2 rounded-xl border shadow-sm space-y-2">
                 <div className="flex flex-wrap items-center gap-2 p-2">
                     <div className="relative flex-1 min-w-75">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
-                            placeholder="Cari agenda rakordir..."
+                            placeholder="Cari judul, pengusul, atau direktur..."
                             className="pl-10 h-11 bg-slate-50 border-none ring-0 focus-visible:ring-1 focus-visible:ring-[#14a2ba]"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -254,7 +323,7 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                             {format(dateRange.from, "dd/MM/yy")} - {format(dateRange.to, "dd/MM/yy")}
                                         </span>
                                     ) : (format(dateRange.from, "dd/MM/yy"))
-                                ) : (<span className="text-slate-500">Filter Tanggal</span>)}
+                                ) : (<span className="text-slate-500 text-xs">Filter Tanggal</span>)}
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="end">
@@ -299,15 +368,15 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                         <TableHeader className="bg-[#f8fafc] border-b">
                             <TableRow>
                                 <TableHead className="w-12.5 px-4 text-center">
-                                    <Checkbox checked={selectedIds.length === filteredData.filter(i => i.status !== "DIJADWALKAN" && i.status !== "SELESAI").length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
+                                    <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                <TableHead className="w-70 text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Agenda Rakordir</TableHead>
+                                <TableHead className="w-80 text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest px-6">Agenda Rakordir</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center w-10"><Lock className="h-3 w-3 mx-auto text-slate-300" /></TableHead>
-                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Urgensi</TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center">Prioritas</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Deadline</TableHead>
-                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Pemrakarsa</TableHead>
+                                <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Direktur Pemrakarsa</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest text-center">Status</TableHead>
-                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest">Aksi</TableHead>
+                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] tracking-widest pr-6">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -316,43 +385,59 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                 return (
                                     <TableRow key={agenda.id} className={cn("hover:bg-slate-50/50 group border-b last:border-0", selectedIds.includes(agenda.id) && "bg-blue-50/40", isLocked && "bg-slate-50/30")}>
                                         <TableCell className="px-4 text-center">
-                                            {!isLocked && <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />}
+                                            {/* ✅ SEKARANG BISA DI-SELECT SEMUA BARIS */}
+                                            <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
                                         </TableCell>
-                                        <TableCell className="py-5 max-w-70">
+                                        <TableCell className="py-5 px-6 max-w-80">
                                             <div className="space-y-1">
-                                                <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs italic">{agenda.title}</p>
-                                                <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1 uppercase"><FileJson className="h-3 w-3" /> {agenda.contactPerson || "No PIC"}</span>
+                                                <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs italic tracking-tighter">{agenda.title}</p>
+                                                <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1 uppercase tracking-widest"><FileJson className="h-3 w-3" /> {agenda.contactPerson || "No PIC"}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center">{isLocked && <Lock className="h-3 w-3 mx-auto text-amber-500 opacity-60" />}</TableCell>
-                                        <TableCell className="max-w-27.5">
-                                            <Badge variant="outline" className="font-black text-[10px] rounded-full border-[#14a2ba] text-[#14a2ba] bg-[#14a2ba]/5 uppercase w-full block truncate text-center">
-                                                <span className="line-clamp-3 whitespace-normal">
-                                                    {agenda.urgency}
-                                                </span>
-                                            </Badge>
+
+                                        <TableCell className="text-center">
+                                            <div className={cn(
+                                                "text-[9px] font-black italic px-2 py-0.5 rounded border inline-block uppercase tracking-tighter",
+                                                agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' :
+                                                    agenda.priority === 'Medium' ? 'text-orange-500 bg-orange-50 border-orange-200' :
+                                                        'text-green-600 bg-green-50 border-green-200'
+                                            )}>
+                                                {agenda.priority ?? 'Low'}
+                                            </div>
                                         </TableCell>
+
                                         <TableCell>
-                                            <div className="flex items-center gap-2 text-slate-600 font-bold text-xs">
+                                            <div className="flex items-center gap-2 text-slate-600 font-bold text-xs tracking-tighter">
                                                 <CalendarIcon className="h-3.5 w-3.5 text-[#14a2ba]" />
                                                 {agenda.deadline ? format(new Date(agenda.deadline), "dd/MM/yyyy") : "-"}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="py-5 max-w-70">
-                                            <div className="space-y-1">
-                                                <p className="font-bold text-[#125d72] leading-tight line-clamp-2 uppercase text-xs italic">{agenda.initiator}</p>
+
+                                        <TableCell className="max-w-60">
+                                            <div className="flex items-center gap-2">
+                                                <div className="bg-[#14a2ba]/10 p-1.5 rounded-lg shrink-0">
+                                                    <User className="h-3.5 w-3.5 text-[#14a2ba]" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-black text-[#125d72] uppercase truncate leading-none mb-1">{agenda.director || "-"}</p>
+                                                    <div className="flex items-center gap-1">
+                                                        <Building2 className="h-2.5 w-2.5 text-slate-400" />
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase truncate">{agenda.initiator}</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </TableCell>
+
                                         <TableCell className="text-center">
-                                            <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase", agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
+                                            <Badge className={cn("text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter", agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
                                                 {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right pr-6">
                                             <ActionButtons
                                                 onSelectDetail={() => handleOpenDetail(agenda)}
                                                 onSelectEdit={() => handleOpenEdit(agenda)}
-                                                // ✅ Trigger Dialog Hapus
                                                 onSelectDelete={() => { setSelectedDeleteId(agenda.id); setDeleteOpen(true); }}
                                                 status={agenda.status}
                                             />
@@ -364,21 +449,21 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                     </Table>
                 </div>
             ) : (
+                /* Grid View */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {filteredData.map((agenda) => {
                         const isLocked = agenda.status === "DIJADWALKAN" || agenda.status === "SELESAI"
                         return (
                             <div key={agenda.id} className={cn("bg-white border-2 rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all group relative", selectedIds.includes(agenda.id) ? "border-[#14a2ba] bg-blue-50/20" : "border-transparent")}>
                                 <div className="absolute top-4 left-4 z-10">
-                                    {!isLocked && <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />}
-                                    {isLocked && <Lock className="h-3 w-3 text-amber-500" />}
+                                    <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
+                                    {isLocked && <Lock className="h-3 w-3 text-amber-500 mt-2" />}
                                 </div>
                                 <div className="flex items-center justify-between mb-4 ml-6">
-                                    <Badge className="bg-[#125d72] text-[10px] font-bold px-3">{agenda.status || "DRAFT"}</Badge>
+                                    <Badge className="bg-[#125d72] text-[10px] font-bold px-3 uppercase tracking-widest">{agenda.status || "DRAFT"}</Badge>
                                     <ActionButtons
                                         onSelectDetail={() => handleOpenDetail(agenda)}
                                         onSelectEdit={() => handleOpenEdit(agenda)}
-                                        // ✅ Trigger Dialog Hapus
                                         onSelectDelete={() => { setSelectedDeleteId(agenda.id); setDeleteOpen(true); }}
                                         status={agenda.status}
                                     />
@@ -386,17 +471,24 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                 <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight italic">{agenda.title}</h3>
                                 <div className="grid grid-cols-2 gap-4 border-t pt-5">
                                     <div className="space-y-1">
-                                        <p className="text-[9px] uppercase font-bold text-slate-400">Deadline</p>
+                                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Deadline</p>
                                         <p className="text-xs font-black text-slate-700 italic">
                                             {agenda.deadline ? format(new Date(agenda.deadline), "dd MMM yyyy") : "-"}
                                         </p>
                                     </div>
                                     <div className="space-y-1 text-right">
-                                        <p className="text-[9px] uppercase font-bold text-slate-400">Urgensi</p>
-                                        <p className="text-xs font-black text-[#14a2ba] uppercase">{agenda.urgency || "NORMAL"}</p>
+                                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Prioritas</p>
+                                        <div className={cn(
+                                            "text-[10px] font-black italic px-2 py-0.5 rounded border inline-block uppercase",
+                                            agenda.priority === 'High' ? 'text-red-600 border-red-200' :
+                                                agenda.priority === 'Medium' ? 'text-orange-500 border-orange-200' :
+                                                    'text-green-600 border-green-200'
+                                        )}>
+                                            {agenda.priority || "Low"}
+                                        </div>
                                     </div>
                                 </div>
-                                <Button onClick={() => handleOpenDetail(agenda)} className="w-full mt-6 bg-slate-50 text-[#125d72] font-black text-[11px] uppercase tracking-widest hover:bg-[#14a2ba] hover:text-white transition-colors py-6 rounded-xl">
+                                <Button onClick={() => handleOpenDetail(agenda)} className="w-full mt-6 bg-slate-50 text-[#125d72] font-black text-[11px] uppercase tracking-widest hover:bg-[#14a2ba] hover:text-white transition-colors py-6 rounded-xl group-hover:shadow-lg">
                                     Lihat Detail Rakordir <ChevronRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </div>
@@ -405,37 +497,48 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                 </div>
             )}
 
-            <DetailAgendaSheet agenda={selectedDetail} open={detailOpen} onOpenChange={setDetailOpen} />
+            {selectedDetail && (
+                <DetailRakordirSheet
+                    agenda={{
+                        ...(selectedDetail as unknown as Agenda),
+                        urgency: selectedDetail.urgency ?? "Normal",
+                        deadline: selectedDetail.deadline ?? new Date(),
+                        supportingDocuments: (selectedDetail as unknown as Agenda).supportingDocuments as string | null,
+                        notRequiredFiles: (selectedDetail as unknown as Agenda).notRequiredFiles as string[] | null
+                    }}
+                    open={detailOpen}
+                    onOpenChange={setDetailOpen}
+                />
+            )}
 
             {selectedEdit && (
                 <EditRakordirModal
                     key={selectedEdit.id}
-                    agenda={selectedEdit}
+                    agenda={selectedEdit as unknown as Agenda}
                     open={editOpen}
                     onOpenChange={setEditOpen}
                 />
             )}
 
-            {/* ✅ AlertDialog untuk Konfirmasi Hapus */}
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                <AlertDialogContent>
+                <AlertDialogContent className="border-none shadow-2xl">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-[#125d72] font-black uppercase text-sm">Konfirmasi Hapus Agenda</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs italic">
                             Tindakan ini akan menghapus agenda secara permanen beserta seluruh lampiran file yang terkait.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isPending}>Batal</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isPending} className="text-xs font-bold">BATAL</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={(e) => {
                                 e.preventDefault();
                                 handleDelete();
                             }}
                             disabled={isPending}
-                            className="bg-red-600 hover:bg-red-700 text-white"
+                            className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold"
                         >
-                            {isPending ? "Menghapus..." : "Ya, Hapus Agenda"}
+                            {isPending ? "MENGHAPUS..." : "YA, HAPUS AGENDA"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -444,7 +547,6 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
     )
 }
 
-// ✅ Update Interface Props ActionButtons
 function ActionButtons({
     onSelectDetail,
     onSelectEdit,
@@ -461,13 +563,13 @@ function ActionButtons({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-9 w-9 p-0 rounded-full hover:bg-slate-100">
+                <Button variant="ghost" className="h-9 w-9 p-0 rounded-full hover:bg-slate-100 transition-colors">
                     <MoreHorizontal className="h-4 w-4 text-slate-500" />
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border-none shadow-2xl">
                 <DropdownMenuItem onClick={onSelectDetail} className="py-3 rounded-lg font-bold text-slate-600 cursor-pointer">
-                    <Eye className="mr-3 h-4 w-4 text-blue-500" /> Detail Agenda Rakordir
+                    <Eye className="mr-3 h-4 w-4 text-blue-500" /> Detail Agenda
                 </DropdownMenuItem>
 
                 {!isLocked && onSelectEdit && (
@@ -476,18 +578,20 @@ function ActionButtons({
                     </DropdownMenuItem>
                 )}
 
-                {/* ✅ Menu Hapus */}
                 {!isLocked && onSelectDelete && (
-                    <DropdownMenuItem
-                        onClick={onSelectDelete}
-                        className="py-3 rounded-lg font-bold cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-                    >
-                        <Trash2 className="mr-3 h-4 w-4 text-red-500" /> Hapus Agenda
-                    </DropdownMenuItem>
+                    <>
+                        <DropdownMenuSeparator className="my-2" />
+                        <DropdownMenuItem
+                            onClick={onSelectDelete}
+                            className="py-3 rounded-lg font-bold cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                        >
+                            <Trash2 className="mr-3 h-4 w-4 text-red-500" /> Hapus Agenda
+                        </DropdownMenuItem>
+                    </>
                 )}
 
                 {isLocked && (
-                    <div className="px-3 py-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg flex items-center gap-2 mt-2">
+                    <div className="px-3 py-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg flex items-center gap-2 mt-2 font-bold uppercase tracking-tighter">
                         <Lock className="h-3 w-3" /> Agenda Terkunci
                     </div>
                 )}

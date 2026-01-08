@@ -32,9 +32,9 @@ import { cn } from "@/lib/utils"
 interface AgendaDetail {
     id?: string
     title: string
-    urgency: string
+    urgency: string | null
     priority?: string | null
-    deadline: string | Date
+    deadline: string | Date | null
     director?: string | null
     initiator?: string | null
     support?: string | null
@@ -59,6 +59,7 @@ interface AgendaDetail {
     supporting_documents?: string | null
     supportingDocuments?: string | null
     status?: string | null
+    notRequiredFiles?: string[] | string | null
 }
 
 interface DetailAgendaSheetProps {
@@ -67,7 +68,7 @@ interface DetailAgendaSheetProps {
     onOpenChange: (open: boolean) => void
 }
 
-export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
+export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
     // Logic Parsing Dokument Pendukung yang aman
     const extraDocs: string[] = React.useMemo(() => {
         const raw = agenda?.supporting_documents || agenda?.supportingDocuments

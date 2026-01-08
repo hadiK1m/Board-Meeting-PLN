@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-import { createRakordirAction } from "@/server/actions/rakordir-actions"
+import { createRadirAction } from "@/server/actions/radir-actions"
 import {
     DIREKTURE_PEMRAKARSA,
     PEMRAKARSA,
@@ -59,10 +59,10 @@ const selectStyles: StylesConfig<{ label: string; value: string }, true> = {
     }),
 };
 
-export function AddRakordirDialog() {
+export function AddRadirModal() {
+    const [isClient, setIsClient] = useState(false)
     const [open, setOpen] = useState(false)
     const [isPending, setIsPending] = useState(false)
-    const [mounted, setMounted] = useState(false)
     const router = useRouter()
 
     const [judul, setJudul] = useState("")
@@ -80,15 +80,18 @@ export function AddRakordirDialog() {
     const pemOptions = PEMRAKARSA.map(p => ({ label: p, value: p }));
     const supOptions = SUPPORT.map(s => ({ label: s, value: s }));
 
-    // ✅ Hanya 3 Lampiran untuk Rakordir
     const FILE_LIST = [
+        { id: "legalReview", label: "Kajian Hukum" },
+        { id: "riskReview", label: "Kajian Risiko" },
+        { id: "complianceReview", label: "Kajian Kepatuhan" },
+        { id: "regulationReview", label: "Kajian Regulasi" },
+        { id: "recommendationNote", label: "Nota Analisa Rekomendasi" },
         { id: "proposalNote", label: "ND Usulan Agenda" },
         { id: "presentationMaterial", label: "Materi Presentasi" },
     ];
 
-    // Hydration Fix
     useEffect(() => {
-        setMounted(true)
+        setIsClient(true)
     }, [])
 
     useEffect(() => {
@@ -129,10 +132,10 @@ export function AddRakordirDialog() {
         formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
         formData.set("priority", prioritas)
         formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
-        formData.set("meetingType", "RAKORDIR") // ✅ Identitas Rakordir
+        formData.set("meetingType", "RADIR")
 
         try {
-            const result = await createRakordirAction(formData)
+            const result = await createRadirAction(formData)
             if (result.success) {
                 toast.custom((t) => (
                     <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-87.5">
@@ -141,7 +144,7 @@ export function AddRakordirDialog() {
                         </div>
                         <div className="flex-1">
                             <h4 className="text-sm font-bold text-[#125d72]">Data Berhasil Disimpan</h4>
-                            <p className="text-xs text-slate-500 italic">Status Rakordir: {isComplete ? "Dapat Dilanjutkan" : "Draft"}</p>
+                            <p className="text-xs text-slate-500 italic">Status Radir: {isComplete ? "Dapat Dilanjutkan" : "Draft"}</p>
                         </div>
                         <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
                             <X className="h-4 w-4" />
@@ -152,7 +155,7 @@ export function AddRakordirDialog() {
                 resetForm()
                 router.refresh()
             } else {
-                toast.error(result.error || "Gagal menyimpan data")
+                toast.error(result.error)
             }
         } catch {
             toast.error("Gagal terhubung ke server")
@@ -161,30 +164,29 @@ export function AddRakordirDialog() {
         }
     }
 
-    if (!mounted) return null
+    if (!isClient) return null
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="bg-[#14a2ba] hover:bg-[#125d72] text-white shadow-lg font-semibold h-11 px-6 rounded-xl transition-all active:scale-95">
-                    <PlusCircle className="mr-2 h-4 w-4" /> Tambah Usulan Rakordir
+                <Button className="bg-[#14a2ba] hover:bg-[#125d72] text-white shadow-lg font-semibold rounded-xl h-11 px-6 transition-all active:scale-95">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Tambah Usulan Radir
                 </Button>
             </DialogTrigger>
 
             <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
                     <DialogTitle className="text-xl font-bold flex items-center gap-2 uppercase tracking-tight">
-                        <PlusCircle className="h-5 w-5 text-[#efe62f]" /> Form Usulan Agenda Rakordir
+                        <PlusCircle className="h-5 w-5 text-[#efe62f]" /> Form Usulan Agenda Radir
                     </DialogTitle>
                     <DialogDescription className="text-[#e7f6f9]/90 italic font-medium">
-                        &quot;Sistem Board Meeting PLN - Khusus Agenda Koordinasi Direksi&quot;
+                        &quot;Sistem Board Meeting PLN - Lengkapi usulan rapat direksi&quot;
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-                    <ScrollArea className="flex-1 h-0 px-8 py-6" type="scroll">
+                    <ScrollArea className="flex-1 h-0 px-8 py-6 bg-white">
                         <div className="grid gap-10 pb-10">
-                            {/* SECTION 1: INFORMASI UTAMA */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <FileText className="h-5 w-5 text-[#14a2ba]" />
@@ -192,36 +194,28 @@ export function AddRakordirDialog() {
                                 </div>
                                 <div className="grid gap-3">
                                     <Label htmlFor="title" className="font-bold text-[#125d72]">Judul Agenda</Label>
-                                    <Input id="title" name="title" value={judul} onChange={(e) => setJudul(e.target.value)} placeholder="Masukkan judul agenda rakordir..." required />
-                                    {judul && (
-                                        <div className="p-4 bg-[#e7f6f9] border-l-4 border-[#14a2ba] rounded-sm">
-                                            <p className="text-[10px] font-bold text-[#125d72] uppercase opacity-60">Preview Teks Surat:</p>
-                                            <p className="text-sm font-semibold text-[#125d72] mt-1 italic leading-relaxed uppercase">&quot;Laporan tentang {judul}</p>
-                                        </div>
-                                    )}
+                                    <Input id="title" name="title" value={judul} onChange={(e) => setJudul(e.target.value)} placeholder="Masukkan judul agenda rapat..." required />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Urgensi</Label><Input name="urgency" placeholder="Sangat Segera" defaultValue="Sangat Segera" required /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Urgensi</Label><Input name="urgency" placeholder="Sangat Segera / Normal" required /></div>
                                     <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Deadline Rapat</Label><Input name="deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} required /></div>
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Prioritas</Label>
-                                        <div className="h-10 flex items-center px-4 border-2 rounded-md bg-[#f8fafc] font-black italic">
+                                        <Label className="font-bold text-[#125d72]">Prioritas (System)</Label>
+                                        <div className="h-10 flex items-center px-4 border-2 rounded-md bg-[#f8fafc] font-black italic text-xs shadow-inner">
                                             <span className={prioritas === 'High' ? 'text-red-600' : prioritas === 'Medium' ? 'text-orange-500' : 'text-green-600'}>{prioritas}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* SECTION 2: PEMRAKARSA & NARAHUBUNG */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <PlusCircle className="h-5 w-5 text-[#14a2ba]" />
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">PEMRAKARSA & NARAHUBUNG</h3>
                                 </div>
-
                                 <div className="grid grid-cols-1 gap-6">
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Direktur Pemrakarsa</Label>
+                                        <Label className="font-bold text-[#125d72]">Direktur Pemrakarsa (Full Width)</Label>
                                         <Select isMulti options={dirOptions} styles={selectStyles} value={selectedDir} onChange={setSelectedDir} placeholder="Pilih Direktur..." menuPlacement="auto" />
                                     </div>
                                     <div className="grid gap-2">
@@ -233,32 +227,17 @@ export function AddRakordirDialog() {
                                         <Select isMulti options={supOptions} styles={selectStyles} value={selectedSupport} onChange={setSelectedSupport} placeholder="Pilih Unit Support..." menuPlacement="auto" />
                                     </div>
                                 </div>
-
-                                {/* Grid kolom untuk  , Jabatan, dan No HP */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="contactPerson" className="font-bold text-[#125d72]">Narahubung  </Label>
-                                        <Input id="contactPerson" name="contactPerson" placeholder="Nama  " required />
-                                    </div>
-
-                                    {/* ✅ INPUT JABATAN YANG DITAMBAHKAN */}
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="position" className="font-bold text-[#125d72]">Jabatan  </Label>
-                                        <Input id="position" name="position" placeholder="Contoh: Manager / Officer" required />
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="phone" className="font-bold text-[#125d72]">No WhatsApp</Label>
-                                        <Input id="phone" name="phone" type="number" placeholder="628123..." required />
-                                    </div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Narahubung</Label><Input name="contactPerson" placeholder="Nama Narahubung" required /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Jabatan</Label><Input name="position" placeholder="Jabatan" required /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">No WhatsApp</Label><Input name="phone" type="number" placeholder="628123..." required /></div>
                                 </div>
                             </div>
 
-                            {/* SECTION 3: LAMPIRAN DOKUMEN (3 ITEM) */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <Paperclip className="h-5 w-5 text-[#14a2ba]" />
-                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Lampiran Dokumen (Rakordir)</h3>
+                                    <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Lampiran Dokumen (PDF)</h3>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {FILE_LIST.map((doc) => (
@@ -289,7 +268,6 @@ export function AddRakordirDialog() {
                                         </div>
                                     ))}
 
-                                    {/* DOKUMEN PENDUKUNG LAINNYA */}
                                     <div className={`p-4 rounded-lg border-2 border-dashed col-span-1 md:col-span-2 transition-all shadow-inner ${notRequiredFiles.includes('supportingDocuments') ? 'bg-slate-100 opacity-60 border-slate-300' : 'border-[#14a2ba] bg-white'}`}>
                                         <div className="flex justify-between items-center mb-3">
                                             <Label className={`text-[10px] font-black uppercase ${notRequiredFiles.includes('supportingDocuments') ? 'text-slate-400' : 'text-[#14a2ba]'}`}>
@@ -299,7 +277,7 @@ export function AddRakordirDialog() {
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className={`h-6 text-[9px] px-2 ${notRequiredFiles.includes('supportingDocuments') ? 'bg-red-50 text-red-600 border-red-200' : 'text-[#14a2ba] border-[#14a2ba]/30'}`}
+                                                className={`h-6 text-[9px] px-2 ${notRequiredFiles.includes('supportingDocuments') ? 'bg-red-50 text-red-600 border-red-200' : 'text-[#14a2ba] border-[#14a2ba]/30 hover:bg-[#14a2ba] hover:text-white'}`}
                                                 onClick={() => toggleNotRequired('supportingDocuments')}
                                             >
                                                 <EyeOff className="h-3 w-3 mr-1" />
@@ -327,14 +305,23 @@ export function AddRakordirDialog() {
                         <Button
                             type="submit"
                             disabled={isPending}
-                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all`}
+                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all rounded-xl h-12`}
                         >
                             {isPending ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</>
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <span>Menyimpan...</span>
+                                </>
                             ) : isComplete ? (
-                                <><Send className="mr-2 h-4 w-4" /> Lanjutkan Rapat</>
+                                <>
+                                    <Send className="mr-2 h-4 w-4" />
+                                    <span>Lanjutkan Rapat</span>
+                                </>
                             ) : (
-                                <><FileText className="mr-2 h-4 w-4" /> Simpan Usulan Rakordir (Draft)</>
+                                <>
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    <span>Simpan Usulan Agenda (Draft)</span>
+                                </>
                             )}
                         </Button>
                     </DialogFooter>

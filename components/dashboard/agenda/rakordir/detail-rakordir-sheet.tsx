@@ -28,52 +28,54 @@ import { getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 import { cn } from "@/lib/utils"
-import { type RakordirAgenda } from "./rakordir-client"
+
+// ✅ Pastikan interface ini mencakup semua field yang dikirim dari Client
+export interface RakordirAgendaDetail {
+    id?: string
+    title: string
+    urgency: string | null
+    priority?: string | null
+    deadline: string | Date | null
+    director?: string | null
+    initiator?: string | null
+    support?: string | null
+    contactPerson?: string | null
+    position?: string | null
+    phone?: string | null
+    status?: string | null
+    // ✅ Tambahkan ini agar tidak error 2353
+    supportingDocuments?: string | string[] | null
+    notRequiredFiles?: string[] | string | null
+    proposalNote?: string | null
+    presentationMaterial?: string | null
+}
 
 interface DetailAgendaSheetProps {
-    agenda: RakordirAgenda | null
+    agenda: RakordirAgendaDetail | null
     open: boolean
     onOpenChange: (open: boolean) => void
 }
 
-export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
-    // Lokal tipe untuk mengamankan akses properti yang dinamis dan variasi nama field
-    type AgendaExtras = RakordirAgenda & {
-        supportingDocuments?: string | string[] | null
+export function DetailRakordirSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
+    // Lokal tipe untuk mengamankan akses properti database yang bervariasi (snake_case vs camelCase)
+    type AgendaExtras = RakordirAgendaDetail & {
         supporting_documents?: string | string[] | null
-        proposalNote?: string | null
         proposal_note?: string | null
-        presentationMaterial?: string | null
         presentation_material?: string | null
-        priority?: string | null
-        // Memastikan field personil ada
-        director?: string | null
-        support?: string | null
-        position?: string | null
-        phone?: string | null
     }
 
-    // Casting agenda ke tipe lengkap
     const ag = agenda as AgendaExtras | null
 
-    // ✅ Logic Parsing untuk menangani format database
+    // ✅ Logic Parsing Dokumen Pendukung
     const extraDocs: string[] = React.useMemo(() => {
         const raw = ag?.supportingDocuments ?? ag?.supporting_documents
 
         if (!raw || raw === "null" || raw === "" || raw === "[]" || raw === '"[]"') return []
 
         try {
-            // Jika sudah array
             if (Array.isArray(raw)) return raw.map(String)
-
-            // Jika string, coba parse
             let parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-
-            // Handle double stringify
-            if (typeof parsed === 'string') {
-                parsed = JSON.parse(parsed)
-            }
-
+            if (typeof parsed === 'string') parsed = JSON.parse(parsed)
             return Array.isArray(parsed) ? (parsed as unknown[]).map(String) : []
         } catch (e) {
             console.error("Gagal parse supporting_documents", e)
@@ -99,17 +101,15 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
         }
     }
 
-    // ✅ Mapping Dokumen Utama Rakordir (Hanya 2 File)
     const docs = {
-        ndUsulan: ag?.proposal_note || ag?.proposalNote || null,
-        materi: ag?.presentation_material || ag?.presentationMaterial || null,
+        ndUsulan: ag?.proposalNote || ag?.proposal_note || null,
+        materi: ag?.presentationMaterial || ag?.presentation_material || null,
     }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                // ✅ h-dvh dan flex flex-col memastikan container mengambil tinggi penuh layar
                 className="w-full sm:max-w-150 p-0 flex flex-col h-dvh border-none shadow-2xl overflow-hidden bg-white"
             >
                 <SheetClose className="absolute right-6 top-6 z-50 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 active:scale-95 focus:outline-none">
@@ -130,15 +130,11 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                     </SheetDescription>
                 </SheetHeader>
 
-                {/* ✅ flex-1 dan min-h-0 sangat penting agar ScrollArea berfungsi di dalam Flexbox */}
                 <ScrollArea className="flex-1 min-h-0 bg-slate-50 border-t">
                     <div className="p-6 md:p-8 space-y-6 md:space-y-8 pb-32">
 
                         {/* SECTION 1: INFO UTAMA */}
-                        {/* ✅ Mengubah grid menjadi 2 kolom di desktop agar Urgensi bisa Full Width di baris pertama */}
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-
-                            {/* ✅ Urgensi dibuat Full Width (col-span-2) */}
                             <div className="col-span-1 md:col-span-2">
                                 <InfoCard
                                     label="Urgensi"
@@ -146,8 +142,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                                     content={
                                         <Badge
                                             variant="outline"
-                                            // ✅ Styling agar teks panjang bisa wrap ke bawah
-                                            className=" rounded-1xl border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-2 h-auto w-full block wrap-break-word"
+                                            className="rounded-xl border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left leading-tight py-2 h-auto w-full block wrap-break-word"
                                         >
                                             {agenda.urgency || "NORMAL"}
                                         </Badge>
@@ -164,11 +159,11 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                             <InfoCard label="Prioritas" icon={Info} content={
                                 <div className={cn(
                                     "text-[10px] font-black italic px-2 py-0.5 rounded border w-fit uppercase",
-                                    ag?.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' :
-                                        ag?.priority === 'Medium' ? 'text-orange-500 bg-orange-50 border-orange-200' :
+                                    agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' :
+                                        agenda.priority === 'Medium' ? 'text-orange-500 bg-orange-50 border-orange-200' :
                                             'text-green-600 bg-green-50 border-green-200'
                                 )}>
-                                    {ag?.priority ?? 'Low'}
+                                    {agenda.priority ?? 'Low'}
                                 </div>
                             } />
                         </div>
@@ -177,9 +172,9 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                         <div className="space-y-4">
                             <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-l-4 border-[#efe62f] pl-3">Informasi Pemrakarsa</h4>
                             <div className="grid gap-4 p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                                <DetailItem label="Direktur Pemrakarsa" value={ag?.director} icon={<User className="h-4 w-4" />} />
+                                <DetailItem label="Direktur Pemrakarsa" value={agenda.director} icon={<User className="h-4 w-4" />} />
                                 <DetailItem label="Unit Pemrakarsa" value={agenda.initiator} icon={<Briefcase className="h-4 w-4" />} />
-                                <DetailItem label="Unit Support" value={ag?.support} icon={<ShieldCheck className="h-4 w-4" />} />
+                                <DetailItem label="Unit Support" value={agenda.support} icon={<ShieldCheck className="h-4 w-4" />} />
                             </div>
                         </div>
 
@@ -188,8 +183,8 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                             <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">Narahubung & Jabatan</h4>
                             <div className="grid gap-4 p-5 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                                 <DetailItem label="Nama PIC" value={agenda.contactPerson} icon={<User className="h-4 w-4" />} />
-                                <DetailItem label="Jabatan" value={ag?.position} icon={<Briefcase className="h-4 w-4" />} />
-                                <DetailItem label="No HP" value={ag?.phone} icon={<Phone className="h-4 w-4" />} />
+                                <DetailItem label="Jabatan" value={agenda.position} icon={<Briefcase className="h-4 w-4" />} />
+                                <DetailItem label="No HP" value={agenda.phone} icon={<Phone className="h-4 w-4" />} />
                             </div>
                         </div>
 

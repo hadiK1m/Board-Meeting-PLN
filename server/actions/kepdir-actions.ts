@@ -3,12 +3,12 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
-import { agendas } from "@/db/schema/agendas"
+import { agendas, Agenda } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
 
 /**
- * HELPER: Membersihkan nilai dengan tipe data yang aman (Menghilangkan error 'any')
+ * HELPER: Membersihkan nilai dengan tipe data yang aman tanpa 'any'
  */
 function cleanValue<T>(val: T, fallback: T): T {
     if (val === undefined || val === null || (typeof val === "string" && val.trim() === "")) {
@@ -52,12 +52,14 @@ export async function createKepdirAction(formData: FormData) {
             }
         }
 
-        // INSERT DATABASE
+        const notRequiredRaw = formData.get("notRequiredFiles") as string
+        const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
+
         await db.insert(agendas).values({
             title: formData.get("title") as string,
             director: cleanValue(formData.get("director") as string, "DIRUT"),
             initiator: cleanValue(formData.get("initiator") as string, "PLN"),
-            support: "", // ✅ FIX: Memberikan string kosong agar TS tidak komplain 'Property support is missing'
+            support: "",
             contactPerson: cleanValue(formData.get("contactPerson") as string, "N/A"),
             position: cleanValue(formData.get("position") as string, "Staff"),
             phone: cleanValue(formData.get("phone") as string, "0"),
@@ -69,7 +71,7 @@ export async function createKepdirAction(formData: FormData) {
             kepdirSirkulerDoc: uploadedUrls.kepdirSirkulerDoc,
             grcDoc: uploadedUrls.grcDoc,
             supportingDocuments: supportingPaths,
-            notRequiredFiles: [],
+            notRequiredFiles: notRequiredFiles,
         })
 
         revalidatePath("/agenda/kepdir-sirkuler")
@@ -95,13 +97,16 @@ export async function updateKepdirAction(id: string, formData: FormData) {
         for (const field of fileFields) {
             const file = formData.get(field) as File
             const deleteFlag = formData.get(`delete_${field}`) === 'true'
-            const oldPath = (oldData as Record<string, any>)[field] as string | null
+
+            // ✅ FIX 1: Type casting ke Agenda untuk menghindari 'any'
+            const oldPath = (oldData as Agenda)[field as keyof Agenda] as string | null
 
             if (file && file.size > 0) {
                 if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
                 const fileExt = file.name.split('.').pop()
                 const path = `kepdir-sirkuler/${user.id}/${Date.now()}-${field}.${fileExt}`
-                const { data } = await supabase.storage.from('agenda-attachments').upload(path, file)
+                const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
+                if (error) throw error
                 updatedUrls[field] = data?.path || null
             } else if (deleteFlag) {
                 if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
@@ -110,6 +115,25 @@ export async function updateKepdirAction(id: string, formData: FormData) {
                 updatedUrls[field] = oldPath
             }
         }
+
+        const newSupportingFiles = formData.getAll("supportingDocuments") as File[]
+
+        // ✅ FIX 2: Menggunakan 'const' untuk 'supportingPaths' sesuai aturan prefer-const
+        // Kita gunakan push untuk memodifikasi array, jadi 'const' sudah benar
+        const supportingPaths: string[] = Array.isArray(oldData.supportingDocuments)
+            ? (oldData.supportingDocuments as string[])
+            : []
+
+        for (const file of newSupportingFiles) {
+            if (file && file.size > 0) {
+                const path = `kepdir-sirkuler/${user.id}/${Date.now()}-support-${file.name.replace(/\s/g, '_')}`
+                const { data } = await supabase.storage.from('agenda-attachments').upload(path, file)
+                if (data) supportingPaths.push(data.path)
+            }
+        }
+
+        const notRequiredRaw = formData.get("notRequiredFiles") as string
+        const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : oldData.notRequiredFiles
 
         await db.update(agendas).set({
             title: formData.get("title") as string,
@@ -121,6 +145,8 @@ export async function updateKepdirAction(id: string, formData: FormData) {
             status: cleanValue(formData.get("status") as string, oldData.status),
             kepdirSirkulerDoc: updatedUrls.kepdirSirkulerDoc,
             grcDoc: updatedUrls.grcDoc,
+            supportingDocuments: supportingPaths,
+            notRequiredFiles: notRequiredFiles,
             updatedAt: new Date(),
         }).where(eq(agendas.id, id))
 
@@ -142,6 +168,10 @@ export async function deleteKepdirAction(id: string) {
         if (existing.kepdirSirkulerDoc) filesToDelete.push(existing.kepdirSirkulerDoc)
         if (existing.grcDoc) filesToDelete.push(existing.grcDoc)
 
+        if (Array.isArray(existing.supportingDocuments)) {
+            filesToDelete.push(...(existing.supportingDocuments as string[]))
+        }
+
         if (filesToDelete.length > 0) {
             await supabase.storage.from('agenda-attachments').remove(filesToDelete)
         }
@@ -150,7 +180,6 @@ export async function deleteKepdirAction(id: string) {
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
     } catch {
-        // ✅ FIX: Menghapus variabel 'error' yang tidak digunakan
         return { success: false, error: "Gagal menghapus agenda" }
     }
 }
