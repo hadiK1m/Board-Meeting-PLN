@@ -6,7 +6,6 @@ import {
     Search,
     LayoutGrid,
     List,
-    Download,
     Eye,
     MoreHorizontal,
     Play,
@@ -242,11 +241,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                         </div>
                     )}
 
-                    {selectedIds.length === 0 && (
-                        <Button variant="outline" onClick={() => toast.info("Pilih agenda terlebih dahulu untuk export")} className="border-slate-200 text-slate-600 font-bold shadow-sm uppercase text-xs h-10">
-                            <Download className="mr-2 h-4 w-4" /> Export Agenda
-                        </Button>
-                    )}
+
                 </div>
             </div>
 
@@ -328,7 +323,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                 <TableHead className="w-[20%] text-[#125d72] font-extrabold uppercase text-[11px] tracking-wider">Narahubung (PIC)</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] text-center tracking-wider">Status</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] pl-6 tracking-wider">Catatan Pembatalan</TableHead>
-                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] pr-6 tracking-wider">Opsi</TableHead>
+                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] pr-6 tracking-wider">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -381,7 +376,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-52 p-2 rounded-xl shadow-2xl border-none">
-                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Opsi</DropdownMenuLabel>
+                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Pilih Aksi</DropdownMenuLabel>
                                                     <DropdownMenuItem onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="rounded-lg py-2.5 cursor-pointer font-bold text-[#125d72]">
                                                         <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
                                                     </DropdownMenuItem>

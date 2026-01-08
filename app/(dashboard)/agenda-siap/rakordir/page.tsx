@@ -1,56 +1,45 @@
-import { db } from "@/db"
-import { agendas } from "@/db/schema/agendas"
-import { desc, eq, and, ne } from "drizzle-orm"
-// ✅ Pastikan import sesuai (Default Export vs Named Export)
-// Jika Anda sudah mengubah client menjadi 'export function', gunakan { RakordirSiapClient }
-// Jika masih 'export default', gunakan RakordirSiapClient
-import RakordirSiapClient, { type AgendaReady } from "@/components/dashboard/agenda-siap/rakordir/rakordir-siap-client"
+import { db } from "@/db";
+import { agendas } from "@/db/schema/agendas";
+import { ne, and, eq, desc } from "drizzle-orm";
+import { RakordirSiapClient, type AgendaReady } from "@/components/dashboard/agenda-siap/rakordir/rakordir-siap-client";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export default async function RakordirSiapPage() {
-    // 1. Fetching data khusus RAKORDIR yang statusnya BUKAN Draft
-    // Ini agar status 'DIJADWALKAN' atau 'DIBATALKAN' tetap muncul di list
-    const data = await db.query.agendas.findMany({
+    // 1. Ambil data dari database: Tipe RAKORDIR dan bukan DRAFT
+    const allAgendas = await db.query.agendas.findMany({
         where: and(
-            eq(agendas.meetingType, "RAKORDIR"),
-            ne(agendas.status, "Draft")
+            ne(agendas.status, "DRAFT"),        // Menampilkan yang siap sidang, terjadwal, atau batal
+            eq(agendas.meetingType, "RAKORDIR")  // Khusus Rakordir
         ),
-        orderBy: [desc(agendas.updatedAt)],
+        orderBy: [desc(agendas.createdAt)],
     });
 
-    // 2. Mapping data agar type-safe (AgendaReady) dan menangani null
-    const formattedAgendas: AgendaReady[] = data.map((item) => ({
-        id: item.id,
-        // ✅ Berikan fallback string kosong agar tidak error di client
-        title: item.title || "Tanpa Judul",
-        urgency: item.urgency || "Normal",
-        initiator: item.initiator || "-",
-        status: item.status || "DAPAT_DILANJUTKAN",
-        contactPerson: item.contactPerson || "-",
+    // 2. Mapping data ke interface AgendaReady dengan aman (Tanpa 'any')
+    const formattedAgendas: AgendaReady[] = allAgendas.map((agenda) => ({
+        id: agenda.id,
+        title: agenda.title || "Tanpa Judul",
+        urgency: agenda.urgency || "Normal",
+        // Konversi string/null date ke objek Date asli
+        deadline: agenda.deadline ? new Date(agenda.deadline) : new Date(),
+        initiator: agenda.initiator || "-",
+        status: agenda.status || "DAPAT_DILANJUTKAN",
+        contactPerson: agenda.contactPerson || "-",
+        cancellationReason: agenda.cancellationReason ?? null,
 
-        // ✅ Pastikan Deadline menjadi Object Date valid
-        deadline: item.deadline ? new Date(item.deadline) : new Date(),
-
-        cancellationReason: item.cancellationReason ?? null,
-
-        // Field Optional Personil
-        director: item.director || null,
-        support: item.support || null,
-        position: item.position || null,
-        phone: item.phone || null,
-
-        // Field Lampiran Khusus Rakordir
-        proposalNote: item.proposalNote || null,
-        presentationMaterial: item.presentationMaterial || null,
+        // Field opsional untuk Detail Sheet Rakordir
+        director: agenda.director || null,
+        support: agenda.support || null,
+        position: agenda.position || null,
+        phone: agenda.phone || null,
+        proposalNote: agenda.proposalNote || null,
+        presentationMaterial: agenda.presentationMaterial || null,
     }));
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6">
-            {/* Header dihapus disini karena sudah ada di dalam komponen RakordirSiapClient agar konsisten dengan Radir */}
-
-            {/* ✅ FIX: Gunakan prop 'data' bukan 'initialData' */}
+        <main className="p-6">
+            {/* Mengirimkan data yang sudah terformat ke Client Component */}
             <RakordirSiapClient data={formattedAgendas} />
-        </div>
-    )
+        </main>
+    );
 }
