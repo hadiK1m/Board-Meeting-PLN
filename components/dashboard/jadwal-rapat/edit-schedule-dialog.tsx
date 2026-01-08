@@ -20,7 +20,9 @@ import {
     SelectValue
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { updateScheduledMeetingAction } from "@/server/actions/agenda-actions"
+
+// ✅ Penyesuaian Import: Menggunakan upsertMeetingScheduleAction dari meeting-actions.ts
+import { upsertMeetingScheduleAction } from "@/server/actions/meeting-actions"
 import { AgendaReady } from "./jadwal-rapat-client"
 
 interface EditScheduleDialogProps {
@@ -39,8 +41,7 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
     const [link, setLink] = useState("")
     const [isPending, setIsPending] = useState(false)
 
-    // ✅ SOLUSI: Sinkronisasi Reaktif
-    // useEffect ini akan berjalan tepat saat prop 'agenda' atau 'open' berubah
+    // ✅ Sinkronisasi Reaktif saat modal dibuka
     useEffect(() => {
         if (open && agenda) {
             setDate(agenda.executionDate || "")
@@ -51,7 +52,7 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
             setLocation(agenda.meetingLocation || "")
             setLink(agenda.meetingLink || "")
         }
-    }, [agenda, open]) // Dependensi memastikan data terisi saat modal dibuka
+    }, [agenda, open])
 
     const toggleEndTimeMode = () => {
         if (!isManualTime) {
@@ -71,14 +72,15 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
 
         setIsPending(true)
         try {
-            const res = await updateScheduledMeetingAction({
+            // ✅ Menggunakan upsertMeetingScheduleAction untuk memperbarui jadwal
+            const res = await upsertMeetingScheduleAction({
                 id: agenda.id,
                 executionDate: date,
                 startTime,
                 endTime: endTime || "Selesai",
                 meetingMethod: method,
-                location,
-                link
+                location: location,
+                link: link
             })
 
             if (res.success) {
@@ -99,7 +101,7 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-2xl border-none shadow-2xl">
                 <DialogHeader>
-                    <DialogTitle className="text-[#125d72] font-bold text-xl">
+                    <DialogTitle className="text-[#125d72] font-bold text-xl uppercase tracking-tight">
                         Edit Jadwal Rapat
                     </DialogTitle>
                 </DialogHeader>
@@ -111,17 +113,17 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
                     </div>
 
                     <div className="space-y-2">
-                        <Label className="text-[#125d72] font-bold">Tanggal Pelaksanaan</Label>
-                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11" />
+                        <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Tanggal Pelaksanaan</Label>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 focus:ring-[#14a2ba]" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-2">
-                            <Label className="text-[#125d72] font-bold">Mulai</Label>
-                            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-11" />
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Mulai</Label>
+                            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-11 focus:ring-[#14a2ba]" />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[#125d72] font-bold">Selesai</Label>
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Selesai</Label>
                             <div className="relative group">
                                 <Input
                                     type={isManualTime ? "time" : "text"}
@@ -138,9 +140,9 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
                     </div>
 
                     <div className="col-span-2 space-y-2">
-                        <Label className="text-[#125d72] font-bold">Metode Rapat</Label>
+                        <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Metode Rapat</Label>
                         <Select value={method} onValueChange={setMethod}>
-                            <SelectTrigger className="h-11"><SelectValue placeholder="Pilih Metode" /></SelectTrigger>
+                            <SelectTrigger className="h-11 focus:ring-[#14a2ba]"><SelectValue placeholder="Pilih Metode" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="OFFLINE">OFFLINE (Tatap Muka)</SelectItem>
                                 <SelectItem value="ONLINE">ONLINE (Virtual / Zoom)</SelectItem>
@@ -151,22 +153,26 @@ export function EditScheduleDialog({ agenda, open, onOpenChange }: EditScheduleD
 
                     {(method === "OFFLINE" || method === "HYBRID") && (
                         <div className="col-span-2 space-y-2 animate-in fade-in slide-in-from-top-1">
-                            <Label className="text-[#125d72] font-bold">Lokasi Ruangan / Tempat</Label>
-                            <Input className="h-11" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Masukkan nama ruangan..." />
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Lokasi Ruangan / Tempat</Label>
+                            <Input className="h-11 focus:ring-[#14a2ba]" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Masukkan nama ruangan..." />
                         </div>
                     )}
 
                     {(method === "ONLINE" || method === "HYBRID") && (
                         <div className="col-span-2 space-y-2 animate-in fade-in slide-in-from-top-1">
-                            <Label className="text-[#125d72] font-bold">Tautan / Link Meeting</Label>
-                            <Input className="h-11" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://zoom.us/j/..." />
+                            <Label className="text-[#125d72] font-bold text-xs uppercase tracking-wider">Tautan / Link Meeting</Label>
+                            <Input className="h-11 focus:ring-[#14a2ba]" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://zoom.us/j/..." />
                         </div>
                     )}
 
                     <div className="col-span-2 pt-4 flex gap-3">
                         <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-bold text-slate-500">Batal</Button>
-                        <Button onClick={handleUpdate} disabled={isPending} className="flex-2 bg-[#125d72] hover:bg-[#05252b] text-white font-bold h-12 shadow-lg">
-                            {isPending ? "Menyimpan..." : "Simpan Perubahan Jadwal"}
+                        <Button onClick={handleUpdate} disabled={isPending} className="flex-2 bg-[#125d72] hover:bg-[#05252b] text-white font-extrabold h-12 shadow-lg active:scale-95 transition-all">
+                            {isPending ? "Menyimpan..." : (
+                                <span className="flex items-center gap-2">
+                                    <Save className="h-4 w-4" /> Simpan Perubahan Jadwal
+                                </span>
+                            )}
                         </Button>
                     </div>
                 </div>

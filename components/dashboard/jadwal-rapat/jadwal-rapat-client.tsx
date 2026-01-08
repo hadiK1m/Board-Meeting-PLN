@@ -40,7 +40,9 @@ import { toast } from "sonner"
 import { ScheduleMeetingDialog } from "./schedule-meeting-dialog"
 import { DetailJadwalSheet } from "./detail-jadwal-sheet"
 import { EditScheduleDialog } from "./edit-schedule-dialog"
-import { rollbackAgendaAction } from "@/server/actions/agenda-actions"
+
+// ✅ Penyesuaian Import: Menggunakan rollbackMeetingScheduleAction dari meeting-actions.ts
+import { rollbackMeetingScheduleAction } from "@/server/actions/meeting-actions"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export interface AgendaReady {
@@ -83,28 +85,21 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
     // Filter untuk tabel utama (yang sudah dijadwalkan)
     const filteredData = useMemo(() => {
         return data.filter(item => {
-            // 1. Filter Wajib: Status harus DIJADWALKAN
             const isScheduled = item.status === "DIJADWALKAN";
             if (!isScheduled) return false;
 
-            // 2. Filter Search: Mencocokkan Judul atau Initiator
             const matchesSearch =
                 item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (item.initiator || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-            // 3. Filter Jenis Rapat (Dropdown)
-            // Menggunakan logika deteksi string "rakordir" pada judul (konsisten dengan handleCopyWA)
             const isRakordir = item.title.toLowerCase().includes("rakordir");
             let matchesType = true;
 
             if (meetingTypeFilter === "radir") {
-                // Jika pilih RADIR, tampilkan yang TIDAK mengandung kata "rakordir"
                 matchesType = !isRakordir;
             } else if (meetingTypeFilter === "rakordir") {
-                // Jika pilih RAKORDIR, tampilkan yang mengandung kata "rakordir"
                 matchesType = isRakordir;
             }
-            // Jika "all", matchesType tetap true
 
             return matchesSearch && matchesType;
         })
@@ -126,7 +121,8 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
         }
 
         try {
-            const res = await rollbackAgendaAction(id)
+            // ✅ Menggunakan fungsi rollbackMeetingScheduleAction yang baru
+            const res = await rollbackMeetingScheduleAction(id)
             if (res.success) {
                 toast.success("Jadwal agenda berhasil dibatalkan")
                 setSelectedIds(prev => prev.filter(item => item !== id))
@@ -275,7 +271,6 @@ _SEKPER PLN_`
                                 <TableHead className="w-12 px-6">
                                     <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                {/* ✅ FIX: Lebar kolom dibatasi 40% dan min-width 300px */}
                                 <TableHead className="w-[40%] min-w-75 text-[#125d72] font-black uppercase text-[11px]">Agenda & Waktu</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Metode</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Status</TableHead>
@@ -290,7 +285,6 @@ _SEKPER PLN_`
                                     </TableCell>
                                     <TableCell className="py-5">
                                         <div className="space-y-1">
-                                            {/* ✅ FIX: Tambahkan line-clamp-2 untuk membatasi baris dan title untuk tooltip native */}
                                             <p
                                                 className="font-bold text-[#125d72] uppercase text-xs tracking-tight line-clamp-2 max-w-2xl"
                                                 title={agenda.title}
@@ -340,7 +334,6 @@ _SEKPER PLN_`
                     </Table>
                 </div>
             ) : (
-                /* View Mode: Grid */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {filteredData.map((agenda) => (
                         <div key={agenda.id} className={cn("bg-white border rounded-2xl p-6 shadow-sm border-slate-100 hover:shadow-md transition-all relative group", selectedIds.includes(agenda.id) ? "border-[#14a2ba] bg-blue-50/20" : "border-slate-100")}>
@@ -377,7 +370,6 @@ _SEKPER PLN_`
                 </div>
             )}
 
-            {/* Modals & Sheets Integration */}
             <DetailJadwalSheet agenda={selectedDetail} open={detailOpen} onOpenChange={setDetailOpen} />
             <EditScheduleDialog agenda={selectedEdit} open={editOpen} onOpenChange={setEditOpen} />
         </div>

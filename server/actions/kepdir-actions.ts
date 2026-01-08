@@ -1,4 +1,3 @@
-// src/server/actions/kepdir-actions.ts
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
@@ -8,7 +7,7 @@ import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
 
 /**
- * HELPER: Membersihkan nilai dengan tipe data yang aman tanpa 'any'
+ * HELPER: Membersihkan nilai dengan tipe data yang aman
  */
 function cleanValue<T>(val: T, fallback: T): T {
     if (val === undefined || val === null || (typeof val === "string" && val.trim() === "")) {
@@ -17,6 +16,10 @@ function cleanValue<T>(val: T, fallback: T): T {
     return val
 }
 
+/**
+ * 1. ACTION: CREATE KEPDIR SIRKULER
+ * Menangani pembuatan usulan Kepdir baru dengan lampiran khusus (Kepdir & GRC).
+ */
 export async function createKepdirAction(formData: FormData) {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -29,6 +32,7 @@ export async function createKepdirAction(formData: FormData) {
         const fileFields = ["kepdirSirkulerDoc", "grcDoc"] as const
         const uploadedUrls: Record<string, string | null> = {}
 
+        // Upload dokumen utama Kepdir
         for (const field of fileFields) {
             const file = formData.get(field) as File
             if (file && file.size > 0) {
@@ -42,6 +46,7 @@ export async function createKepdirAction(formData: FormData) {
             }
         }
 
+        // Upload dokumen pendukung lainnya
         const supportingFiles = formData.getAll("supportingDocuments") as File[]
         const supportingPaths: string[] = []
         for (const file of supportingFiles) {
@@ -82,6 +87,10 @@ export async function createKepdirAction(formData: FormData) {
     }
 }
 
+/**
+ * 2. ACTION: UPDATE KEPDIR SIRKULER
+ * Memperbarui data Kepdir dan mengelola penggantian file di storage.
+ */
 export async function updateKepdirAction(id: string, formData: FormData) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -94,11 +103,10 @@ export async function updateKepdirAction(id: string, formData: FormData) {
         const fileFields = ["kepdirSirkulerDoc", "grcDoc"] as const
         const updatedUrls: Record<string, string | null> = {}
 
+        // Mengelola file utama (Hapus lama jika ada baru)
         for (const field of fileFields) {
             const file = formData.get(field) as File
             const deleteFlag = formData.get(`delete_${field}`) === 'true'
-
-            // ✅ FIX 1: Type casting ke Agenda untuk menghindari 'any'
             const oldPath = (oldData as Agenda)[field as keyof Agenda] as string | null
 
             if (file && file.size > 0) {
@@ -116,10 +124,8 @@ export async function updateKepdirAction(id: string, formData: FormData) {
             }
         }
 
+        // Tambah dokumen pendukung baru ke array yang sudah ada
         const newSupportingFiles = formData.getAll("supportingDocuments") as File[]
-
-        // ✅ FIX 2: Menggunakan 'const' untuk 'supportingPaths' sesuai aturan prefer-const
-        // Kita gunakan push untuk memodifikasi array, jadi 'const' sudah benar
         const supportingPaths: string[] = Array.isArray(oldData.supportingDocuments)
             ? (oldData.supportingDocuments as string[])
             : []
@@ -158,6 +164,10 @@ export async function updateKepdirAction(id: string, formData: FormData) {
     }
 }
 
+/**
+ * 3. ACTION: DELETE KEPDIR SIRKULER
+ * Menghapus agenda kepdir dan membersihkan seluruh file terkait di storage.
+ */
 export async function deleteKepdirAction(id: string) {
     const supabase = await createClient()
     try {
@@ -179,7 +189,8 @@ export async function deleteKepdirAction(id: string) {
         await db.delete(agendas).where(eq(agendas.id, id))
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch {
-        return { success: false, error: "Gagal menghapus agenda" }
+    } catch (error) {
+        console.error("Delete Kepdir Error:", error)
+        return { success: false, error: "Gagal menghapus agenda kepdir" }
     }
 }

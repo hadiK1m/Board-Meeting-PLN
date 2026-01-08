@@ -1,34 +1,33 @@
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
-import { ne, and, eq, desc } from "drizzle-orm"; // ✅ Tambahkan 'and', 'eq', 'desc'
-import { RadirReadyClient, type AgendaReady } from "@/components/dashboard/agenda-siap/radir/radir-ready-client";
+import { ne, and, eq, desc } from "drizzle-orm";
+import { RadirSiapClient, type AgendaReady } from "@/components/dashboard/agenda-siap/radir/radir-siap-client";
 
-export const dynamic = "force-dynamic"; // Opsional: Memastikan data selalu fresh
+export const dynamic = "force-dynamic";
 
 export default async function RadirSiapPage() {
-    // 1. Ambil data dari database dengan filter yang BENAR
+    // 1. Ambil data dari database dengan filter RADIR dan bukan DRAFT
     const allAgendas = await db.query.agendas.findMany({
         where: and(
-            ne(agendas.status, "Draft"),      // Bukan Draft
-            eq(agendas.meetingType, "RADIR")  // ✅ WAJIB: Hanya ambil tipe RADIR
+            ne(agendas.status, "DRAFT"),      // Sesuaikan case sensitivity dengan enum DB Anda
+            eq(agendas.meetingType, "RADIR")  // Filter hanya tipe RADIR
         ),
         orderBy: [desc(agendas.createdAt)],
     });
 
-    // 2. Mapping data agar sesuai dengan interface AgendaReady
+    // 2. Mapping data agar sesuai dengan interface AgendaReady di Client Component
     const formattedAgendas: AgendaReady[] = allAgendas.map((agenda) => ({
         id: agenda.id,
-        // ✅ Berikan fallback agar tidak error jika data null
         title: agenda.title || "Tanpa Judul",
         urgency: agenda.urgency || "Normal",
-        // ✅ Pastikan deadline menjadi objek Date yang valid
+        // Konversi deadline ke objek Date untuk dikirim ke Client
         deadline: agenda.deadline ? new Date(agenda.deadline) : new Date(),
         initiator: agenda.initiator || "-",
         status: agenda.status || "DAPAT_DILANJUTKAN",
         contactPerson: agenda.contactPerson || "-",
         cancellationReason: agenda.cancellationReason ?? null,
 
-        // Field optional (jika diperlukan untuk detail sheet)
+        // Field pendukung untuk Detail Sheet
         director: agenda.director || null,
         support: agenda.support || null,
         position: agenda.position || null,
@@ -42,7 +41,7 @@ export default async function RadirSiapPage() {
 
     return (
         <main className="p-6">
-            <RadirReadyClient data={formattedAgendas} />
+            <RadirSiapClient data={formattedAgendas} />
         </main>
     );
 }

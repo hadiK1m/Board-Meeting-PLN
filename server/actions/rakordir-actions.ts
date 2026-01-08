@@ -5,14 +5,14 @@ import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { randomUUID } from "crypto"
-import { eq, inArray } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 
 // ✅ Type-Safety: Menggunakan inferensi tipe dari Drizzle Schema
 type NewAgenda = typeof agendas.$inferInsert;
-type ExistingAgenda = typeof agendas.$inferSelect;
 
 /**
  * HELPER: Upload file ke bucket 'agenda-attachments'
+ * Khusus digunakan untuk modul Rakordir
  */
 async function uploadToStorage(file: File, folder: string): Promise<string | null> {
     if (!file || file.size === 0) return null
@@ -23,8 +23,6 @@ async function uploadToStorage(file: File, folder: string): Promise<string | nul
         const fileName = `${Date.now()}-${folder}.${fileExt}`
         const bucketId = "agenda-attachments"
         const path = `rakordir/${randomUUID()}/${fileName}`
-
-        console.log(`[DEBUG-STORAGE] Menjalankan upload ke: ${bucketId}/${path}`);
 
         const { data, error } = await supabase.storage
             .from(bucketId)
@@ -43,7 +41,7 @@ async function uploadToStorage(file: File, folder: string): Promise<string | nul
 }
 
 /**
- * HELPER: Hapus file dari storage untuk cleanup
+ * HELPER: Hapus file dari storage untuk cleanup internal modul
  */
 async function deleteFromStorage(paths: string[]) {
     const validPaths = paths.filter((p) => !!p && p !== "null" && p !== "");
@@ -52,19 +50,18 @@ async function deleteFromStorage(paths: string[]) {
     try {
         const supabase = await createClient();
         const bucketId = "agenda-attachments";
-        console.log(`[DEBUG-CLEANUP] Menghapus ${validPaths.length} file usang dari storage...`);
         await supabase.storage.from(bucketId).remove(validPaths);
     } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown cleanup error"
-        console.error(`[STORAGE-CLEANUP-ERROR] Gagal menghapus file usang:`, msg);
+        console.error(`[STORAGE-CLEANUP-ERROR] Gagal menghapus file:`, msg);
     }
 }
 
 /**
- * ACTION: CREATE RAKORDIR
+ * 1. ACTION: CREATE RAKORDIR
+ * Menangani usulan Rapat Koordinasi Direksi baru.
  */
 export async function createRakordirAction(formData: FormData) {
-    console.log("[DEBUG-ACTION] Memulai Create Rakordir...");
     try {
         const proposalPath = await uploadToStorage(formData.get("proposalNote") as File, "proposal")
         const presentationPath = await uploadToStorage(formData.get("presentationMaterial") as File, "presentation")
@@ -72,24 +69,24 @@ export async function createRakordirAction(formData: FormData) {
         const insertData: NewAgenda = {
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
-            priority: formData.get("priority") as string, // ✅ Tambah Prioritas
+            priority: formData.get("priority") as string,
             deadline: new Date(formData.get("deadline") as string),
-            director: formData.get("director") as string, // ✅ Simpan String dari Multi-Select
-            initiator: formData.get("initiator") as string, // ✅ Simpan String dari Multi-Select
-            support: formData.get("support") as string, // ✅ Simpan String dari Multi-Select
+            director: formData.get("director") as string,
+            initiator: formData.get("initiator") as string,
+            support: formData.get("support") as string,
             contactPerson: formData.get("contactPerson") as string,
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
+            // Status otomatis menjadi SIAP jika ada dokumen utama, jika tidak tetap DRAFT
             status: (proposalPath || presentationPath) ? "DAPAT_DILANJUTKAN" : "DRAFT",
             meetingType: "RAKORDIR",
             endTime: "Selesai",
         };
 
-        const [inserted] = await db.insert(agendas).values(insertData).returning({ id: agendas.id });
+        await db.insert(agendas).values(insertData);
 
-        console.log(`[DEBUG-SUCCESS] Berhasil membuat agenda ID: ${inserted.id}`);
         revalidatePath("/agenda/rakordir")
         return { success: true }
     } catch (error) {
@@ -100,15 +97,14 @@ export async function createRakordirAction(formData: FormData) {
 }
 
 /**
- * ACTION: UPDATE RAKORDIR
+ * 2. ACTION: UPDATE RAKORDIR
+ * Menangani pembaruan data dan penggantian dokumen fisik.
  */
 export async function updateRakordirAction(formData: FormData, id: string) {
-    console.log(`[DEBUG-ACTION] Memulai Update Rakordir ID: ${id}`);
     try {
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
 
-        // Proses File (Upload Baru & Deteksi Hapus)
         const proposalFile = formData.get("proposalNote") as File;
         const presentationFile = formData.get("presentationMaterial") as File;
         const deleteProposal = formData.get("delete_proposalNote") === 'true';
@@ -116,10 +112,9 @@ export async function updateRakordirAction(formData: FormData, id: string) {
 
         let proposalPath = existing.proposalNote;
         let presentationPath = existing.presentationMaterial;
-
         const filesToRemove: string[] = [];
 
-        // Logika Update Proposal
+        // Update Proposal Note
         if (proposalFile && proposalFile.size > 0) {
             if (existing.proposalNote) filesToRemove.push(existing.proposalNote);
             proposalPath = await uploadToStorage(proposalFile, "proposal");
@@ -128,7 +123,7 @@ export async function updateRakordirAction(formData: FormData, id: string) {
             proposalPath = null;
         }
 
-        // Logika Update Presentation
+        // Update Presentation Material
         if (presentationFile && presentationFile.size > 0) {
             if (existing.presentationMaterial) filesToRemove.push(existing.presentationMaterial);
             presentationPath = await uploadToStorage(presentationFile, "presentation");
@@ -137,16 +132,14 @@ export async function updateRakordirAction(formData: FormData, id: string) {
             presentationPath = null;
         }
 
-        // Cleanup File Usang
         if (filesToRemove.length > 0) await deleteFromStorage(filesToRemove);
 
-        // Eksekusi Update ke Database
         await db.update(agendas).set({
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
-            priority: formData.get("priority") as string, // ✅ Update Prioritas
+            priority: formData.get("priority") as string,
             deadline: new Date(formData.get("deadline") as string),
-            director: formData.get("director") as string, // ✅ Update Multi-Select String
+            director: formData.get("director") as string,
             initiator: formData.get("initiator") as string,
             support: formData.get("support") as string,
             contactPerson: formData.get("contactPerson") as string,
@@ -154,12 +147,12 @@ export async function updateRakordirAction(formData: FormData, id: string) {
             phone: formData.get("phone") as string,
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
-            notRequiredFiles: formData.get("notRequiredFiles") as string, // ✅ Simpan status dokumen
+            notRequiredFiles: formData.get("notRequiredFiles") as string,
             updatedAt: new Date(),
         }).where(eq(agendas.id, id));
 
-        console.log(`[DEBUG-SUCCESS] Berhasil update agenda ID: ${id}`);
         revalidatePath("/agenda/rakordir")
+        revalidatePath("/agenda-siap/radir") // Sinkronisasi jika data muncul di dashboard siap
         return { success: true }
     } catch (error) {
         const msg = error instanceof Error ? error.message : "Gagal update agenda"
@@ -169,64 +162,23 @@ export async function updateRakordirAction(formData: FormData, id: string) {
 }
 
 /**
- * ACTION: DELETE BULK RAKORDIR
- */
-export async function deleteBulkRakordirAction(ids: string[]) {
-    console.log(`[DEBUG-ACTION] Memulai Delete Bulk untuk ${ids.length} agenda...`);
-    try {
-        const items: ExistingAgenda[] = await db.query.agendas.findMany({
-            where: inArray(agendas.id, ids),
-        });
-
-        const filesToDelete: string[] = [];
-        items.forEach(item => {
-            if (item.proposalNote) filesToDelete.push(item.proposalNote);
-            if (item.presentationMaterial) filesToDelete.push(item.presentationMaterial);
-
-            if (item.supportingDocuments && typeof item.supportingDocuments === 'string') {
-                try {
-                    const parsed = JSON.parse(item.supportingDocuments);
-                    if (Array.isArray(parsed)) {
-                        filesToDelete.push(...parsed.map(String));
-                    }
-                } catch { /* ignore error */ }
-            }
-        });
-
-        await deleteFromStorage(filesToDelete);
-        await db.delete(agendas).where(inArray(agendas.id, ids));
-
-        console.log(`[DEBUG-SUCCESS] Berhasil menghapus ${ids.length} data.`);
-        revalidatePath("/agenda/rakordir")
-        return { success: true }
-    } catch (error) {
-        const msg = error instanceof Error ? error.message : "Gagal hapus massal"
-        console.error("[ACTION-DELETE-ERROR]", msg)
-        return { success: false, error: msg }
-    }
-}
-
-/**
- * ACTION: DELETE SINGLE RAKORDIR
+ * 3. ACTION: DELETE SINGLE RAKORDIR
  */
 export async function deleteRakordirAction(id: string) {
-    console.log(`[DEBUG-ACTION] Menghapus Agenda Rakordir ID: ${id}`);
     try {
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
 
-        // Kumpulkan file untuk dihapus
         const filesToDelete: string[] = [];
         if (existing.proposalNote) filesToDelete.push(existing.proposalNote);
         if (existing.presentationMaterial) filesToDelete.push(existing.presentationMaterial);
 
-        // Hapus file dari storage
         if (filesToDelete.length > 0) await deleteFromStorage(filesToDelete);
 
-        // Hapus dari database
         await db.delete(agendas).where(eq(agendas.id, id));
 
         revalidatePath("/agenda/rakordir");
+        revalidatePath("/agenda-siap/radir");
         return { success: true };
     } catch (error) {
         const msg = error instanceof Error ? error.message : "Gagal menghapus agenda";

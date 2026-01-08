@@ -35,6 +35,7 @@ function cleanValue<T>(val: T, fallback: T): T {
 
 /**
  * 1. ACTION: Create Agenda (RADIR)
+ * Menangani pembuatan usulan baru dan pengecekan kelengkapan dokumen.
  */
 export async function createRadirAction(formData: FormData) {
     const supabase = await createClient()
@@ -47,7 +48,7 @@ export async function createRadirAction(formData: FormData) {
     try {
         const uploadedUrls: Partial<Record<AgendaFileField, string | null>> = {}
 
-        // ✅ Ambil status tombol dan parse menjadi array asli
+        // Ambil status tombol dan parse menjadi array asli
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
@@ -75,7 +76,7 @@ export async function createRadirAction(formData: FormData) {
             }
         }
 
-        // Cek kelengkapan dokumen
+        // Cek kelengkapan dokumen untuk menentukan status
         const allFilesHandled = FILE_FIELDS.every(field =>
             (uploadedUrls[field] !== null) || (Array.isArray(notRequiredFiles) && notRequiredFiles.includes(field))
         );
@@ -104,12 +105,14 @@ export async function createRadirAction(formData: FormData) {
         return { success: true }
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "Gagal menyimpan data."
+        console.error("Critical Error Create Radir:", msg)
         return { success: false, error: msg }
     }
 }
 
 /**
  * 2. ACTION: Update Agenda (RADIR)
+ * Menangani update data, penggantian file lama, dan kunci status jika sudah dijadwalkan.
  */
 export async function updateRadirAction(id: string, formData: FormData) {
     const supabase = await createClient()
@@ -120,6 +123,11 @@ export async function updateRadirAction(id: string, formData: FormData) {
         const oldData = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
         if (!oldData) return { success: false, error: "Data tidak ditemukan." }
 
+        // Proteksi agenda yang sudah dikunci
+        if (oldData.status === "DIJADWALKAN" || oldData.status === "SELESAI") {
+            return { success: false, error: "Agenda sudah dikunci karena telah dijadwalkan." }
+        }
+
         const updatedUrls: Partial<Record<AgendaFileField, string | null>> = {}
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : oldData.notRequiredFiles
@@ -127,11 +135,10 @@ export async function updateRadirAction(id: string, formData: FormData) {
         for (const field of FILE_FIELDS) {
             const file = formData.get(field) as File
             const deleteFlag = formData.get(`delete_${field}`) === 'true'
-
-            // ✅ Fix type casting ESLint
             const oldPath = (oldData as Agenda)[field as keyof Agenda]
 
             if (file && file.size > 0) {
+                // Hapus file lama dari storage jika ada penggantian
                 if (typeof oldPath === 'string') await supabase.storage.from('agenda-attachments').remove([oldPath])
                 const fileExt = file.name.split('.').pop()
                 const path = `radir/${user.id}/${Date.now()}-${field}.${fileExt}`
@@ -139,6 +146,7 @@ export async function updateRadirAction(id: string, formData: FormData) {
                 if (error) throw error
                 updatedUrls[field] = data?.path || null
             } else if (deleteFlag) {
+                // Hapus file dari storage jika ditandai hapus
                 if (typeof oldPath === 'string') await supabase.storage.from('agenda-attachments').remove([oldPath])
                 updatedUrls[field] = null
             } else {
@@ -168,15 +176,18 @@ export async function updateRadirAction(id: string, formData: FormData) {
         }).where(eq(agendas.id, id))
 
         revalidatePath("/agenda/radir")
+        revalidatePath("/agenda-siap/radir")
         return { success: true }
     } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : "Error update"
+        const msg = error instanceof Error ? error.message : "Gagal memperbarui data."
+        console.error("Error Update Radir:", msg)
         return { success: false, error: msg }
     }
 }
 
 /**
  * 3. ACTION: Delete Agenda (RADIR)
+ * Menghapus agenda tunggal beserta pembersihan file di storage.
  */
 export async function deleteRadirAction(id: string) {
     const supabase = await createClient()
@@ -191,9 +202,9 @@ export async function deleteRadirAction(id: string) {
         })
 
         if (dataAgenda.supportingDocuments) {
-            const extra = typeof dataAgenda.supportingDocuments === 'string'
-                ? JSON.parse(dataAgenda.supportingDocuments)
-                : dataAgenda.supportingDocuments
+            const extra = Array.isArray(dataAgenda.supportingDocuments)
+                ? dataAgenda.supportingDocuments
+                : JSON.parse(dataAgenda.supportingDocuments as string || "[]")
             if (Array.isArray(extra)) filesToDelete.push(...extra.map(String))
         }
 
@@ -202,9 +213,13 @@ export async function deleteRadirAction(id: string) {
         }
 
         await db.delete(agendas).where(eq(agendas.id, id))
+
         revalidatePath("/agenda/radir")
+        revalidatePath("/agenda-siap/radir")
         return { success: true }
-    } catch {
-        return { success: false, error: "Gagal menghapus data." }
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Gagal menghapus data."
+        console.error("Critical Error Delete Radir:", msg)
+        return { success: false, error: msg }
     }
 }
