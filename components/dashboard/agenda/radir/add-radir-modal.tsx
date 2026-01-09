@@ -193,9 +193,26 @@ export function AddRadirModal() {
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Informasi Utama Agenda</h3>
                                 </div>
                                 <div className="grid gap-3">
-                                    <Label htmlFor="title" className="font-bold text-[#125d72]">Judul Agenda</Label>
-                                    <Input id="title" name="title" value={judul} onChange={(e) => setJudul(e.target.value)} placeholder="Masukkan judul agenda rapat..." required />
+                                    <Label className="font-bold text-[#125d72] uppercase text-[11px]">Judul Agenda</Label>
+                                    <Input
+                                        value={judul}
+                                        onChange={(e) => setJudul(e.target.value)}
+                                        name="title"
+                                        required
+                                        className="h-11 border-slate-200 focus:border-[#14a2ba]"
+                                    />
+
+                                    {/* Penambahan Preview Judul Agenda */}
+                                    {judul && (
+                                        <div className="p-4 bg-[#e7f6f9] border-l-4 border-[#14a2ba] rounded-sm animate-in fade-in slide-in-from-top-1">
+                                            <p className="text-[10px] font-bold text-[#125d72] uppercase opacity-60 tracking-wider">Preview Teks Surat:</p>
+                                            <p className="text-sm font-semibold text-[#125d72] mt-1 italic leading-relaxed uppercase">
+                                                &quot;Usulan Persetujuan Direksi tentang {judul}&quot;
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Urgensi</Label><Input name="urgency" placeholder="Sangat Segera / Normal" required /></div>
                                     <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Deadline Rapat</Label><Input name="deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} required /></div>

@@ -6,7 +6,7 @@ import {
     BookOpen,
     LayoutDashboard,
     CalendarCheck,
-    // FileSignature, // Tidak perlu di-import jika tidak dipakai di level induk
+    Presentation, // Ikon untuk Pelaksanaan Rapat
 } from "lucide-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
@@ -54,9 +54,8 @@ const data = {
                     url: "/agenda/rakordir",
                 },
                 {
-                    title: "Kepdir Sirkuler", // ✅ Menu Baru
-                    url: "/agenda/kepdir-sirkuler", // Ubah 'href' menjadi 'url' agar konsisten
-                    // icon: FileSignature, // Biasanya sub-menu tidak pakai icon agar rapi
+                    title: "Kepdir Sirkuler",
+                    url: "/agenda/kepdir-sirkuler",
                 },
             ],
         },
@@ -73,11 +72,6 @@ const data = {
                     title: "Rakordir Siap",
                     url: "/agenda-siap/rakordir",
                 },
-                // OPSI: Tambahkan juga Kepdir Siap jika diperlukan
-                // {
-                //   title: "Kepdir Sirkuler Siap",
-                //   url: "/agenda-siap/kepdir-sirkuler",
-                // },
             ],
         },
         {
@@ -85,6 +79,22 @@ const data = {
             url: "/jadwal-rapat",
             icon: CalendarCheck,
         },
+        {
+            title: "Pelaksanaan Rapat", // ✅ Menu Induk Baru
+            url: "#",
+            icon: Presentation,
+            items: [
+                {
+                    title: "Radir",
+                    url: "/pelaksanaan-rapat/radir",
+                },
+                {
+                    title: "Rakordir",
+                    url: "/pelaksanaan-rapat/rakordir",
+                },
+            ],
+        },
+
     ],
 }
 

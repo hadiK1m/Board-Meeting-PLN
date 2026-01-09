@@ -63,9 +63,27 @@ async function deleteFromStorage(paths: string[]) {
  */
 export async function createRakordirAction(formData: FormData) {
     try {
-        const proposalPath = await uploadToStorage(formData.get("proposalNote") as File, "proposal")
-        const presentationPath = await uploadToStorage(formData.get("presentationMaterial") as File, "presentation")
+        // 1. Ambil Data Status dan Not Required dari Client
+        // Status sudah ditentukan di modal (DRAFT / DAPAT_DILANJUTKAN)
+        const status = formData.get("status") as string;
+        const notRequiredFiles = formData.get("notRequiredFiles") as string;
 
+        // 2. Proses Upload File (Gunakan pengecekan size agar tidak upload file kosong)
+        const proposalFile = formData.get("proposalNote") as File;
+        const presentationFile = formData.get("presentationMaterial") as File;
+
+        let proposalPath = null;
+        let presentationPath = null;
+
+        if (proposalFile && proposalFile.size > 0) {
+            proposalPath = await uploadToStorage(proposalFile, "proposal");
+        }
+
+        if (presentationFile && presentationFile.size > 0) {
+            presentationPath = await uploadToStorage(presentationFile, "presentation");
+        }
+
+        // 3. Susun Data untuk Insert
         const insertData: NewAgenda = {
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
@@ -79,23 +97,30 @@ export async function createRakordirAction(formData: FormData) {
             phone: formData.get("phone") as string,
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
-            // Status otomatis menjadi SIAP jika ada dokumen utama, jika tidak tetap DRAFT
-            status: (proposalPath || presentationPath) ? "DAPAT_DILANJUTKAN" : "DRAFT",
+            // Simpan daftar dokumen yang ditandai "Tidak Diperlukan"
+            notRequiredFiles: notRequiredFiles,
+            // Gunakan status yang dikirim dari Modal (isComplete logic)
+            status: status || "DRAFT",
             meetingType: "RAKORDIR",
             endTime: "Selesai",
+            createdAt: new Date(),
+            updatedAt: new Date(),
         };
 
+        // 4. Eksekusi ke Database
         await db.insert(agendas).values(insertData);
 
-        revalidatePath("/agenda/rakordir")
-        return { success: true }
+        // 5. Revalidate agar data muncul di halaman terkait
+        revalidatePath("/agenda/rakordir");
+        revalidatePath("/agenda-siap/rakordir");
+
+        return { success: true };
     } catch (error) {
-        const msg = error instanceof Error ? error.message : "Gagal menyimpan agenda"
-        console.error("[ACTION-CREATE-ERROR]", msg)
-        return { success: false, error: msg }
+        const msg = error instanceof Error ? error.message : "Gagal menyimpan agenda";
+        console.error("[ACTION-CREATE-ERROR]", msg);
+        return { success: false, error: msg };
     }
 }
-
 /**
  * 2. ACTION: UPDATE RAKORDIR
  * Menangani pembaruan data dan penggantian dokumen fisik.
@@ -104,6 +129,9 @@ export async function updateRakordirAction(formData: FormData, id: string) {
     try {
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
+
+        // ✅ Ambil status dari formData yang dikirim client
+        const status = formData.get("status") as string;
 
         const proposalFile = formData.get("proposalNote") as File;
         const presentationFile = formData.get("presentationMaterial") as File;
@@ -134,8 +162,10 @@ export async function updateRakordirAction(formData: FormData, id: string) {
 
         if (filesToRemove.length > 0) await deleteFromStorage(filesToRemove);
 
+        // ✅ Lakukan Update ke Database
         await db.update(agendas).set({
             title: formData.get("title") as string,
+            status: status, // 👈 INI POIN PENTINGNYA: Menyimpan status baru (DRAFT / DAPAT_DILANJUTKAN)
             urgency: formData.get("urgency") as string,
             priority: formData.get("priority") as string,
             deadline: new Date(formData.get("deadline") as string),
@@ -151,13 +181,15 @@ export async function updateRakordirAction(formData: FormData, id: string) {
             updatedAt: new Date(),
         }).where(eq(agendas.id, id));
 
-        revalidatePath("/agenda/rakordir")
-        revalidatePath("/agenda-siap/radir") // Sinkronisasi jika data muncul di dashboard siap
-        return { success: true }
+        // ✅ Revalidate Path agar UI segera berubah
+        revalidatePath("/agenda/rakordir");
+        revalidatePath("/agenda-siap/rakordir"); // Tambahkan ini agar halaman Siap Rakordir juga terupdate
+
+        return { success: true };
     } catch (error) {
-        const msg = error instanceof Error ? error.message : "Gagal update agenda"
-        console.error("[ACTION-UPDATE-ERROR]", msg)
-        return { success: false, error: msg }
+        const msg = error instanceof Error ? error.message : "Gagal update agenda";
+        console.error("[ACTION-UPDATE-ERROR]", msg);
+        return { success: false, error: msg };
     }
 }
 

@@ -5,22 +5,57 @@ import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
 
-interface MeetingData {
-    id: string
-    executionDate: string
-    startTime: string
-    endTime: string
-    meetingMethod: string
-    location?: string
-    link?: string
+// --- INTERFACES ---
+
+interface Option {
+    label: string;
+    value: string;
+}
+
+interface DecisionItem {
+    id: number;
+    text: string;
+}
+
+interface Guest {
+    id: number;
+    name: string;
+    position: string;
+}
+
+interface MeetingScheduleData {
+    id: string;
+    executionDate: string;
+    startTime: string;
+    endTime: string;
+    meetingMethod: string;
+    location?: string;
+    link?: string;
+}
+
+interface RisalahData {
+    agendaId: string;
+    startTime: string;
+    endTime: string;
+    meetingLocation: string;
+    pimpinanRapat: Option[];
+    attendanceData: Record<string, {
+        status: string;
+        reason?: string;
+        proxy?: readonly Option[];
+    }>;
+    guestParticipants: Guest[];
+    executiveSummary: string;
+    considerations: string;
+    risalahBody: string;
+    meetingDecisions: DecisionItem[];
+    dissentingOpinion: string;
 }
 
 /**
- * Menjadwalkan atau Memperbarui Jadwal Rapat (Universal).
- * Fungsi ini menangani pembuatan jadwal pertama kali maupun update jadwal yang sudah ada.
- *
+ * 1. Menjadwalkan atau Memperbarui Jadwal Rapat.
  */
-export async function upsertMeetingScheduleAction(data: MeetingData) {
+export async function upsertMeetingScheduleAction(data: MeetingScheduleData) {
     try {
         if (!data.id) return { success: false, error: "ID Agenda diperlukan" };
 
@@ -35,10 +70,10 @@ export async function upsertMeetingScheduleAction(data: MeetingData) {
             updatedAt: new Date(),
         }).where(eq(agendas.id, data.id));
 
-        // Revalidate halaman terkait jadwal dan daftar siap sidang
         revalidatePath("/jadwal-rapat");
         revalidatePath("/agenda-siap/radir");
         revalidatePath("/agenda-siap/rakordir");
+        revalidatePath("/pelaksanaan-rapat/radir");
 
         return { success: true, message: "Jadwal rapat berhasil diproses" };
     } catch (error: unknown) {
@@ -49,9 +84,7 @@ export async function upsertMeetingScheduleAction(data: MeetingData) {
 }
 
 /**
- * Membatalkan Jadwal (Rollback ke status Siap Sidang).
- * Menghapus detail jadwal dan mengembalikan status ke 'DAPAT_DILANJUTKAN'.
- *
+ * 2. Membatalkan Jadwal (Rollback).
  */
 export async function rollbackMeetingScheduleAction(id: string) {
     try {
@@ -66,17 +99,54 @@ export async function rollbackMeetingScheduleAction(id: string) {
             updatedAt: new Date(),
         }).where(eq(agendas.id, id));
 
-        // Revalidate semua path yang mungkin menampilkan data jadwal ini
         revalidatePath("/jadwal-rapat");
         revalidatePath("/agenda-siap/radir");
         revalidatePath("/agenda-siap/rakordir");
-        revalidatePath("/agenda/radir");
-        revalidatePath("/agenda/rakordir");
 
         return { success: true };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "Gagal melakukan rollback jadwal.";
         console.error("[ROLLBACK-ERROR]:", msg);
+        return { success: false, error: msg };
+    }
+}
+
+/**
+ * 3. Menyimpan Risalah Pelaksanaan Rapat (FINAL).
+ */
+export async function saveMeetingRisalahAction(data: RisalahData) {
+    try {
+        if (!data.agendaId) return { success: false, error: "ID Agenda tidak ditemukan" };
+
+        await db.update(agendas).set({
+            startTime: data.startTime,
+            endTime: data.endTime,
+            meetingLocation: data.meetingLocation,
+
+            pimpinanRapat: data.pimpinanRapat,
+            attendanceData: data.attendanceData,
+            guestParticipants: data.guestParticipants,
+
+            executiveSummary: data.executiveSummary,
+            considerations: data.considerations,
+            risalahBody: data.risalahBody,
+            meetingDecisions: data.meetingDecisions,
+            dissentingOpinion: data.dissentingOpinion,
+
+            meetingStatus: "COMPLETED",
+            status: "SELESAI_SIDANG",
+            updatedAt: new Date(),
+        }).where(eq(agendas.id, data.agendaId));
+
+        revalidatePath("/pelaksanaan-rapat/radir");
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+        revalidatePath("/agenda-siap/radir");
+        revalidatePath("/dashboard");
+
+        return { success: true, message: "Risalah rapat berhasil disimpan secara permanen" };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Gagal menyimpan risalah rapat";
+        console.error("❌ Error in saveMeetingRisalahAction:", msg);
         return { success: false, error: msg };
     }
 }

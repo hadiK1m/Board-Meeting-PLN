@@ -31,10 +31,13 @@ export const agendas = pgTable("agendas", {
     kepdirSirkulerDoc: text("kepdir_sirkuler_doc"),
     grcDoc: text("grc_doc"),
 
-    /** * FIELD BARU: Pembatalan 
-     * Menampung alasan mengapa agenda dibatalkan (nullable)
+    /** * FIELD PEMBATALAN 
      */
     cancellationReason: text("cancellation_reason"),
+
+    /**
+     * FIELD LOGISTIK RAPAT (Sudah ada di schema Anda)
+     */
     executionDate: date("execution_date"),
     startTime: time("start_time"),
     endTime: varchar("end_time", { length: 50 }).default("Selesai"),
@@ -43,10 +46,27 @@ export const agendas = pgTable("agendas", {
     meetingLink: text("meeting_link"),
     meetingType: text("meeting_type").default("RADIR"),
 
+    /**
+     * FIELD BARU: PELAKSANAAN RAPAT (RISALAH)
+     * Ditambahkan tanpa menghapus field lama untuk menjaga compatibility
+     */
+    pimpinanRapat: jsonb("pimpinan_rapat").default([]), // Menyimpan array pimpinan dari MasterData
+    attendanceData: jsonb("attendance_data").default({}), // Menyimpan objek Hadir/Tidak/Kuasa
+    guestParticipants: jsonb("guest_participants").default([]), // Manajemen Atas & Undangan Luar
+
+    executiveSummary: text("executive_summary"), // Ringkasan Eksekutif
+    considerations: text("considerations"), // Dasar Pertimbangan
+    risalahBody: text("risalah_body"), // Isi Utama Notulensi (Rich Text/Simple Text)
+
+    // Keputusan disimpan dalam format JSON Array: [{id: 1, text: "..."}]
+    meetingDecisions: jsonb("meeting_decisions").default([]),
+
+    dissentingOpinion: text("dissenting_opinion"), // Catatan perbedaan pendapat
+
+    meetingStatus: text("meeting_status").default("PENDING"), // PENDING, IN_PROGRESS, COMPLETED
+
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-
-    // Audit Trail
 });
 
 // Helper Types untuk penggunaan di Server Actions dan UI
