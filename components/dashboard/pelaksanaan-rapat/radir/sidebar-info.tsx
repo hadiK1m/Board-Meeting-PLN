@@ -60,6 +60,7 @@ export function SidebarInfo({
                 </CardHeader>
                 <CardContent className="pt-4 pb-5">
                     <Select
+                        instanceId="pimpinan-rapat-select"
                         isMulti
                         options={dirOptions}
                         placeholder="Cari & pilih pimpinan..."
