@@ -247,7 +247,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                 <TableHead className="w-[20%] text-[#125d72] font-extrabold uppercase text-[11px] tracking-wider">NARAHUBUNG (PIC)</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] text-center tracking-wider">Status</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] pl-6 tracking-wider">Catatan Pembatalan</TableHead>
-                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] pr-6 tracking-wider">Opsi</TableHead>
+                                <TableHead className="text-right text-[#125d72] font-extrabold uppercase text-[11px] pr-6 tracking-wider">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -294,7 +294,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                                     <Button variant="ghost" className="h-8 w-8 p-0 rounded-full"><MoreHorizontal className="h-4 w-4 text-slate-500" /></Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-52 p-2 rounded-xl shadow-2xl border-none">
-                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Opsi</DropdownMenuLabel>
+                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Aksi</DropdownMenuLabel>
                                                     <DropdownMenuItem onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="rounded-lg py-2.5 cursor-pointer font-bold text-[#125d72]">
                                                         <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
                                                     </DropdownMenuItem>

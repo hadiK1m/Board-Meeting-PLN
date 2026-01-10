@@ -118,9 +118,9 @@ export function AddRadirModal() {
         setFileStatus(prev => ({ ...prev, [fieldId]: hasFile }));
     }
 
-    const isComplete =
-        FILE_LIST.every(doc => fileStatus[doc.id] || notRequiredFiles.includes(doc.id)) &&
-        (fileStatus["supportingDocuments"] || notRequiredFiles.includes("supportingDocuments"));
+    // ✅ Perbaikan logika isComplete: Hanya dokumen utama (FILE_LIST) yang wajib
+    // Dokumen pendukung bersifat opsional dan tidak mengunci status "Dapat Dilanjutkan"
+    const isComplete = FILE_LIST.every(doc => fileStatus[doc.id] || notRequiredFiles.includes(doc.id));
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -138,7 +138,7 @@ export function AddRadirModal() {
             const result = await createRadirAction(formData)
             if (result.success) {
                 toast.custom((t) => (
-                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-87.5">
+                    <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-[350px]">
                         <div className="shrink-0">
                             <Image src="/logo-pln.png" alt="PLN" width={40} height={40} className="object-contain" />
                         </div>
@@ -174,7 +174,7 @@ export function AddRadirModal() {
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-[95vw] sm:max-w-200 h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
+            <DialogContent className="max-w-[95vw] sm:max-w-[800px] h-[95vh] p-0 flex flex-col border-none shadow-2xl overflow-hidden rounded-t-xl bg-white">
                 <DialogHeader className="p-6 bg-[#125d72] text-white shrink-0">
                     <DialogTitle className="text-xl font-bold flex items-center gap-2 uppercase tracking-tight">
                         <PlusCircle className="h-5 w-5 text-[#efe62f]" /> Form Usulan Agenda Radir
@@ -202,7 +202,6 @@ export function AddRadirModal() {
                                         className="h-11 border-slate-200 focus:border-[#14a2ba]"
                                     />
 
-                                    {/* Penambahan Preview Judul Agenda */}
                                     {judul && (
                                         <div className="p-4 bg-[#e7f6f9] border-l-4 border-[#14a2ba] rounded-sm animate-in fade-in slide-in-from-top-1">
                                             <p className="text-[10px] font-bold text-[#125d72] uppercase opacity-60 tracking-wider">Preview Teks Surat:</p>
@@ -232,7 +231,7 @@ export function AddRadirModal() {
                                 </div>
                                 <div className="grid grid-cols-1 gap-6">
                                     <div className="grid gap-2">
-                                        <Label className="font-bold text-[#125d72]">Direktur Pemrakarsa (Full Width)</Label>
+                                        <Label className="font-bold text-[#125d72]">Direktur Pemrakarsa </Label>
                                         <Select isMulti options={dirOptions} styles={selectStyles} value={selectedDir} onChange={setSelectedDir} placeholder="Pilih Direktur..." menuPlacement="auto" />
                                     </div>
                                     <div className="grid gap-2">
@@ -322,7 +321,7 @@ export function AddRadirModal() {
                         <Button
                             type="submit"
                             disabled={isPending}
-                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all rounded-xl h-12`}
+                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-[220px] transition-all rounded-xl h-12`}
                         >
                             {isPending ? (
                                 <>

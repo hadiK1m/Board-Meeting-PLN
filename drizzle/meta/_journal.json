@@ -22,6 +22,27 @@
       "when": 1767690678181,
       "tag": "0002_volatile_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767971589600,
+      "tag": "0003_stale_tomas",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1768038826942,
+      "tag": "0004_youthful_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1768048358382,
+      "tag": "0005_medical_newton_destine",
+      "breakpoints": true
     }
   ]
 }

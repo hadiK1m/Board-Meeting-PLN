@@ -274,7 +274,7 @@ _SEKPER PLN_`
                                 <TableHead className="w-[40%] min-w-75 text-[#125d72] font-black uppercase text-[11px]">Agenda & Waktu</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Metode</TableHead>
                                 <TableHead className="text-[#125d72] font-black uppercase text-[11px] text-center">Status</TableHead>
-                                <TableHead className="text-right text-[#125d72] font-black uppercase text-[11px] pr-6">Opsi</TableHead>
+                                <TableHead className="text-right text-[#125d72] font-black uppercase text-[11px] pr-6">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -353,7 +353,7 @@ _SEKPER PLN_`
                                 <Button variant="ghost" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="bg-slate-50 text-[#125d72] text-[10px] font-bold uppercase rounded-xl">Detail</Button>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase rounded-xl">Opsi</Button>
+                                        <Button variant="ghost" className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase rounded-xl">Aksi</Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-48 p-2 rounded-xl border-none shadow-xl">
                                         <DropdownMenuItem onClick={() => { setSelectedEdit(agenda); setEditOpen(true); }} className="rounded-lg font-bold text-amber-600 focus:bg-amber-50 cursor-pointer text-xs">

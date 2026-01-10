@@ -2,16 +2,19 @@ import { uuid, text, varchar, timestamp, date, time, pgTable, jsonb } from "driz
 
 export const agendas = pgTable("agendas", {
     id: uuid("id").defaultRandom().primaryKey(),
-    title: text("title").notNull(),
+    title: text("title").notNull(), // Judul tetap wajib diisi
     urgency: varchar("urgency", { length: 50 }),
     deadline: timestamp("deadline"),
-    priority: text("priority").notNull(),
-    director: text("director").notNull(),
-    initiator: text("initiator").notNull(),
+
+    // Field di bawah ini diubah menjadi opsional (tanpa .notNull()) 
+    // agar fleksibel untuk berbagai jenis rapat (RADIR/RAKORDIR)
+    priority: text("priority"),
+    director: text("director"),
+    initiator: text("initiator"),
     support: text("support"),
-    contactPerson: text("contact_person").notNull(),
-    position: text("position").notNull(),
-    phone: text("phone").notNull(),
+    contactPerson: text("contact_person"),
+    position: text("position"),
+    phone: text("phone"),
 
     // File Attachments (Storage Paths)
     legalReview: text("legal_review"),
@@ -31,12 +34,11 @@ export const agendas = pgTable("agendas", {
     kepdirSirkulerDoc: text("kepdir_sirkuler_doc"),
     grcDoc: text("grc_doc"),
 
-    /** * FIELD PEMBATALAN 
-     */
+    /** * FIELD PEMBATALAN */
     cancellationReason: text("cancellation_reason"),
 
     /**
-     * FIELD LOGISTIK RAPAT (Sudah ada di schema Anda)
+     * FIELD LOGISTIK RAPAT
      */
     executionDate: date("execution_date"),
     startTime: time("start_time"),
@@ -46,24 +48,30 @@ export const agendas = pgTable("agendas", {
     meetingLink: text("meeting_link"),
     meetingType: text("meeting_type").default("RADIR"),
 
-    /**
-     * FIELD BARU: PELAKSANAAN RAPAT (RISALAH)
-     * Ditambahkan tanpa menghapus field lama untuk menjaga compatibility
-     */
-    pimpinanRapat: jsonb("pimpinan_rapat").default([]), // Menyimpan array pimpinan dari MasterData
-    attendanceData: jsonb("attendance_data").default({}), // Menyimpan objek Hadir/Tidak/Kuasa
-    guestParticipants: jsonb("guest_participants").default([]), // Manajemen Atas & Undangan Luar
+    // ── FIELD BARU: NOMOR & TAHUN RAPAT ──
+    meetingNumber: varchar("meeting_number", { length: 50 }),
+    meetingYear: varchar("meeting_year", { length: 4 }),
 
-    executiveSummary: text("executive_summary"), // Ringkasan Eksekutif
-    considerations: text("considerations"), // Dasar Pertimbangan
-    risalahBody: text("risalah_body"), // Isi Utama Notulensi (Rich Text/Simple Text)
+    /**
+     * FIELD PELAKSANAAN RAPAT (RISALAH)
+     */
+    pimpinanRapat: jsonb("pimpinan_rapat").default([]),
+    attendanceData: jsonb("attendance_data").default({}),
+    guestParticipants: jsonb("guest_participants").default([]),
+
+    executiveSummary: text("executive_summary"),
+    considerations: text("considerations"),
+    risalahBody: text("risalah_body"),
 
     // Keputusan disimpan dalam format JSON Array: [{id: 1, text: "..."}]
     meetingDecisions: jsonb("meeting_decisions").default([]),
 
-    dissentingOpinion: text("dissenting_opinion"), // Catatan perbedaan pendapat
+    dissentingOpinion: text("dissenting_opinion"),
 
-    meetingStatus: text("meeting_status").default("PENDING"), // PENDING, IN_PROGRESS, COMPLETED
+    meetingStatus: text("meeting_status").default("PENDING"),
+
+    // ── FIELD BARU: GROUPING UNTUK RISALAH ──
+    risalahGroupId: uuid("risalah_group_id").defaultRandom(),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -1,0 +1,1 @@
+ALTER TABLE "agendas" ADD COLUMN "risalah_group_id" uuid DEFAULT gen_random_uuid();

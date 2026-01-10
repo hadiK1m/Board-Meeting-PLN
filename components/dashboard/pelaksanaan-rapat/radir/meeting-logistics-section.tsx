@@ -1,3 +1,4 @@
+// components/dashboard/pelaksanaan-rapat/radir/meeting-logistics-section.tsx
 "use client"
 
 import React from "react"
@@ -8,7 +9,7 @@ import {
     Timer,
     TimerOff,
     Navigation,
-    Info
+    Info,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,26 +17,25 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { id as localeID } from "date-fns/locale"
 
-interface MeetingLogisticsProps {
-    startTime: string;
-    setStartTime: (val: string) => void;
-    endTime: string;
-    setEndTime: (val: string) => void;
-    location: string;
-    setLocation: (val: string) => void;
-    executionDate?: string;
+interface MeetingLogisticsSectionProps {
+    startTime: string
+    setStartTime: (val: string) => void
+    endTime: string
+    setEndTime: (val: string) => void
+    location: string
+    setLocation: (val: string) => void
+    executionDate?: string
 }
 
-export function MeetingLogistics({
+export function MeetingLogisticsSection({
     startTime,
     setStartTime,
     endTime,
     setEndTime,
     location,
     setLocation,
-    executionDate
-}: MeetingLogisticsProps) {
-
+    executionDate,
+}: MeetingLogisticsSectionProps) {
     return (
         <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden bg-white">
             {/* SUB-HEADER LOGISTIK */}
@@ -50,7 +50,10 @@ export function MeetingLogistics({
                 </div>
 
                 {executionDate && (
-                    <Badge variant="outline" className="bg-white border-slate-200 text-[#125d72] text-[9px] font-black py-0.5 px-3 rounded-md shadow-sm">
+                    <Badge
+                        variant="outline"
+                        className="bg-white border-slate-200 text-[#125d72] text-[9px] font-black py-0.5 px-3 rounded-md shadow-sm"
+                    >
                         {format(new Date(executionDate), "EEEE, dd MMMM yyyy", { locale: localeID }).toUpperCase()}
                     </Badge>
                 )}
@@ -59,7 +62,6 @@ export function MeetingLogistics({
             <CardContent className="p-5 md:p-6">
                 {/* GRID FORM: Responsive 1, 2, atau 3 kolom */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-8">
-
                     {/* INPUT: JAM MULAI */}
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
@@ -110,7 +112,7 @@ export function MeetingLogistics({
                                 <MapPin className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#14a2ba] transition-colors" />
                             </div>
 
-                            {/* Input dengan padding kiri (pl-10) yang cukup agar teks tidak menabrak ikon */}
+                            {/* Input dengan padding kiri */}
                             <Input
                                 value={location}
                                 onChange={(e) => setLocation(e.target.value)}
@@ -130,5 +132,5 @@ export function MeetingLogistics({
                 </p>
             </div>
         </Card>
-    );
+    )
 }

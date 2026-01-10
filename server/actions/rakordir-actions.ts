@@ -7,14 +7,10 @@ import { createClient } from "@/lib/supabase/server"
 import { randomUUID } from "crypto"
 import { eq } from "drizzle-orm"
 
-// ✅ Type-Safety: Menggunakan inferensi tipe dari Drizzle Schema
-type NewAgenda = typeof agendas.$inferInsert;
-
 /**
  * HELPER: Upload file ke bucket 'agenda-attachments'
- * Khusus digunakan untuk modul Rakordir
  */
-async function uploadToStorage(file: File, folder: string): Promise<string | null> {
+async function uploadToStorage(file: File, folder: string, userId: string): Promise<string | null> {
     if (!file || file.size === 0) return null
 
     try {
@@ -22,7 +18,8 @@ async function uploadToStorage(file: File, folder: string): Promise<string | nul
         const fileExt = file.name.split('.').pop()
         const fileName = `${Date.now()}-${folder}.${fileExt}`
         const bucketId = "agenda-attachments"
-        const path = `rakordir/${randomUUID()}/${fileName}`
+        // Menggunakan userId dan randomUUID untuk path yang unik
+        const path = `rakordir/${userId}/${randomUUID()}/${fileName}`
 
         const { data, error } = await supabase.storage
             .from(bucketId)
@@ -41,7 +38,7 @@ async function uploadToStorage(file: File, folder: string): Promise<string | nul
 }
 
 /**
- * HELPER: Hapus file dari storage untuk cleanup internal modul
+ * HELPER: Hapus file dari storage
  */
 async function deleteFromStorage(paths: string[]) {
     const validPaths = paths.filter((p) => !!p && p !== "null" && p !== "");
@@ -52,155 +49,165 @@ async function deleteFromStorage(paths: string[]) {
         const bucketId = "agenda-attachments";
         await supabase.storage.from(bucketId).remove(validPaths);
     } catch (error) {
-        const msg = error instanceof Error ? error.message : "Unknown cleanup error"
-        console.error(`[STORAGE-CLEANUP-ERROR] Gagal menghapus file:`, msg);
+        console.error(`[STORAGE-CLEANUP-ERROR] Gagal menghapus file:`, error);
     }
 }
 
 /**
  * 1. ACTION: CREATE RAKORDIR
- * Menangani usulan Rapat Koordinasi Direksi baru.
  */
 export async function createRakordirAction(formData: FormData) {
     try {
-        // 1. Ambil Data Status dan Not Required dari Client
-        // Status sudah ditentukan di modal (DRAFT / DAPAT_DILANJUTKAN)
-        const status = formData.get("status") as string;
-        const notRequiredFiles = formData.get("notRequiredFiles") as string;
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
 
-        // 2. Proses Upload File (Gunakan pengecekan size agar tidak upload file kosong)
-        const proposalFile = formData.get("proposalNote") as File;
-        const presentationFile = formData.get("presentationMaterial") as File;
+        if (!user) return { success: false, error: "Sesi kadaluarsa." }
 
-        let proposalPath = null;
-        let presentationPath = null;
+        const notRequiredRaw = formData.get("notRequiredFiles") as string
+        const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
-        if (proposalFile && proposalFile.size > 0) {
-            proposalPath = await uploadToStorage(proposalFile, "proposal");
+        // 1. Log data awal untuk analisa
+        console.log("[DEBUG] Memproses Form Rakordir untuk Title:", formData.get("title"));
+
+        // Helper upload sederhana
+        const upload = async (fieldName: string) => {
+            const file = formData.get(fieldName) as File
+            if (!file || file.size === 0) return null
+            const path = `rakordir/${user.id}/${randomUUID()}-${file.name}`
+            const { data } = await supabase.storage.from('agenda-attachments').upload(path, file)
+            return data?.path || null
         }
 
-        if (presentationFile && presentationFile.size > 0) {
-            presentationPath = await uploadToStorage(presentationFile, "presentation");
-        }
+        const proposalPath = await upload("proposalNote")
+        const presentationPath = await upload("presentationMaterial")
 
-        // 3. Susun Data untuk Insert
-        const insertData: NewAgenda = {
+        const isProposalOk = proposalPath !== null || notRequiredFiles.includes("proposalNote");
+        const isPresentationOk = presentationPath !== null || notRequiredFiles.includes("presentationMaterial");
+        const finalStatus = (isProposalOk && isPresentationOk) ? "DAPAT_DILANJUTKAN" : "DRAFT";
+
+        // 2. KONSTRUKSI DATA EKSPLISIT (Sesuai db/schema/agendas.ts)
+        const insertData: any = {
             title: formData.get("title") as string,
-            urgency: formData.get("urgency") as string,
-            priority: formData.get("priority") as string,
-            deadline: new Date(formData.get("deadline") as string),
-            director: formData.get("director") as string,
-            initiator: formData.get("initiator") as string,
-            support: formData.get("support") as string,
-            contactPerson: formData.get("contactPerson") as string,
-            position: formData.get("position") as string,
-            phone: formData.get("phone") as string,
+            urgency: (formData.get("urgency") as string) || "Biasa",
+            deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string) : null,
+            priority: (formData.get("priority") as string) || "Low",
+            director: (formData.get("director") as string) || "DIRUT",
+            initiator: (formData.get("initiator") as string) || "PLN",
+            support: (formData.get("support") as string) || "",
+            contactPerson: (formData.get("contactPerson") as string) || "",
+            position: (formData.get("position") as string) || "",
+            phone: (formData.get("phone") as string) || "",
+
+            // Set null untuk field Radir agar tidak bergeser
+            legalReview: null,
+            riskReview: null,
+            complianceReview: null,
+            regulationReview: null,
+            recommendationNote: null,
+
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
-            // Simpan daftar dokumen yang ditandai "Tidak Diperlukan"
+            supportingDocuments: [],
+
             notRequiredFiles: notRequiredFiles,
-            // Gunakan status yang dikirim dari Modal (isComplete logic)
-            status: status || "DRAFT",
+            status: finalStatus,
             meetingType: "RAKORDIR",
-            endTime: "Selesai",
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            meetingStatus: "PENDING",
+            endTime: "Selesai"
         };
 
-        // 4. Eksekusi ke Database
+        // 3. Log data sebelum insert untuk verifikasi akhir
+        console.log("[DEBUG] Objek InsertData siap dikirim ke DB");
+
         await db.insert(agendas).values(insertData);
 
-        // 5. Revalidate agar data muncul di halaman terkait
         revalidatePath("/agenda/rakordir");
-        revalidatePath("/agenda-siap/rakordir");
-
         return { success: true };
-    } catch (error) {
-        const msg = error instanceof Error ? error.message : "Gagal menyimpan agenda";
-        console.error("[ACTION-CREATE-ERROR]", msg);
-        return { success: false, error: msg };
+    } catch (error: any) {
+        console.error("[CRITICAL-ERROR] Gagal Insert Rakordir:", error.message);
+        return { success: false, error: error.message };
     }
 }
+
 /**
  * 2. ACTION: UPDATE RAKORDIR
- * Menangani pembaruan data dan penggantian dokumen fisik.
  */
-export async function updateRakordirAction(formData: FormData, id: string) {
+export async function updateRakordirAction(id: string, formData: FormData) {
     try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: "Sesi kadaluarsa." }
+
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
 
-        // ✅ Ambil status dari formData yang dikirim client
-        const status = formData.get("status") as string;
+        const notRequiredRaw = formData.get("notRequiredFiles") as string
+        const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
+        // File Update Logic
         const proposalFile = formData.get("proposalNote") as File;
         const presentationFile = formData.get("presentationMaterial") as File;
-        const deleteProposal = formData.get("delete_proposalNote") === 'true';
-        const deletePresentation = formData.get("delete_presentationMaterial") === 'true';
 
         let proposalPath = existing.proposalNote;
         let presentationPath = existing.presentationMaterial;
         const filesToRemove: string[] = [];
 
-        // Update Proposal Note
+        // Jika ada file baru diunggah, hapus file lama dari storage
         if (proposalFile && proposalFile.size > 0) {
             if (existing.proposalNote) filesToRemove.push(existing.proposalNote);
-            proposalPath = await uploadToStorage(proposalFile, "proposal");
-        } else if (deleteProposal) {
-            if (existing.proposalNote) filesToRemove.push(existing.proposalNote);
-            proposalPath = null;
+            proposalPath = await uploadToStorage(proposalFile, "proposal", user.id);
         }
 
-        // Update Presentation Material
         if (presentationFile && presentationFile.size > 0) {
             if (existing.presentationMaterial) filesToRemove.push(existing.presentationMaterial);
-            presentationPath = await uploadToStorage(presentationFile, "presentation");
-        } else if (deletePresentation) {
-            if (existing.presentationMaterial) filesToRemove.push(existing.presentationMaterial);
-            presentationPath = null;
+            presentationPath = await uploadToStorage(presentationFile, "presentation", user.id);
         }
 
         if (filesToRemove.length > 0) await deleteFromStorage(filesToRemove);
 
-        // ✅ Lakukan Update ke Database
+        // Re-kalkulasi status
+        const isProposalOk = proposalPath !== null || notRequiredFiles.includes("proposalNote");
+        const isPresentationOk = presentationPath !== null || notRequiredFiles.includes("presentationMaterial");
+        const finalStatus = (isProposalOk && isPresentationOk) ? "DAPAT_DILANJUTKAN" : "DRAFT";
+
+        // Update Database menggunakan set secara eksplisit
         await db.update(agendas).set({
-            title: formData.get("title") as string,
-            status: status, // 👈 INI POIN PENTINGNYA: Menyimpan status baru (DRAFT / DAPAT_DILANJUTKAN)
-            urgency: formData.get("urgency") as string,
-            priority: formData.get("priority") as string,
-            deadline: new Date(formData.get("deadline") as string),
-            director: formData.get("director") as string,
-            initiator: formData.get("initiator") as string,
-            support: formData.get("support") as string,
-            contactPerson: formData.get("contactPerson") as string,
-            position: formData.get("position") as string,
-            phone: formData.get("phone") as string,
+            title: (formData.get("title") as string) || existing.title,
+            priority: (formData.get("priority") as string) || existing.priority,
+            director: (formData.get("director") as string) || existing.director,
+            initiator: (formData.get("initiator") as string) || existing.initiator,
+            contactPerson: (formData.get("contactPerson") as string) || existing.contactPerson,
+            position: (formData.get("position") as string) || existing.position,
+            phone: (formData.get("phone") as string) || existing.phone,
+            urgency: (formData.get("urgency") as string) || existing.urgency,
+            deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string) : existing.deadline,
             proposalNote: proposalPath,
             presentationMaterial: presentationPath,
-            notRequiredFiles: formData.get("notRequiredFiles") as string,
+            notRequiredFiles: notRequiredFiles,
+            status: finalStatus,
             updatedAt: new Date(),
         }).where(eq(agendas.id, id));
 
-        // ✅ Revalidate Path agar UI segera berubah
         revalidatePath("/agenda/rakordir");
-        revalidatePath("/agenda-siap/rakordir"); // Tambahkan ini agar halaman Siap Rakordir juga terupdate
+        revalidatePath("/agenda-siap/rakordir");
 
         return { success: true };
     } catch (error) {
         const msg = error instanceof Error ? error.message : "Gagal update agenda";
-        console.error("[ACTION-UPDATE-ERROR]", msg);
+        console.error("[ACTION-UPDATE-ERROR] Detail:", msg);
         return { success: false, error: msg };
     }
 }
 
 /**
- * 3. ACTION: DELETE SINGLE RAKORDIR
+ * 3. ACTION: DELETE RAKORDIR
  */
 export async function deleteRakordirAction(id: string) {
     try {
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) });
         if (!existing) throw new Error("Agenda tidak ditemukan");
 
+        // Bersihkan file di storage sebelum hapus record
         const filesToDelete: string[] = [];
         if (existing.proposalNote) filesToDelete.push(existing.proposalNote);
         if (existing.presentationMaterial) filesToDelete.push(existing.presentationMaterial);
@@ -210,11 +217,12 @@ export async function deleteRakordirAction(id: string) {
         await db.delete(agendas).where(eq(agendas.id, id));
 
         revalidatePath("/agenda/rakordir");
-        revalidatePath("/agenda-siap/radir");
+        revalidatePath("/agenda-siap/rakordir");
+
         return { success: true };
     } catch (error) {
         const msg = error instanceof Error ? error.message : "Gagal menghapus agenda";
-        console.error("[ACTION-DELETE-ERROR]", msg);
+        console.error("[ACTION-DELETE-ERROR] Detail:", msg);
         return { success: false, error: msg };
     }
 }

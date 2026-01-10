@@ -155,7 +155,7 @@ export function AddRakordirModal() {
                         <div className="flex-1">
                             <h4 className="text-sm font-bold text-[#125d72]">Data Berhasil Disimpan</h4>
                             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
-                                Status: {isComplete ? "Siap Sidang (Dapat Dilanjutkan)" : "Draft"}
+                                Status: {isComplete ? "Siap Risalah (Dapat Dilanjutkan)" : "Draft"}
                             </p>
                         </div>
                         <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
@@ -199,7 +199,7 @@ export function AddRakordirModal() {
                             </DialogDescription>
                         </div>
                         <Badge className={cn("border-none px-3 py-1 text-[10px] uppercase font-bold", isComplete ? "bg-emerald-500 text-white" : "bg-amber-400 text-[#125d72]")}>
-                            {isComplete ? "Mode: Siap Sidang" : "Mode: Draft"}
+                            {isComplete ? "Mode: Siap Risalah" : "Mode: Draft"}
                         </Badge>
                     </div>
                 </DialogHeader>
