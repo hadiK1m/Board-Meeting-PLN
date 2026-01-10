@@ -134,7 +134,7 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
         if (open && agenda) {
             setJudul(agenda.title)
             setDeadline(agenda.deadline ? format(new Date(agenda.deadline), "yyyy-MM-dd") : "")
-            setPrioritas(agenda.priority)
+            setPrioritas(agenda.priority ?? "Normal")
 
             // ✅ PERBAIKAN LOGIKA SINKRONISASI DATA MULTI-SELECT
             const syncMultiSelect = (dbValue: string | null, masterOptions: Option[]) => {
