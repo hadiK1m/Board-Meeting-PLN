@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
-import { eq, inArray } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData" // Import master data untuk default attendance
 
 // --- INTERFACES ---
@@ -211,5 +213,55 @@ export async function saveBulkMeetingRisalahAction(data: any) {
         return { success: true, message: "Risalah bulk berhasil disimpan" }
     } catch (error: unknown) {
         return { success: false, error: "Gagal menyimpan bulk" }
+    }
+}
+
+export async function getRadirMonitoringData() {
+    try {
+        // Hanya ambil agenda RADIR yang SUDAH memiliki Nomor Meeting
+        const allAgendas = await db.query.agendas.findMany({
+            where: and(
+                eq(agendas.meetingType, "RADIR"),
+                isNotNull(agendas.meetingNumber) // Saring di level Database
+            ),
+            orderBy: [desc(agendas.meetingYear), desc(agendas.meetingNumber)]
+        });
+
+        // Grouping logic tetap sama, tapi sekarang pasti punya nomor
+        const groupedMeetings = allAgendas.reduce((acc: any[], current) => {
+            const key = `${current.meetingNumber}-${current.meetingYear}`;
+            const existingGroup = acc.find(item => item.groupKey === key);
+
+            if (existingGroup) {
+                existingGroup.agendas.push(current);
+                if (current.meetingStatus === "COMPLETED") existingGroup.status = "COMPLETED";
+            } else {
+                acc.push({
+                    groupKey: key,
+                    meetingNumber: current.meetingNumber,
+                    meetingYear: current.meetingYear,
+                    executionDate: current.executionDate,
+                    startTime: current.startTime,
+                    endTime: current.endTime,
+                    location: current.meetingLocation,
+                    status: current.meetingStatus || "SCHEDULED",
+                    agendas: [current]
+                });
+            }
+            return acc;
+        }, []);
+
+        const readyAgendas = await db.query.agendas.findMany({
+            where: and(
+                eq(agendas.meetingType, "RADIR"),
+                eq(agendas.status, "DIJADWALKAN")
+            ),
+            orderBy: [desc(agendas.priority), desc(agendas.createdAt)]
+        });
+
+        return { success: true, groupedMeetings, readyAgendas };
+    } catch (error) {
+        console.error("Error fetching monitoring data:", error);
+        return { success: false, error: "Gagal mengambil data", groupedMeetings: [], readyAgendas: [] };
     }
 }

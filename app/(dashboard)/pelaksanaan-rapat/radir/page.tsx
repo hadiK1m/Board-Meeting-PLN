@@ -1,61 +1,66 @@
-import React from "react"
-import { db } from "@/db"
-import { agendas } from "@/db/schema/agendas"
-import { eq, and, desc, isNotNull } from "drizzle-orm"
-import { Presentation, LayoutGrid, List } from "lucide-react"
+"use client"
+
+import React, { useState, useEffect } from "react"
+import {
+    Presentation,
+    LayoutGrid,
+    List,
+    Loader2,
+    RefreshCcw,
+    AlertCircle
+} from "lucide-react"
 import { RadirListView } from "@/components/dashboard/pelaksanaan-rapat/radir/radir-list-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StartMeetingDialog } from "@/components/dashboard/pelaksanaan-rapat/radir/start-meeting-dialog"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { getRadirMonitoringData } from "@/server/actions/meeting-actions"
+import { Agenda } from "@/db/schema/agendas"
 
-export default async function PelaksanaanRadirPage() {
-    // 1. Ambil Semua Agenda RADIR yang sudah memiliki Nomor Meeting
-    const allAgendas = await db.query.agendas.findMany({
-        where: and(
-            eq(agendas.meetingType, "RADIR"),
-            isNotNull(agendas.meetingNumber) // Hanya ambil yang sudah dijadwalkan/sidang
-        ),
-        orderBy: [desc(agendas.meetingYear), desc(agendas.meetingNumber)]
-    });
+interface GroupedMeeting {
+    groupKey: string
+    meetingNumber: string
+    meetingYear: string
+    executionDate: string | null
+    startTime: string | null
+    endTime: string | null
+    location: string | null
+    status: string
+    agendas: Agenda[]
+}
 
-    // 2. Kelompokkan Agenda berdasarkan meetingNumber + meetingYear (Satu Nomor = Satu Sesi)
-    const groupedMeetings = allAgendas.reduce((acc: any[], current) => {
-        const key = `${current.meetingNumber}-${current.meetingYear}`;
-        const existingGroup = acc.find(item => item.groupKey === key);
+export default function PelaksanaanRadirPage() {
+    const [mounted, setMounted] = useState(false)
+    const [groupedMeetings, setGroupedMeetings] = useState<GroupedMeeting[]>([])
+    const [readyAgendas, setReadyAgendas] = useState<Agenda[]>([])
+    const [loading, setLoading] = useState(true)
 
-        if (existingGroup) {
-            existingGroup.agendas.push(current);
-            // Update status grup: Jika ada satu saja yang COMPLETED, tandai sesi tersebut
-            if (current.meetingStatus === "COMPLETED") {
-                existingGroup.status = "COMPLETED";
+    useEffect(() => {
+        setMounted(true)
+        loadData()
+    }, [])
+
+    const loadData = async () => {
+        setLoading(true)
+        try {
+            const result = await getRadirMonitoringData()
+            console.log("Data Received:", result) // Debugging: Cek di console browser
+
+            if (result.success) {
+                setGroupedMeetings(result.groupedMeetings as GroupedMeeting[])
+                setReadyAgendas(result.readyAgendas as Agenda[])
             }
-        } else {
-            acc.push({
-                groupKey: key,
-                meetingNumber: current.meetingNumber,
-                meetingYear: current.meetingYear,
-                executionDate: current.executionDate,
-                startTime: current.startTime,
-                endTime: current.endTime,
-                location: current.meetingLocation,
-                status: current.meetingStatus || "SCHEDULED",
-                agendas: [current]
-            });
+        } catch (err) {
+            console.error("Gagal memuat data monitoring:", err)
+        } finally {
+            setLoading(false)
         }
-        return acc;
-    }, []);
+    }
 
-    // 3. Data untuk Dropdown Start Meeting (Hanya yang statusnya DIJADWALKAN)
-    const readyToMeetAgendas = await db.query.agendas.findMany({
-        where: and(
-            eq(agendas.meetingType, "RADIR"),
-            eq(agendas.status, "DIJADWALKAN")
-        ),
-        orderBy: [desc(agendas.priority), desc(agendas.createdAt)]
-    });
+    if (!mounted) return null
 
     return (
-        <div className="flex-1 space-y-4 p-8 pt-6 bg-slate-50/50 min-h-screen">
-            {/* HEADER SECTION */}
+        <div className="flex-1 space-y-4 p-8 pt-6 bg-slate-50/50 min-h-screen" suppressHydrationWarning>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-[#125d72] rounded-xl shadow-lg">
@@ -71,8 +76,19 @@ export default async function PelaksanaanRadirPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <StartMeetingDialog readyAgendas={readyToMeetAgendas} />
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadData}
+                        disabled={loading}
+                        className="h-10 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-600 shadow-sm"
+                    >
+                        <RefreshCcw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh Data
+                    </Button>
+                    {/* Pastikan Dialog menerima data readyAgendas */}
+                    <StartMeetingDialog readyAgendas={readyAgendas} />
                 </div>
             </div>
 
@@ -81,41 +97,45 @@ export default async function PelaksanaanRadirPage() {
             <Tabs defaultValue="table" className="w-full">
                 <div className="flex items-center justify-between mb-6">
                     <TabsList className="bg-slate-200/50 p-1 border rounded-xl">
-                        <TabsTrigger value="table" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-[#125d72] rounded-lg transition-all">
+                        <TabsTrigger value="table" className="flex items-center gap-2 data-[state=active]:bg-white rounded-lg transition-all">
                             <List className="h-4 w-4" />
                             <span className="text-[10px] font-black uppercase tracking-wider">Table View</span>
                         </TabsTrigger>
-                        <TabsTrigger value="grid" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-[#125d72] rounded-lg transition-all">
+                        <TabsTrigger value="grid" className="flex items-center gap-2 data-[state=active]:bg-white rounded-lg transition-all">
                             <LayoutGrid className="h-4 w-4" />
                             <span className="text-[10px] font-black uppercase tracking-wider">Grid View</span>
                         </TabsTrigger>
                     </TabsList>
 
                     <div className="hidden md:block">
-                        <Badge variant="secondary" className="text-[10px] font-bold bg-white border-slate-200 text-slate-500 py-1 px-3 rounded-lg shadow-sm">
-                            TOTAL {groupedMeetings.length} SESI RAPAT
+                        <Badge variant="outline" className="text-[10px] font-bold bg-white border-slate-200 text-[#125d72] py-1.5 px-4 rounded-lg shadow-sm">
+                            {loading ? "SINKRONISASI..." : `TOTAL ${groupedMeetings.length} SESI RAPAT`}
                         </Badge>
                     </div>
                 </div>
 
-                <TabsContent value="table" className="mt-0 outline-none">
-                    {/* initialData sekarang mengirimkan groupedMeetings */}
-                    <RadirListView initialData={groupedMeetings} viewMode="table" />
-                </TabsContent>
-
-                <TabsContent value="grid" className="mt-0 outline-none">
-                    <RadirListView initialData={groupedMeetings} viewMode="grid" />
-                </TabsContent>
+                {loading && groupedMeetings.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 bg-white rounded-3xl border border-dashed border-slate-200">
+                        <Loader2 className="h-8 w-8 animate-spin text-slate-300 mb-2" />
+                        <p className="text-xs text-slate-400 font-medium tracking-widest uppercase">Memproses Data...</p>
+                    </div>
+                ) : groupedMeetings.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 bg-white rounded-3xl border border-dashed border-slate-300">
+                        <AlertCircle className="h-10 w-10 text-slate-200 mb-3" />
+                        <p className="text-xs text-slate-400 font-bold uppercase">Belum ada data rapat yang tersimpan</p>
+                        <p className="text-[10px] text-slate-400">Silakan jadwalkan atau mulai rapat baru.</p>
+                    </div>
+                ) : (
+                    <>
+                        <TabsContent value="table" className="mt-0 outline-none">
+                            <RadirListView initialData={groupedMeetings} viewMode="table" />
+                        </TabsContent>
+                        <TabsContent value="grid" className="mt-0 outline-none">
+                            <RadirListView initialData={groupedMeetings} viewMode="grid" />
+                        </TabsContent>
+                    </>
+                )}
             </Tabs>
-        </div>
-    )
-}
-
-// Komponen Badge Lokal untuk Header
-function Badge({ children, className, variant }: any) {
-    return (
-        <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${className}`}>
-            {children}
         </div>
     )
 }

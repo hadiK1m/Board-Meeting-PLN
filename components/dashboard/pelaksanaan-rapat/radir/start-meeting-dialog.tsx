@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import * as React from "react"
@@ -170,7 +171,7 @@ export function StartMeetingDialog({ readyAgendas }: StartMeetingDialogProps) {
                                     <ChevronsUpDown className="h-4 w-4 opacity-30" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 rounded-2xl shadow-2xl border-slate-100" align="start">
+                            <PopoverContent className="w-(--radix-popover-trigger-width) p-0 rounded-2xl shadow-2xl border-slate-100" align="start">
                                 <Command className="rounded-2xl">
                                     <CommandInput placeholder="Cari judul agenda..." />
                                     <CommandList className="max-h-64">
@@ -213,7 +214,7 @@ export function StartMeetingDialog({ readyAgendas }: StartMeetingDialogProps) {
                                     key={agenda.id}
                                     className="bg-[#125d72]/5 hover:bg-[#125d72]/10 text-[#125d72] border-none px-3 py-1 rounded-full gap-2 transition-all"
                                 >
-                                    <span className="max-w-[150px] truncate text-[10px] font-bold uppercase tracking-tight">
+                                    <span className="max-w-37.5 truncate text-[10px] font-bold uppercase tracking-tight">
                                         {agenda.title}
                                     </span>
                                     <X
