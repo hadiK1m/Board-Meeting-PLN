@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // components/dashboard/pelaksanaan-rapat/radir/executive-summary-section.tsx
 "use client"
 
@@ -59,7 +60,7 @@ export function ExecutiveSummarySection({
 
     if (!editor) {
         return (
-            <div className="w-full h-[600px] bg-white border border-slate-200 rounded-lg animate-pulse flex items-center justify-center">
+            <div className="w-full h-150 bg-white border border-slate-200 rounded-lg animate-pulse flex items-center justify-center">
                 <p className="text-slate-400 text-xs font-bold tracking-widest uppercase">
                     Memuat Editor Risalah...
                 </p>
@@ -189,7 +190,7 @@ export function ExecutiveSummarySection({
 
             {/* EDITOR CANVAS */}
             <CardContent className="p-4 md:p-12 flex justify-center bg-slate-100/30">
-                <div className="w-full max-w-4xl bg-white shadow-2xl border border-slate-200 min-h-[842px] relative transition-all">
+                <div className="w-full max-w-4xl bg-white shadow-2xl border border-slate-200 min-h-210.5 relative transition-all">
                     <EditorContent editor={editor} />
                 </div>
             </CardContent>

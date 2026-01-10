@@ -1,11 +1,10 @@
-// components/dashboard/pelaksanaan-rapat/radir/considerations-section.tsx
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, GripVertical, Plus } from "lucide-react"
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -17,7 +16,7 @@ interface ConsiderationItem {
 
 interface ConsiderationsSectionProps {
     considerations: ConsiderationItem[]
-    setConsiderations: (items: ConsiderationItem[]) => void
+    setConsiderations: (items: ConsiderationItem[] | ((prev: ConsiderationItem[]) => ConsiderationItem[])) => void
 }
 
 const SortableItem = ({ id, text, onUpdate, onDelete }: { id: string; text: string; onUpdate: (text: string) => void; onDelete: () => void }) => {
@@ -59,12 +58,14 @@ export function ConsiderationsSection({ considerations, setConsiderations }: Con
         })
     )
 
-    const handleDragEnd = (event) => {
+    const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event
-        if (active.id !== over?.id) {
-            setConsiderations((items) => {
-                const oldIndex = items.findIndex((i) => i.id === active.id)
-                const newIndex = items.findIndex((i) => i.id === over.id)
+
+        // Cek apakah 'over' ada dan ID-nya berbeda
+        if (over && active.id !== over.id) {
+            setConsiderations((items: ConsiderationItem[]) => {
+                const oldIndex = items.findIndex((i: ConsiderationItem) => i.id === active.id)
+                const newIndex = items.findIndex((i: ConsiderationItem) => i.id === over.id)
                 return arrayMove(items, oldIndex, newIndex)
             })
         }

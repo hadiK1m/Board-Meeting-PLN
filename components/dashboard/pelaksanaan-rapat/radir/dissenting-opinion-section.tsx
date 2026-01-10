@@ -55,7 +55,7 @@ export function DissentingOpinionSection({ value, onChange }: DissentingOpinionS
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder="Diisi jika terdapat anggota direksi yang memiliki pendapat berbeda...&#10;Jika tidak ada, tulis «Tidak ada»"
-                        className="min-h-[120px] bg-orange-50/20 border-orange-200 focus-visible:ring-orange-400 focus:border-orange-300 text-orange-900 placeholder:text-orange-400/70 rounded-xl resize-y shadow-inner"
+                        className="min-h-30 bg-orange-50/20 border-orange-200 focus-visible:ring-orange-400 focus:border-orange-300 text-orange-900 placeholder:text-orange-400/70 rounded-xl resize-y shadow-inner"
                     />
                 </div>
 

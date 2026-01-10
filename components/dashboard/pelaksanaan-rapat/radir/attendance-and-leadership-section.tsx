@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // components/dashboard/pelaksanaan-rapat/radir/attendance-and-leadership-section.tsx
 "use client"
 
@@ -190,7 +191,7 @@ export function AttendanceAndLeadershipSection({
                                         {attendance[name]?.status === "Tidak Hadir" && (
                                             <textarea
                                                 placeholder="Alasan tidak hadir..."
-                                                className="mt-2 w-full min-h-[60px] p-2 text-xs border border-red-200 rounded-lg focus:ring-red-400"
+                                                className="mt-2 w-full min-h-15 p-2 text-xs border border-red-200 rounded-lg focus:ring-red-400"
                                                 value={attendance[name]?.reason || ""}
                                                 onChange={(e) => handleFieldChange(name, "reason", e.target.value)}
                                             />
