@@ -222,7 +222,7 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
         })
 
         try {
-            const result = await updateRakordirAction(formData, agenda.id)
+            const result = await updateRakordirAction(agenda.id, formData)
             if (result.success) {
                 toast.custom((t) => (
                     <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg">
