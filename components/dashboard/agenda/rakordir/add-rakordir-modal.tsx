@@ -31,6 +31,12 @@ import {
     extractCode
 } from "@/lib/MasterData"
 
+// Pindahkan FILE_LIST ke luar komponen agar stabil (fix exhaustive-deps)
+const FILE_LIST = [
+    { id: "proposalNote", label: "ND Usulan Agenda" },
+    { id: "presentationMaterial", label: "Materi Presentasi" },
+] as const;
+
 // Interface untuk React-Select Options
 interface Option {
     label: string;
@@ -76,6 +82,11 @@ export function AddRakordirModal() {
     const [deadline, setDeadline] = useState("")
     const [prioritas, setPrioritas] = useState("Low")
 
+    // State untuk narahubung agar bisa dicek real-time di isComplete
+    const [contactPerson, setContactPerson] = useState("")
+    const [position, setPosition] = useState("")
+    const [phone, setPhone] = useState("")
+
     const [notRequiredFiles, setNotRequiredFiles] = useState<string[]>([])
     const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
 
@@ -86,11 +97,6 @@ export function AddRakordirModal() {
     const dirOptions: Option[] = DIREKTURE_PEMRAKARSA.map(d => ({ label: d, value: d }));
     const pemOptions: Option[] = PEMRAKARSA.map(p => ({ label: p, value: p }));
     const supOptions: Option[] = SUPPORT.map(s => ({ label: s, value: s }));
-
-    const FILE_LIST = [
-        { id: "proposalNote", label: "ND Usulan Agenda" },
-        { id: "presentationMaterial", label: "Materi Presentasi" },
-    ];
 
     useEffect(() => {
         setMounted(true)
@@ -107,6 +113,7 @@ export function AddRakordirModal() {
 
     const resetForm = () => {
         setJudul(""); setDeadline(""); setSelectedDir([]); setSelectedPemrakarsa([]); setSelectedSupport([]);
+        setContactPerson(""); setPosition(""); setPhone("");
         setNotRequiredFiles([]); setFileStatus({});
     }
 
@@ -120,28 +127,54 @@ export function AddRakordirModal() {
         setFileStatus(prev => ({ ...prev, [fieldId]: hasFile }));
     }
 
-    // ✅ Logika isComplete yang diperhitungkan secara real-time
+    // ✅ Logika isComplete yang akurat dan real-time
+    //    - Supporting documents benar-benar opsional (tidak memblokir)
+    //    - Mencakup semua field wajib: judul, deadline, direktur, pemrakarsa, narahubung
     const isComplete = useMemo(() => {
-        const docWajibOk = FILE_LIST.every(doc => fileStatus[doc.id] || notRequiredFiles.includes(doc.id));
-        const pendukungOk = fileStatus["supportingDocuments"] || notRequiredFiles.includes("supportingDocuments");
-        return docWajibOk && pendukungOk;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fileStatus, notRequiredFiles]);
+        const requiredFieldsOk =
+            judul.trim() !== "" &&
+            deadline !== "" &&
+            selectedDir.length > 0 &&
+            selectedPemrakarsa.length > 0 &&
+            contactPerson.trim() !== "" &&
+            position.trim() !== "" &&
+            phone.trim() !== "";
+
+        const docWajibOk = FILE_LIST.every(doc =>
+            fileStatus[doc.id] || notRequiredFiles.includes(doc.id)
+        );
+
+        return requiredFieldsOk && docWajibOk;
+    }, [
+        judul,
+        deadline,
+        selectedDir,
+        selectedPemrakarsa,
+        contactPerson,
+        position,
+        phone,
+        fileStatus,
+        notRequiredFiles
+    ]);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setIsPending(true)
         const formData = new FormData(event.currentTarget)
 
-        // ✅ Penyesuaian Data Multi-Select
+        // ✅ Penyesuaian Data Multi-Select dengan extractCode
         formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "))
         formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "))
         formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
         formData.set("priority", prioritas)
 
-        // ✅ Logika Not Required & Status (Poin Utama Perbaikan)
-        formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
+        // ✅ TAMBAHKAN isComplete agar server bisa membacanya dengan benar
+        formData.set("isComplete", String(isComplete))
+
+        // Status tetap dikirim (untuk fallback jika server tidak pakai isComplete)
         formData.set("status", isComplete ? "DAPAT_DILANJUTKAN" : "DRAFT")
+
+        formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
         formData.set("meetingType", "RAKORDIR")
 
         try {
@@ -260,9 +293,40 @@ export function AddRakordirModal() {
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72] text-xs uppercase">Narahubung</Label><Input name="contactPerson" placeholder="Nama PIC" required className="h-11" /></div>
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72] text-xs uppercase">Jabatan</Label><Input name="position" placeholder="Contoh: Manager" required className="h-11" /></div>
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72] text-xs uppercase">No WhatsApp</Label><Input name="phone" type="number" placeholder="628123..." required className="h-11" /></div>
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold text-[#125d72] text-xs uppercase">Narahubung</Label>
+                                        <Input
+                                            name="contactPerson"
+                                            value={contactPerson}
+                                            onChange={(e) => setContactPerson(e.target.value)}
+                                            placeholder="Nama PIC"
+                                            required
+                                            className="h-11"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold text-[#125d72] text-xs uppercase">Jabatan</Label>
+                                        <Input
+                                            name="position"
+                                            value={position}
+                                            onChange={(e) => setPosition(e.target.value)}
+                                            placeholder="Contoh: Manager"
+                                            required
+                                            className="h-11"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold text-[#125d72] text-xs uppercase">No WhatsApp</Label>
+                                        <Input
+                                            name="phone"
+                                            type="number"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                            placeholder="628123..."
+                                            required
+                                            className="h-11"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -283,22 +347,20 @@ export function AddRakordirModal() {
                                                     size="sm"
                                                     className={cn(
                                                         "h-7 text-[9px] px-2 font-bold",
-                                                        // Jika sudah ada di array (artinya tidak diperlukan), beri warna biru/aktif
                                                         notRequiredFiles.includes(doc.id)
                                                             ? 'bg-blue-50 text-blue-600 border-blue-200'
                                                             : 'text-slate-400'
                                                     )}
                                                     onClick={() => toggleNotRequired(doc.id)}
                                                 >
-                                                    {/* LOGIKA TEKS TERBALIK SEBELUMNYA, INI PERBAIKANNYA: */}
                                                     {notRequiredFiles.includes(doc.id) ? (
                                                         <>
-                                                            <Eye className="h-3 w-3 mr-1" /> {/* Ikon mata buka: Tandai jadi Perlu lagi */}
+                                                            <Eye className="h-3 w-3 mr-1" />
                                                             Dibutuhkan
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <EyeOff className="h-3 w-3 mr-1" /> {/* Ikon mata coret: Tandai Tidak Perlu */}
+                                                            <EyeOff className="h-3 w-3 mr-1" />
                                                             Tidak Diperlukan
                                                         </>
                                                     )}

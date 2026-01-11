@@ -58,30 +58,6 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         )
     })
 
-    const handleExport = async (number: string, year: string) => {
-        setIsExporting(true)
-        try {
-            toast.info("Menyiapkan dokumen risalah...")
-            const result = await exportRisalahToDocx(number, year)
-
-            if (result.success && result.data) {
-                const link = document.createElement("a")
-                link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${result.data}`
-                link.download = result.filename
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                toast.success("Risalah berhasil diunduh")
-            } else {
-                toast.error(result.error || "Gagal melakukan export")
-            }
-        } catch (error) {
-            toast.error("Terjadi kesalahan pada sistem export")
-        } finally {
-            setIsExporting(false)
-        }
-    }
-
     if (viewMode === "grid") {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -103,8 +79,8 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                 <StatusBadge status={group.status} />
                                 <ActionDropdown
                                     group={group}
-                                    onExport={() => handleExport(group.meetingNumber, group.meetingYear)}
                                     isExporting={isExporting}
+                                    setIsExporting={setIsExporting}
                                 />
                             </div>
                         </div>
@@ -225,8 +201,8 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                     <TableCell className="text-right">
                                         <ActionDropdown
                                             group={group}
-                                            onExport={() => handleExport(group.meetingNumber, group.meetingYear)}
                                             isExporting={isExporting}
+                                            setIsExporting={setIsExporting}
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -239,17 +215,42 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     )
 }
 
-// Sub-components
+// Updated ActionDropdown with two export options
 function ActionDropdown({
     group,
-    onExport,
     isExporting,
+    setIsExporting,
 }: {
     group: any
-    onExport: () => void
     isExporting: boolean
+    setIsExporting: (val: boolean) => void
 }) {
     const router = useRouter()
+
+    const handleDownload = async (type: "ISI" | "TTD") => {
+        setIsExporting(true)
+        toast.info(`Menyiapkan ${type === "ISI" ? "Lembar Isi" : "Lembar TTD"}...`)
+
+        try {
+            const res = await exportRisalahToDocx(group.meetingNumber, group.meetingYear, type)
+
+            if (res.success && res.data) {
+                const link = document.createElement("a")
+                link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${res.data}`
+                link.download = res.filename
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                toast.success("Dokumen berhasil diunduh")
+            } else {
+                toast.error(res.error || "Gagal melakukan export")
+            }
+        } catch (error) {
+            toast.error("Terjadi kesalahan pada sistem export")
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     return (
         <DropdownMenu>
@@ -258,11 +259,10 @@ function ActionDropdown({
                     <MoreHorizontal className="h-4 w-4" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl border-slate-200">
+            <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-xl border-slate-200">
                 <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">
-                    Opsi Sesi Rapat
+                    Opsi Risalah
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
 
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-[#125d72]/5 group"
@@ -276,13 +276,24 @@ function ActionDropdown({
                     <span className="text-xs font-bold text-slate-700">Kelola Sesi Rapat</span>
                 </DropdownMenuItem>
 
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
+                    disabled={isExporting}
+                    onClick={() => handleDownload("ISI")}
+                >
+                    <FileText className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
+                    <span className="text-xs font-bold text-slate-700">Export Lembar Isi (1.2)</span>
+                </DropdownMenuItem>
+
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
                     disabled={isExporting}
-                    onClick={onExport}
+                    onClick={() => handleDownload("TTD")}
                 >
-                    <Download className="h-4 w-4 text-slate-400 group-hover:text-emerald-600" />
-                    <span className="text-xs font-bold text-slate-700">Export Radir Lembar</span>
+                    <Download className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                    <span className="text-xs font-bold text-slate-700">Export Lembar TTD (1.3)</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />

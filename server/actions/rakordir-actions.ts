@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use server"
 
@@ -106,7 +107,7 @@ export async function createRakordirAction(formData: FormData) {
             presentationMaterial: presentationMaterialPath,
             supportingDocuments: JSON.stringify(supportingPaths),
             notRequiredFiles,
-            status: isComplete ? "SIAP_SIDANG" : "DRAFT",
+            status: formData.get("status") as string || "DRAFT",
             createdAt: new Date(),
             updatedAt: new Date(),
         })

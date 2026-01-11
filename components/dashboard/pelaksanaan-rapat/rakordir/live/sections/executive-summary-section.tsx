@@ -30,6 +30,30 @@ interface ExecutiveSummarySectionProps {
     activeAgendaTitle?: string
 }
 
+// ✅ Perbaikan: Definisikan interface & komponen MenuButton di luar komponen utama
+interface MenuButtonProps {
+    onClick: () => void;
+    isActive?: boolean;
+    children: React.ReactNode;
+    tooltip: string;
+}
+
+const MenuButton = ({ onClick, isActive, children, tooltip }: MenuButtonProps) => (
+    <Button
+        variant="ghost"
+        size="sm"
+        onClick={onClick}
+        className={`h-8 w-8 p-0 rounded-lg transition-all ${isActive
+            ? "bg-[#125d72] text-white hover:bg-[#125d72] shadow-md shadow-[#125d72]/20"
+            : "text-slate-500 hover:bg-slate-100"
+            }`}
+        title={tooltip}
+    >
+        {children}
+    </Button>
+)
+
+// --- Komponen Utama ---
 export function ExecutiveSummarySection({
     value,
     onChange,
@@ -59,30 +83,7 @@ export function ExecutiveSummarySection({
 
     if (!editor) return null
 
-    const MenuButton = ({
-        onClick,
-        isActive,
-        children,
-        tooltip
-    }: {
-        onClick: () => void;
-        isActive?: boolean;
-        children: React.ReactNode;
-        tooltip: string;
-    }) => (
-        <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClick}
-            className={`h-8 w-8 p-0 rounded-lg transition-all ${isActive
-                    ? "bg-[#125d72] text-white hover:bg-[#125d72] shadow-md shadow-[#125d72]/20"
-                    : "text-slate-500 hover:bg-slate-100"
-                }`}
-            title={tooltip}
-        >
-            {children}
-        </Button>
-    )
+    // Definisi MenuButton di dalam komponen sudah dihapus (dipindah ke luar)
 
     return (
         <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden bg-white">
@@ -93,9 +94,9 @@ export function ExecutiveSummarySection({
                     </div>
                     <div>
                         <CardTitle className="text-[10px] font-black uppercase tracking-widest text-[#125d72]">
-                            Ringkasan Pembahasan
+                            Ringkasan Executive
                         </CardTitle>
-                        <p className="text-[11px] font-bold text-slate-500 mt-0.5 italic truncate max-w-[400px]">
+                        <p className="text-[11px] font-bold text-slate-500 mt-0.5 italic truncate max-w-100">
                             {activeAgendaTitle || "Materi Agenda"}
                         </p>
                     </div>
@@ -129,7 +130,7 @@ export function ExecutiveSummarySection({
                     <UnderlineIcon className="h-4 w-4" />
                 </MenuButton>
 
-                <div className="w-[1px] h-4 bg-slate-200 mx-1" />
+                <div className="w-px h-4 bg-slate-200 mx-1" />
 
                 <MenuButton
                     onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -146,7 +147,7 @@ export function ExecutiveSummarySection({
                     <ListOrdered className="h-4 w-4" />
                 </MenuButton>
 
-                <div className="w-[1px] h-4 bg-slate-200 mx-1" />
+                <div className="w-px h-4 bg-slate-200 mx-1" />
 
                 <MenuButton
                     onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
@@ -174,7 +175,7 @@ export function ExecutiveSummarySection({
             </div>
 
             <CardContent className="p-0 bg-slate-50/10">
-                <EditorContent editor={editor} className="min-h-[300px] cursor-text" />
+                <EditorContent editor={editor} className="min-h-75 cursor-text" />
             </CardContent>
 
             {/* FOOTER INFO */}
