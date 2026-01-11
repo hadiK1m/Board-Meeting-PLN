@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React, { useState } from "react"
@@ -15,14 +17,13 @@ import {
     Search,
     Calendar,
     MapPin,
-    ExternalLink,
-    FileText,
     MoreHorizontal,
-    CheckCircle2,
-    Clock,
+    FileText,
+    Settings2,
     Download,
     Eye,
-    Settings2
+    CheckCircle2,
+    Clock,
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -40,7 +41,7 @@ import { toast } from "sonner"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
 
 interface RadirListViewProps {
-    initialData: any[] // Menerima groupedMeetings
+    initialData: any[] // grouped meetings
     viewMode: "table" | "grid"
 }
 
@@ -49,7 +50,6 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [isExporting, setIsExporting] = useState(false)
 
-    // Filter menggunakan meetingNumber atau location
     const filteredData = initialData.filter((item) => {
         const search = searchTerm.toLowerCase()
         return (
@@ -58,7 +58,6 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         )
     })
 
-    // Handler untuk Export DOCX
     const handleExport = async (number: string, year: string) => {
         setIsExporting(true)
         try {
@@ -87,7 +86,10 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredData.map((group) => (
-                    <div key={group.groupKey} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card">
+                    <div
+                        key={group.groupKey}
+                        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card"
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div className="space-y-1">
                                 <Badge className="bg-[#125d72]/10 text-[#125d72] hover:bg-[#125d72]/20 border-none text-[10px] font-black">
@@ -111,22 +113,32 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                             <div className="flex items-center gap-2 text-slate-500">
                                 <Calendar className="h-3.5 w-3.5" />
                                 <span className="text-[11px] font-medium">
-                                    {group.executionDate ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id }) : "-"}
+                                    {group.executionDate
+                                        ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id })
+                                        : "-"}
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 text-slate-500">
                                 <MapPin className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-medium truncate">{group.location || "Lokasi belum diatur"}</span>
+                                <span className="text-[11px] font-medium truncate">
+                                    {group.location || "Lokasi belum diatur"}
+                                </span>
                             </div>
                             <div className="flex items-center gap-2 text-slate-500">
                                 <FileText className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-bold text-[#125d72]">{group.agendas.length} Agenda Terkait</span>
+                                <span className="text-[11px] font-bold text-[#125d72]">
+                                    {group.agendas.length} Agenda Terkait
+                                </span>
                             </div>
                         </div>
 
                         <Button
                             className="w-full bg-[#125d72] hover:bg-[#0d4a5b] text-white text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
-                            onClick={() => router.push(`/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`)}
+                            onClick={() =>
+                                router.push(
+                                    `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
+                                )
+                            }
                         >
                             <Settings2 className="mr-2 h-3.5 w-3.5" /> Kelola Sesi Rapat
                         </Button>
@@ -136,6 +148,7 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         )
     }
 
+    // Table View
     return (
         <div className="space-y-4">
             <div className="relative max-w-sm">
@@ -152,12 +165,24 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                 <Table>
                     <TableHeader className="bg-slate-50">
                         <TableRow>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Nomor Meeting</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Tanggal & Waktu</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Lokasi</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Agenda</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">Status</TableHead>
-                            <TableHead className="text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Aksi</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Nomor Meeting
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Tanggal & Waktu
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Lokasi
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Agenda
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">
+                                Status
+                            </TableHead>
+                            <TableHead className="text-right text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Aksi
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -172,13 +197,19 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                 <TableRow key={group.groupKey} className="hover:bg-slate-50/50 transition-colors">
                                     <TableCell className="py-4">
                                         <div className="font-black text-[#125d72] text-sm">#{group.meetingNumber}</div>
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase">Tahun {group.meetingYear}</div>
+                                        <div className="text-[9px] font-bold text-slate-400 uppercase">
+                                            Tahun {group.meetingYear}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="text-xs font-bold text-slate-700">
-                                            {group.executionDate ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id }) : "-"}
+                                            {group.executionDate
+                                                ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id })
+                                                : "-"}
                                         </div>
-                                        <div className="text-[10px] text-slate-500 font-medium">{group.startTime} - {group.endTime}</div>
+                                        <div className="text-[10px] text-slate-500 font-medium">
+                                            {group.startTime} - {group.endTime}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-xs font-medium text-slate-600">
                                         {group.location || "-"}
@@ -208,9 +239,17 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     )
 }
 
-// Sub-komponen Dropdown Aksi
-function ActionDropdown({ group, onExport, isExporting }: { group: any, onExport: () => void, isExporting: boolean }) {
-    const router = useRouter();
+// Sub-components
+function ActionDropdown({
+    group,
+    onExport,
+    isExporting,
+}: {
+    group: any
+    onExport: () => void
+    isExporting: boolean
+}) {
+    const router = useRouter()
 
     return (
         <DropdownMenu>
@@ -220,15 +259,23 @@ function ActionDropdown({ group, onExport, isExporting }: { group: any, onExport
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl border-slate-200">
-                <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">Opsi Sesi Rapat</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">
+                    Opsi Sesi Rapat
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-[#125d72]/5 group"
-                    onClick={() => router.push(`/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`)}
+                    onClick={() =>
+                        router.push(
+                            `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
+                        )
+                    }
                 >
                     <Settings2 className="h-4 w-4 text-slate-400 group-hover:text-[#125d72]" />
                     <span className="text-xs font-bold text-slate-700">Kelola Sesi Rapat</span>
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
                     disabled={isExporting}
@@ -237,7 +284,9 @@ function ActionDropdown({ group, onExport, isExporting }: { group: any, onExport
                     <Download className="h-4 w-4 text-slate-400 group-hover:text-emerald-600" />
                     <span className="text-xs font-bold text-slate-700">Export Radir Lembar</span>
                 </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-slate-100 text-slate-400 italic">
                     <Eye className="h-4 w-4" />
                     <span className="text-[10px] font-medium">Aksi lainnya menyusul...</span>
@@ -247,7 +296,6 @@ function ActionDropdown({ group, onExport, isExporting }: { group: any, onExport
     )
 }
 
-// Sub-komponen Badge Status
 function StatusBadge({ status }: { status: string }) {
     if (status === "COMPLETED") {
         return (
@@ -256,6 +304,7 @@ function StatusBadge({ status }: { status: string }) {
             </Badge>
         )
     }
+
     return (
         <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
             <Clock className="h-2.5 w-2.5" /> DIJADWALKAN
