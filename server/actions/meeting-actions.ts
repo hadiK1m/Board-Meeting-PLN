@@ -265,3 +265,92 @@ export async function getRadirMonitoringData() {
         return { success: false, error: "Gagal mengambil data", groupedMeetings: [], readyAgendas: [] };
     }
 }
+
+export async function updateRakordirLiveAction(
+    agendasData: any[],
+    meetingInfo: {
+        number: string;
+        year: string;
+        date: string;
+        day?: string;
+        location: string;
+        startTime: string;
+        endTime: string;
+        pimpinanRapat: string;
+        catatanKetidakhadiran: string;
+    }
+) {
+    try {
+        // Menjalankan Transaksi Database
+        await db.transaction(async (tx) => {
+            for (const item of agendasData) {
+                await tx.update(agendas)
+                    .set({
+                        // 1. Sinkronisasi Data Logistik (Sama untuk semua agenda dalam satu sesi)
+                        meetingNumber: meetingInfo.number,
+                        meetingYear: meetingInfo.year,
+                        executionDate: meetingInfo.date || null,
+                        startTime: meetingInfo.startTime || null,
+                        endTime: meetingInfo.endTime || "Selesai",
+                        meetingLocation: meetingInfo.location || null,
+                        pimpinanRapat: meetingInfo.pimpinanRapat, // Disimpan sebagai string/JSON
+                        catatanRapat: meetingInfo.catatanKetidakhadiran, // Digunakan untuk Notulensi Word
+
+                        // 2. Data Naratif Spesifik (Berbeda tiap agenda)
+                        executiveSummary: item.executiveSummary,
+                        arahanDireksi: item.arahanDireksi, // JSONB
+                        attendanceData: item.attendanceData, // JSONB Kehadiran Direksi
+
+                        // 3. Update Status & Metadata
+                        meetingStatus: "COMPLETED",
+                        status: "SELESAI", // Update status alur kerja utama
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(agendas.id, item.id));
+            }
+        });
+
+        // Membersihkan cache agar data terbaru muncul di Monitoring
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+        revalidatePath(`/pelaksanaan-rapat/rakordir/live`);
+
+        return {
+            success: true,
+            message: "Notulensi Rakordir berhasil disimpan dan disinkronkan."
+        };
+    } catch (error) {
+        console.error("[RAKORDIR-ACTION-ERROR]:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Terjadi kesalahan saat menyimpan data."
+        };
+    }
+}
+
+/**
+ * ACTION: DELETE RAKORDIR SESSION
+ * Menghapus nomor meeting dari sekelompok agenda (Reset ke status Terjadwal)
+ */
+export async function resetRakordirSessionAction(meetingNumber: string, meetingYear: string) {
+    try {
+        await db.update(agendas)
+            .set({
+                meetingNumber: null,
+                meetingStatus: "PENDING",
+                status: "DIJADWALKAN",
+                updatedAt: new Date()
+            })
+            .where(
+                and(
+                    eq(agendas.meetingNumber, meetingNumber),
+                    eq(agendas.meetingYear, meetingYear),
+                    eq(agendas.meetingType, "RAKORDIR")
+                )
+            );
+
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Gagal mereset sesi rapat." };
+    }
+}

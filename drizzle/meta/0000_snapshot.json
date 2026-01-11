@@ -1,5 +1,5 @@
 {
-  "id": "5c853c0d-b256-4466-80dc-13bcf7886e64",
+  "id": "dc4e21ab-534b-4c79-93c9-cf1d8b8aa3d5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -81,27 +81,33 @@
         },
         "urgency": {
           "name": "urgency",
-          "type": "varchar(20)",
+          "type": "varchar(50)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "deadline": {
           "name": "deadline",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "director": {
           "name": "director",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "initiator": {
           "name": "initiator",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "support": {
           "name": "support",
@@ -113,19 +119,19 @@
           "name": "contact_person",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "position": {
           "name": "position",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "phone": {
           "name": "phone",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "legal_review": {
           "name": "legal_review",
@@ -176,12 +182,172 @@
           "notNull": false,
           "default": "'[]'::jsonb"
         },
+        "not_required_files": {
+          "name": "not_required_files",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
         "status": {
           "name": "status",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "'Draft'"
+        },
+        "kepdir_sirkuler_doc": {
+          "name": "kepdir_sirkuler_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "grc_doc": {
+          "name": "grc_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancellation_reason": {
+          "name": "cancellation_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_date": {
+          "name": "execution_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_time": {
+          "name": "end_time",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'Selesai'"
+        },
+        "meeting_method": {
+          "name": "meeting_method",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_location": {
+          "name": "meeting_location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_link": {
+          "name": "meeting_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_type": {
+          "name": "meeting_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'RADIR'"
+        },
+        "meeting_number": {
+          "name": "meeting_number",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_year": {
+          "name": "meeting_year",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pimpinan_rapat": {
+          "name": "pimpinan_rapat",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "attendance_data": {
+          "name": "attendance_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "guest_participants": {
+          "name": "guest_participants",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "executive_summary": {
+          "name": "executive_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "considerations": {
+          "name": "considerations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "risalah_body": {
+          "name": "risalah_body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catatan_rapat": {
+          "name": "catatan_rapat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arahan_direksi": {
+          "name": "arahan_direksi",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "meeting_decisions": {
+          "name": "meeting_decisions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "dissenting_opinion": {
+          "name": "dissenting_opinion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_status": {
+          "name": "meeting_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'PENDING'"
+        },
+        "risalah_group_id": {
+          "name": "risalah_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "gen_random_uuid()"
         },
         "created_at": {
           "name": "created_at",

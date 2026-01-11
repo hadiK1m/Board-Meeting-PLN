@@ -222,3 +222,43 @@ export async function deleteRakordirAction(id: string) {
         return { success: false, error: "Gagal menghapus agenda" }
     }
 }
+export async function updateRakordirLiveAction(payloads: any[]) {
+    try {
+        await db.transaction(async (tx) => {
+            for (const data of payloads) {
+                await tx.update(agendas)
+                    .set({
+                        // Data Logistik (Global)
+                        meetingNumber: data.number,
+                        meetingYear: data.year,
+                        executionDate: data.date,
+                        meetingLocation: data.location,
+                        startTime: data.startTime,
+                        endTime: data.endTime,
+
+                        // Data Kehadiran (Global)
+                        attendanceData: data.attendance,
+                        guestParticipants: data.guests,
+                        pimpinanRapat: JSON.stringify(data.selectedPimpinan),
+                        catatanRapat: data.catatanKetidakhadiran,
+
+                        // Data Naratif (Spesifik per Agenda)
+                        executiveSummary: data.executiveSummary,
+                        arahanDireksi: data.arahanDireksi,
+
+                        // Status
+                        status: "SELESAI",
+                        meetingStatus: "COMPLETED",
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(agendas.id, data.id));
+            }
+        });
+
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+        return { success: true };
+    } catch (error) {
+        console.error("Error saving Rakordir:", error);
+        return { success: false, error: "Gagal menyimpan data ke database" };
+    }
+}

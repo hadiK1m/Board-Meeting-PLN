@@ -1,1 +1,0 @@
-ALTER TABLE "agendas" ADD COLUMN "priority" varchar(20) DEFAULT 'Low' NOT NULL;
