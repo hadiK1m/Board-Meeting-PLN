@@ -75,6 +75,7 @@ export const agendas = pgTable("agendas", {
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    risalahTtd: text("risalah_ttd"),
 });
 
 export type Agenda = typeof agendas.$inferSelect;

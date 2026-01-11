@@ -24,6 +24,7 @@ import {
     Eye,
     CheckCircle2,
     Clock,
+    Upload, // Import icon Upload
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -39,6 +40,7 @@ import { id } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
+import { UploadRisalahDialog } from "./upload-risalah-dialog" // Import Dialog
 
 interface RadirListViewProps {
     initialData: any[] // grouped meetings
@@ -50,6 +52,11 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [isExporting, setIsExporting] = useState(false)
 
+    // State untuk Upload Dialog
+    const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+    const [selectedAgendaId, setSelectedAgendaId] = useState("")
+    const [selectedAgendaTitle, setSelectedAgendaTitle] = useState("")
+
     const filteredData = initialData.filter((item) => {
         const search = searchTerm.toLowerCase()
         return (
@@ -58,69 +65,87 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         )
     })
 
+    // Handler untuk membuka dialog upload
+    const handleOpenUpload = (agendaId: string, meetingNumber: string) => {
+        setSelectedAgendaId(agendaId)
+        setSelectedAgendaTitle(`Meeting #${meetingNumber}`)
+        setUploadDialogOpen(true)
+    }
+
     if (viewMode === "grid") {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredData.map((group) => (
-                    <div
-                        key={group.groupKey}
-                        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card"
-                    >
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="space-y-1">
-                                <Badge className="bg-[#125d72]/10 text-[#125d72] hover:bg-[#125d72]/20 border-none text-[10px] font-black">
-                                    NOMOR MEETING: {group.meetingNumber}
-                                </Badge>
-                                <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
-                                    TAHUN {group.meetingYear}
-                                </h3>
-                            </div>
-                            <div className="flex gap-2">
-                                <StatusBadge status={group.status} />
-                                <ActionDropdown
-                                    group={group}
-                                    isExporting={isExporting}
-                                    setIsExporting={setIsExporting}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-3 mb-6">
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <Calendar className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-medium">
-                                    {group.executionDate
-                                        ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id })
-                                        : "-"}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <MapPin className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-medium truncate">
-                                    {group.location || "Lokasi belum diatur"}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <FileText className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-bold text-[#125d72]">
-                                    {group.agendas.length} Agenda Terkait
-                                </span>
-                            </div>
-                        </div>
-
-                        <Button
-                            className="w-full bg-[#125d72] hover:bg-[#0d4a5b] text-white text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
-                            onClick={() =>
-                                router.push(
-                                    `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
-                                )
-                            }
+            <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredData.map((group) => (
+                        <div
+                            key={group.groupKey}
+                            className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card"
                         >
-                            <Settings2 className="mr-2 h-3.5 w-3.5" /> Kelola Sesi Rapat
-                        </Button>
-                    </div>
-                ))}
-            </div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="space-y-1">
+                                    <Badge className="bg-[#125d72]/10 text-[#125d72] hover:bg-[#125d72]/20 border-none text-[10px] font-black">
+                                        NOMOR MEETING: {group.meetingNumber}
+                                    </Badge>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
+                                        TAHUN {group.meetingYear}
+                                    </h3>
+                                </div>
+                                <div className="flex gap-2">
+                                    <StatusBadge status={group.status} />
+                                    <ActionDropdown
+                                        group={group}
+                                        isExporting={isExporting}
+                                        setIsExporting={setIsExporting}
+                                        onOpenUpload={handleOpenUpload} // Pass handler
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 mb-6">
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <Calendar className="h-3.5 w-3.5" />
+                                    <span className="text-[11px] font-medium">
+                                        {group.executionDate
+                                            ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id })
+                                            : "-"}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <MapPin className="h-3.5 w-3.5" />
+                                    <span className="text-[11px] font-medium truncate">
+                                        {group.location || "Lokasi belum diatur"}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span className="text-[11px] font-bold text-[#125d72]">
+                                        {group.agendas.length} Agenda Terkait
+                                    </span>
+                                </div>
+                            </div>
+
+                            <Button
+                                className="w-full bg-[#125d72] hover:bg-[#0d4a5b] text-white text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
+                                onClick={() =>
+                                    router.push(
+                                        `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
+                                    )
+                                }
+                            >
+                                <Settings2 className="mr-2 h-3.5 w-3.5" /> Kelola Sesi Rapat
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Render Dialog Upload */}
+                <UploadRisalahDialog
+                    open={uploadDialogOpen}
+                    onOpenChange={setUploadDialogOpen}
+                    agendaId={selectedAgendaId}
+                    title={selectedAgendaTitle}
+                />
+            </>
         )
     }
 
@@ -203,6 +228,7 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                             group={group}
                                             isExporting={isExporting}
                                             setIsExporting={setIsExporting}
+                                            onOpenUpload={handleOpenUpload} // Pass handler
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -211,25 +237,35 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Render Dialog Upload (untuk Table View) */}
+            <UploadRisalahDialog
+                open={uploadDialogOpen}
+                onOpenChange={setUploadDialogOpen}
+                agendaId={selectedAgendaId}
+                title={selectedAgendaTitle}
+            />
         </div>
     )
 }
 
-// Updated ActionDropdown with two export options
+// Updated ActionDropdown with Upload Option
 function ActionDropdown({
     group,
     isExporting,
     setIsExporting,
+    onOpenUpload, // Receive handler props
 }: {
     group: any
     isExporting: boolean
     setIsExporting: (val: boolean) => void
+    onOpenUpload: (agendaId: string, meetingNumber: string) => void
 }) {
     const router = useRouter()
 
     const handleDownload = async (type: "ISI" | "TTD") => {
         setIsExporting(true)
-        toast.info(`Menyiapkan ${type === "ISI" ? "Lembar Isi" : "Lembar TTD"}...`)
+        toast.info(`Menyiapkan ${type === "ISI" ? "Risalah Isi" : "Risalah TTD"}...`)
 
         try {
             const res = await exportRisalahToDocx(group.meetingNumber, group.meetingYear, type)
@@ -278,13 +314,32 @@ function ActionDropdown({
 
                 <DropdownMenuSeparator />
 
+                {/* Tombol Upload Baru */}
+                <DropdownMenuItem
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-orange-50 group"
+                    onClick={() => {
+                        // Kita ambil ID agenda pertama di dalam grup ini sebagai referensi upload
+                        const firstAgendaId = group.agendas[0]?.id
+                        if (firstAgendaId) {
+                            onOpenUpload(firstAgendaId, group.meetingNumber)
+                        } else {
+                            toast.error("Data agenda tidak ditemukan")
+                        }
+                    }}
+                >
+                    <Upload className="h-4 w-4 text-orange-600 group-hover:text-orange-700" />
+                    <span className="text-xs font-bold text-slate-700">Upload Risalah Final (TTD)</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
                     disabled={isExporting}
                     onClick={() => handleDownload("ISI")}
                 >
                     <FileText className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
-                    <span className="text-xs font-bold text-slate-700">Export Lembar Isi (1.2)</span>
+                    <span className="text-xs font-bold text-slate-700">Export Risalah Isi (1.2)</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
@@ -293,7 +348,7 @@ function ActionDropdown({
                     onClick={() => handleDownload("TTD")}
                 >
                     <Download className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
-                    <span className="text-xs font-bold text-slate-700">Export Lembar TTD (1.3)</span>
+                    <span className="text-xs font-bold text-slate-700">Export Risalah TTD (1.3)</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />

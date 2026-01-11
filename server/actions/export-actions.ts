@@ -1,4 +1,3 @@
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
@@ -12,6 +11,7 @@ import Docxtemplater from "docxtemplater"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 
+// --- TIPE DATA ---
 interface AttendanceInfo {
     status: "Hadir" | "Tidak Hadir" | "Kuasa"
     reason?: string
@@ -22,9 +22,23 @@ interface AttendanceData {
     [directorKey: string]: AttendanceInfo
 }
 
-/**
- * HELPER: Mengonversi angka menjadi kata terbilang Indonesia
- */
+// --- KAMUS DATA: PEMETAAN JABATAN KE NAMA ---
+const DIRECTOR_NAMES: Record<string, string> = {
+    "DIREKTUR UTAMA (DIRUT)": "DARMAWAN PRASODJO",
+    "DIREKTUR KEUANGAN (DIR KEU)": "SINTHYA ROESLY",
+    "DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)": "YUSUF DIDI SETIARTO",
+    "DIREKTUR MANAJEMEN RISIKO (DIR MRO)": "ADI LUMAKSO",
+    "DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)": "HARTANTO WIBOWO",
+    "DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)": "SUROSO ISNANDAR",
+    "DIREKTUR TEKNOLOGI, ENGINEERING, DAN KEBERLANJUTAN (DIR TNK)": "E. HARYADI",
+    "DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)": "RIZAL CALVARY MARIMBO",
+    "DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)": "EDWIN NUGRAHA PUTRA",
+    "DIREKTUR DISTRIBUSI (DIR DIST)": "ARSYADANY GHANA AKMALAPUTRI",
+    "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)": "ADI PRIYANTO"
+}
+
+// --- HELPER FUNCTIONS ---
+
 function terbilang(n: number): string {
     if (n === 0) return "nol"
     const ambil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]
@@ -34,9 +48,6 @@ function terbilang(n: number): string {
     return String(n)
 }
 
-/**
- * HELPER: Mengonversi angka menjadi huruf Romawi kecil
- */
 function toRoman(num: number): string {
     const lookup: Record<string, number> = { x: 10, ix: 9, v: 5, iv: 4, i: 1 }
     let roman = ""
@@ -49,29 +60,41 @@ function toRoman(num: number): string {
     return roman
 }
 
-/**
- * HELPER: Membersihkan tag HTML dari editor Tiptap untuk Docx
- */
 function cleanHtml(html: string | null | undefined): string {
     if (!html) return "-"
-    return html
-        .replace(/<\/p><p>/g, "\n")
-        .replace(/<br\s*\/?>/g, "\n")
-        .replace(/<[^>]+>/g, "")
-        .replace(/&nbsp;/g, " ")
-        .trim()
+    let text = html
+    text = text.replace(/<\/p>/gi, "\n")
+    text = text.replace(/<br\s*\/?>/gi, "\n")
+    text = text.replace(/<li>/gi, "\n- ")
+    text = text.replace(/<\/li>/gi, "")
+    text = text.replace(/<\/(ul|ol)>/gi, "\n")
+    text = text.replace(/<[^>]+>/g, "")
+    text = text.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    return text.trim()
 }
 
 /**
- * EXPORT RISALAH RADIR (Lembar Isi 1.2 & Lembar TTD 1.3)
+ * PARSER KHUSUS: Agar Docxtemplater bisa membaca object nested (titik)
  */
+const expressionParser = (tag: string) => {
+    return {
+        get: (scope: any) => {
+            if (tag === '.') return scope;
+            return tag.split('.').reduce((obj, key) => {
+                return (obj && obj[key] !== undefined) ? obj[key] : undefined;
+            }, scope);
+        }
+    };
+};
+
+// --- EXPORT FUNCTION ---
+
 export async function exportRisalahToDocx(
     meetingNumber: string,
     meetingYear: string,
-    templateType: "ISI" | "TTD" = "ISI" // default ke Lembar Isi
+    templateType: "ISI" | "TTD" = "ISI"
 ) {
     try {
-        // 1. Ambil semua agenda dalam satu sesi rapat
         const dataAgendas = await db.query.agendas.findMany({
             where: and(
                 eq(agendas.meetingNumber, meetingNumber),
@@ -88,89 +111,132 @@ export async function exportRisalahToDocx(
         const first = dataAgendas[0]
         const executionDate = first.executionDate ? new Date(first.executionDate) : new Date()
 
-        // 2. Parsing Data Kehadiran secara Aman
+        // 1. Parsing Attendance Data
         let attendanceMap: Record<string, any> = {}
         try {
-            attendanceMap =
-                typeof first.attendanceData === "string"
-                    ? JSON.parse(first.attendanceData)
-                    : (first.attendanceData || {})
+            attendanceMap = typeof first.attendanceData === "string" ? JSON.parse(first.attendanceData) : (first.attendanceData || {})
         } catch (e) {
             console.error("Gagal parse attendance:", e)
             attendanceMap = {}
         }
 
-        // 3. Helper untuk mencocokkan data Signer dengan Key Database
-        const getSigner = (dbKey: string, realName: string, title: string) => {
+        // 2. Hitung Statistik Kehadiran
+        const direkturList = Object.keys(attendanceMap)
+        const hadirCount = direkturList.filter(
+            (d) => attendanceMap[d]?.status !== "Tidak Hadir"
+        ).length
+
+        const teksCatatan = direkturList
+            .filter((name) => attendanceMap[name]?.status === "Tidak Hadir" || attendanceMap[name]?.status === "Kuasa")
+            .map((name) => {
+                const info = attendanceMap[name]
+                if (info?.status === "Kuasa") {
+                    const penerima = info.proxy?.[0]?.label ?? "Direktur terkait"
+                    return `${name} tidak hadir dan memberikan kuasa kepada ${penerima};`
+                }
+                return `${name} tidak hadir karena ${info?.reason ?? "tugas kedinasan lainnya"};`
+            })
+            .join("\n")
+
+        // 3. Format Daftar Ringkasan Agenda (Agenda Summary List)
+        const agendaSummaryList = dataAgendas.map((a, idx) => {
+            const roman = toRoman(idx + 1).toLowerCase()
+            const pemrakarsaList = [a.director, a.initiator]
+                .filter((val) => val && val.trim() !== "")
+                .join(", ")
+            return `${roman}. ${a.title} Pemrakarsa (${pemrakarsaList})`
+        }).join("\n")
+
+        // 4. Helper Logic Alih Kuasa
+        const getSigner = (dbKey: string, defaultTitle: string) => {
             const record = attendanceMap[dbKey]
+            const realName = DIRECTOR_NAMES[dbKey] || "NAMA TIDAK DITEMUKAN"
+
+            if (record?.status === "Kuasa" && Array.isArray(record.proxy) && record.proxy.length > 0) {
+                const proxyKey = record.proxy[0].value
+                const proxyName = DIRECTOR_NAMES[proxyKey]
+                return {
+                    name: proxyName || proxyKey,
+                    title: "(ALIH KUASA)",
+                }
+            }
             return {
                 name: realName,
-                title: title,
-                // Jika status "Kuasa", maka munculkan label, jika tidak kosongkan
-                proxyLabel: record?.status === "Kuasa" ? "(Alih Kuasa)" : "",
+                title: defaultTitle
             }
         }
 
-        // 4. Susun Template Data
+        // 5. Susun Data Template Lengkap
         const templateData = {
             meetingNumber,
             meetingYear,
             executionDate: format(executionDate, "eeee, dd MMMM yyyy", { locale: id }),
+            day: format(executionDate, "eeee", { locale: id }),
             startTime: first.startTime || "",
             endTime: first.endTime || "",
             location: first.meetingLocation || "",
 
-            // PEMETAAN 11 DIREKTUR UNTUK LEMBAR TTD (1.3) – hanya aktif jika TTD
-            ...(templateType === "TTD" && {
-                dir_ut: getSigner("DIREKTUR UTAMA (DIRUT)", "DARMAWAN PRASODJO", "DIRUT"),
+            // --- DATA PEMBUKAAN ---
+            agenda_summary_list: agendaSummaryList,
+            hadir_count_num: hadirCount,
+            hadir_count_terbilang: terbilang(hadirCount),
+            pimpinanRapat: Array.isArray(first.pimpinanRapat)
+                ? first.pimpinanRapat.map((p: any) => p.label).join(", ")
+                : "Sekretaris Perusahaan",
+            catatan_ketidakhadiran: teksCatatan || "Seluruh Direksi hadir lengkap",
+            guestParticipants: Array.isArray(first.guestParticipants)
+                ? first.guestParticipants.map((g: any) => `${g.name} (${g.position})`).join(", ")
+                : "-",
 
-                dir_keu: getSigner("DIREKTUR KEUANGAN (DIR KEU)", "SINTHYA ROESLY", "DIR KEU"),
-                dir_lhc: getSigner("DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)", "YUSUF DIDI SETIARTO", "DIR LHC"),
-                dir_mro: getSigner("DIREKTUR MANAJEMEN RISIKO (DIR MRO)", "ADI LUMAKSO", "DIR MRO"),
+            // --- DATA PENANDATANGAN ---
+            dir_ut: getSigner("DIREKTUR UTAMA (DIRUT)", "DIRUT"),
+            dir_keu: getSigner("DIREKTUR KEUANGAN (DIR KEU)", "DIR KEU"),
+            dir_lhc: getSigner("DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)", "DIR LHC"),
+            dir_mro: getSigner("DIREKTUR MANAJEMEN RISIKO (DIR MRO)", "DIR MRO"),
+            dir_renbang: getSigner("DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)", "DIR RENBANG"),
+            dir_mpro: getSigner("DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)", "DIR MPRO"),
+            dir_tnk: getSigner("DIREKTUR TEKNOLOGI, ENGINEERING, DAN KEBERLANJUTAN (DIR TNK)", "DIR TNK"),
+            dir_mkit: getSigner("DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)", "DIR MKIT"),
+            dir_trans: getSigner("DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)", "DIR TRANS"),
+            dir_dist: getSigner("DIREKTUR DISTRIBUSI (DIR DIST)", "DIR DIST"),
+            dir_retail: getSigner("DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)", "DIR RETAIL"),
 
-                dir_renbang: getSigner("DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)", "HARTANTO WIBOWO", "DIR RENBANG"),
-                dir_mpro: getSigner("DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)", "SUROSO ISNANDAR", "DIR MPRO"),
-                dir_tnk: getSigner("DIREKTUR TEKNOLOGI, ENGINEERING, DAN KEBERLANJUTAN (DIR TNK)", "E. HARYADI", "DIR TNK"),
-
-                dir_mkit: getSigner("DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)", "RIZAL CALVARY MARIMBO", "DIR MKIT"),
-                dir_trans: getSigner("DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)", "EDWIN NUGRAHA PUTRA", "DIR TRANS"),
-
-                dir_dist: getSigner("DIREKTUR DISTRIBUSI (DIR DIST)", "ARSYADANY GHANA AKMALAPUTRI", "DIR DIST"),
-                dir_retail: getSigner("DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)", "ADI PRIYANTO", "DIR RETAIL"),
-            }),
-
-            // DATA UNTUK LEMBAR ISI (1.2) – looping agenda
+            // --- DATA AGENDA (LOOP) ---
             agendas: dataAgendas.map((a, i) => ({
                 index: i + 1,
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
+
+                // ✅ PERBAIKAN DI SINI: Dasar Pertimbangan (Cek Array vs String)
                 considerations: Array.isArray(a.considerations)
                     ? a.considerations.map((c: any, idx: number) => `${idx + 1}. ${c.text}`).join("\n")
                     : cleanHtml(String(a.considerations || "")),
+
+                // ✅ PERBAIKAN DI SINI: Keputusan Rapat (Cek Array vs String)
                 meetingDecisions: Array.isArray(a.meetingDecisions)
                     ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n")
                     : cleanHtml(String(a.meetingDecisions || "")),
+
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
             })),
         }
 
-        // 5. Pilih File Template
-        const fileName =
-            templateType === "ISI" ? "1.2 Radir_Lembar Isi.docx" : "1.3. Radir_Lembar ttd.docx"
-
+        const fileName = templateType === "ISI" ? "1.2 Radir_Lembar Isi.docx" : "1.3. Radir_Lembar ttd.docx"
         const templatePath = path.resolve(process.cwd(), "public", fileName)
 
         if (!fs.existsSync(templatePath)) {
             throw new Error(`Template ${fileName} tidak ditemukan di folder public.`)
         }
 
-        // 6. Proses Docxtemplater
         const content = fs.readFileSync(templatePath, "binary")
         const zip = new PizZip(content)
+
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
+            parser: expressionParser,
+            nullGetter: () => { return "" }
         })
 
         doc.render(templateData)
@@ -192,7 +258,7 @@ export async function exportRisalahToDocx(
 }
 
 /**
- * Export Notulensi RAKORDIR – tetap sama seperti versi sebelumnya
+ * EXPORT NOTULENSI RAKORDIR
  */
 export async function exportRakordirToDocx(meetingNumber: string, meetingYear: string) {
     const safeNumber = meetingNumber || "000"
@@ -214,10 +280,9 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
 
         const firstAgenda = dataAgendas[0]
         const executionDate = firstAgenda.executionDate ? new Date(firstAgenda.executionDate) : new Date()
-
         const attendance = (firstAgenda.attendanceData as AttendanceData | null) ?? {}
-
         const direkturList = Object.keys(attendance)
+
         const hadirCount = direkturList.filter(
             (d) => attendance[d]?.status !== "Tidak Hadir"
         ).length

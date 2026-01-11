@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
-import { agendas, Agenda } from "@/db/schema/agendas"
+import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
 
@@ -234,5 +235,52 @@ export async function deleteRadirAction(id: string) {
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "Gagal menghapus data."
         return { success: false, error: msg }
+    }
+}
+
+/**
+ * Upload Risalah Final (Sudah TTD)
+ * Bucket: agenda-attachments
+ */
+export async function uploadRisalahTtdAction(agendaId: string, formData: FormData) {
+    const supabase = await createClient()
+
+    try {
+        const file = formData.get("file") as File
+        if (!file) throw new Error("File tidak ditemukan")
+
+        // 1. Validasi Tipe File (PDF Only)
+        if (file.type !== "application/pdf") {
+            return { success: false, error: "Hanya file PDF yang diperbolehkan." }
+        }
+
+        // 2. Generate File Name & Path
+        // Format: risalah-final/[agendaId]_[timestamp].pdf
+        const timestamp = Date.now()
+        const fileName = `risalah-final/${agendaId}_${timestamp}.pdf`
+
+        // 3. Upload ke Supabase Storage (Bucket: agenda-attachments)
+        const { error: uploadError } = await supabase.storage
+            .from("agenda-attachments") // <--- SESUAI REQUEST
+            .upload(fileName, file, {
+                cacheControl: "3600",
+                upsert: true,
+            })
+
+        if (uploadError) throw new Error(`Upload Gagal: ${uploadError.message}`)
+
+        // 4. Update Database dengan Path File
+        await db
+            .update(agendas)
+            .set({ risalahTtd: fileName })
+            .where(eq(agendas.id, agendaId))
+
+        // 5. Revalidate Halaman
+        revalidatePath("/pelaksanaan-rapat/radir")
+
+        return { success: true, message: "Risalah Final berhasil diunggah" }
+    } catch (error: any) {
+        console.error("Upload Risalah Error:", error)
+        return { success: false, error: error.message }
     }
 }
