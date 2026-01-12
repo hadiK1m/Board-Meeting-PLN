@@ -311,6 +311,25 @@ export async function updateRakordirLiveAction(payloads: any[]) {
     try {
         await db.transaction(async (tx) => {
             for (const data of payloads) {
+                // 1. Ambil Arahan Direksi dari Payload
+                // Pastikan formatnya array object { id, text }
+                const listArahan = Array.isArray(data.arahanDireksi)
+                    ? data.arahanDireksi
+                    : [];
+
+                // 2. Mapping ke Format Monev (Meeting Decisions)
+                // Kita copy data dari Arahan ke Meeting Decisions agar muncul di Monev
+                const meetingDecisions = listArahan.map((item: any) => ({
+                    id: item.id || crypto.randomUUID(),
+                    text: item.text || item.value, // Handle variasi nama field
+                    targetOutput: "", // Default kosong, nanti diisi di Monev
+                    currentProgress: "",
+                    evidencePath: null,
+                    status: "ON_PROGRESS",
+                    lastUpdated: new Date().toISOString()
+                }));
+
+                // 3. Update Database
                 await tx.update(agendas)
                     .set({
                         meetingNumber: data.number,
@@ -326,10 +345,16 @@ export async function updateRakordirLiveAction(payloads: any[]) {
                         catatanRapat: data.catatanKetidakhadiran,
 
                         executiveSummary: data.executiveSummary,
-                        arahanDireksi: data.arahanDireksi,
 
-                        status: "SELESAI",
+                        // Simpan di dua kolom: 
+                        // 1. arahan_direksi (untuk display di Notulensi)
+                        // 2. meeting_decisions (untuk data di Monev)
+                        arahanDireksi: listArahan,
+                        meetingDecisions: meetingDecisions,
+
+                        status: "RAPAT_SELESAI", // ✅ UBAH DARI 'SELESAI' KE 'RAPAT_SELESAI'
                         meetingStatus: "COMPLETED",
+                        monevStatus: "ON_PROGRESS", // Set default status monev
                         updatedAt: new Date(),
                     })
                     .where(eq(agendas.id, data.id))
@@ -337,6 +362,7 @@ export async function updateRakordirLiveAction(payloads: any[]) {
         })
 
         revalidatePath("/pelaksanaan-rapat/rakordir")
+        revalidatePath("/monev/rakordir") // ✅ Revalidate halaman Monev juga
         return { success: true }
     } catch (error) {
         console.error("[ACTION-LIVE-ERROR]:", error)

@@ -130,6 +130,14 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
 
     return (
         <div className="space-y-6">
+            <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">
+                <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
+                    Monitoring & Evaluasi Radir
+                </h1>
+                <p className="text-slate-500 font-medium text-sm italic">
+                    Pemantauan dan evaluasi pelaksanaan arahan hasil rapat direksi
+                </p>
+            </div>
             {/* --- TOOLBAR SECTION --- */}
             {/* Tambahkan bg-white, border, shadow-sm, padding (p-4), dan rounded-xl */}
             <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center bg-white border border-slate-200 shadow-sm p-4 rounded-xl">

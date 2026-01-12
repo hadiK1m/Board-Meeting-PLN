@@ -1,0 +1,30 @@
+import { Metadata } from "next"
+import { getMonevRakordirList } from "@/server/actions/monev-rakordir-actions"
+import { MonevRakordirClient } from "@/components/dashboard/monev/rakordir/monev-rakordir-client"
+
+export const metadata: Metadata = {
+    title: "Monev Rakordir | Board Meeting PLN",
+    description: "Monitoring dan Evaluasi Tindak Lanjut Rapat Koordinasi Direksi",
+}
+
+export default async function MonevRakordirPage() {
+    const { success, data, error } = await getMonevRakordirList()
+
+    if (!success || !data) {
+        return (
+            <div className="p-8 text-center text-red-500 bg-red-50 rounded-xl border border-red-200 m-6">
+                <h3 className="font-bold">Gagal memuat data</h3>
+                <p>{error}</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-col h-full">
+
+            <div className="flex-1 p-6 space-y-6 overflow-auto">
+                <MonevRakordirClient initialData={data} />
+            </div>
+        </div>
+    )
+}

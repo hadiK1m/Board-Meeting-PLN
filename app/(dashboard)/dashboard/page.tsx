@@ -1,29 +1,17 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { Metadata } from "next"
+import { DashboardClient } from "@/components/dashboard/dashboard-client"
 
-export default async function DashboardPage() {
-    const supabase = await createClient();
+export const metadata: Metadata = {
+    title: "Dashboard | Board Meeting PLN",
+    description: "Ringkasan Eksekutif Aktivitas Rapat",
+}
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        return redirect("/login");
-    }
-
+export default function DashboardPage() {
     return (
-        <div className="flex flex-col gap-4 p-8">
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Selamat datang, {user.email}</p>
-
-            {/* Placeholder content */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
-                    <div className="font-semibold leading-none tracking-tight">Total Rapat</div>
-                    <div className="mt-2 text-2xl font-bold">0</div>
-                </div>
+        <div className="flex flex-col min-h-screen bg-[#f8fafc]">
+            <div className="flex-1 p-8 space-y-6">
+                <DashboardClient />
             </div>
         </div>
-    );
+    )
 }
