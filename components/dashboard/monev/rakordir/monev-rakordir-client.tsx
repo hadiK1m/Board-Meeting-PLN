@@ -133,7 +133,7 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                     </Select>
                     <Select value={statusFilter} onValueChange={(v: "ALL" | "ON_PROGRESS" | "DONE") => setStatusFilter(v)}>
                         <SelectTrigger className="h-10 w-30 rounded-xl border-slate-200 text-xs font-medium bg-slate-50 focus:bg-white transition-all"><Filter className="mr-2 h-3.5 w-3.5 text-slate-500" /><SelectValue placeholder="Status" /></SelectTrigger>
-                        <SelectContent><SelectItem value="ALL">Semua</SelectItem><SelectItem value="ON_PROGRESS">On Progress</SelectItem><SelectItem value="DONE">Selesai</SelectItem></SelectContent>
+                        <SelectContent><SelectItem value="ALL">Semua</SelectItem><SelectItem value="ON_PROGRESS">In Progress</SelectItem><SelectItem value="DONE">Selesai</SelectItem></SelectContent>
                     </Select>
                     <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 h-10">
                         <Button variant="ghost" size="icon" className={`h-8 w-8 rounded-lg ${viewMode === "grid" ? "bg-white shadow-sm text-[#125d72]" : "text-slate-400 hover:text-slate-600"}`} onClick={() => setViewMode("grid")}><LayoutGrid className="h-4 w-4" /></Button>
@@ -264,5 +264,5 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
 
 function MonevStatusBadge({ status }: { status: string | null }) {
     if (status === "DONE") return <Badge className="bg-emerald-500/10 text-emerald-600 border-none hover:bg-emerald-500/20 text-[9px] font-black flex items-center gap-1 w-fit mx-auto"><CheckCircle2 className="h-2.5 w-2.5" /> SELESAI</Badge>
-    return <Badge className="bg-amber-500/10 text-amber-600 border-none hover:bg-amber-500/20 text-[9px] font-black flex items-center gap-1 w-fit mx-auto"><Clock className="h-2.5 w-2.5" /> ON PROGRESS</Badge>
+    return <Badge className="bg-amber-500/10 text-amber-600 border-none hover:bg-amber-500/20 text-[9px] font-black flex items-center gap-1 w-fit mx-auto"><Clock className="h-2.5 w-2.5" /> IN PROGRESS</Badge>
 }

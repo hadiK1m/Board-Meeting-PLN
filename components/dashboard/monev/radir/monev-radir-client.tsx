@@ -173,7 +173,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="ALL">Semua</SelectItem>
-                            <SelectItem value="ON_PROGRESS">On Progress</SelectItem>
+                            <SelectItem value="ON_PROGRESS">In Progress</SelectItem>
                             <SelectItem value="DONE">Selesai</SelectItem>
                         </SelectContent>
                     </Select>
@@ -494,7 +494,7 @@ function MonevStatusBadge({ status }: { status: string | null }) {
     }
     return (
         <Badge className="bg-amber-500/10 text-amber-600 border-none hover:bg-amber-500/20 text-[9px] font-black flex items-center gap-1 w-fit mx-auto">
-            <Clock className="h-2.5 w-2.5" /> ON PROGRESS
+            <Clock className="h-2.5 w-2.5" /> IN PROGRESS
         </Badge>
     )
 }

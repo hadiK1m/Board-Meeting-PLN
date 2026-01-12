@@ -91,7 +91,7 @@ export function MonevAddDialog({ open, onOpenChange }: MonevAddDialogProps) {
                             <SelectContent>
                                 <SelectItem value="ON_PROGRESS">
                                     <div className="flex items-center gap-2 text-amber-600">
-                                        <AlertCircle className="h-4 w-4" /> On Progress
+                                        <AlertCircle className="h-4 w-4" /> In Progress
                                     </div>
                                 </SelectItem>
                                 <SelectItem value="DONE">

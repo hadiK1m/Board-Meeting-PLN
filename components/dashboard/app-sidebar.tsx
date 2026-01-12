@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-    Command,
     LifeBuoy,
     PieChart,
     Settings2,
@@ -34,7 +33,7 @@ const data = {
     teams: [
         {
             name: "Board Meeting",
-            logo: Command,
+            logo: "/logo-pln.png",
             plan: "PT PLN (Persero)",
         },
     ],

@@ -19,6 +19,17 @@ const config: Config = {
             },
         },
         extend: {
+            // ✅ Menambahkan spacing kustom untuk layout login
+            spacing: {
+                '100': '25rem',   // 400px
+                '125': '31.25rem', // 500px
+                '150': '37.5rem', // 600px
+                '200': '50rem',   // 800px
+            },
+            // ✅ Menambahkan aspect ratio kustom
+            aspectRatio: {
+                '4/3': '4 / 3',
+            },
             colors: {
                 // ✅ Color Palette PLN
                 pln: {

@@ -58,7 +58,7 @@ export function MonevAddRakordirDialog({ open, onOpenChange }: MonevAddDialogPro
                         <Select value={status} onValueChange={setStatus}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="ON_PROGRESS"><div className="flex items-center gap-2 text-amber-600"><AlertCircle className="h-4 w-4" /> On Progress</div></SelectItem>
+                                <SelectItem value="ON_PROGRESS"><div className="flex items-center gap-2 text-amber-600"><AlertCircle className="h-4 w-4" /> In Progress</div></SelectItem>
                                 <SelectItem value="DONE"><div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Selesai</div></SelectItem>
                             </SelectContent>
                         </Select>

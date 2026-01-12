@@ -316,7 +316,7 @@ function DecisionItemCard({
                                         <SelectContent>
                                             <SelectItem value="ON_PROGRESS">
                                                 <div className="flex items-center gap-2">
-                                                    <AlertCircle className="h-4 w-4 text-amber-500" /> On Progress
+                                                    <AlertCircle className="h-4 w-4 text-amber-500" /> In Progress
                                                 </div>
                                             </SelectItem>
                                             <SelectItem value="DONE">

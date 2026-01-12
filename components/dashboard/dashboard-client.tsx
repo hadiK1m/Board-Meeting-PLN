@@ -14,7 +14,9 @@ import {
     XCircle,
     BarChart3,
     ArrowRight,
-    Users
+    Users,
+    ListTodo,
+    Activity
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
@@ -39,6 +41,7 @@ export function DashboardClient() {
     const [stats, setStats] = useState({
         rakordir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
         radir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
+        followUp: { radir: { inProgress: 0, done: 0 }, rakordir: { inProgress: 0, done: 0 } },
         directorChartData: [] as any[]
     })
     const [loading, setLoading] = useState(true)
@@ -84,47 +87,84 @@ export function DashboardClient() {
                 </div>
             </div>
 
-            {/* --- TOP ROW: STATS CARDS --- */}
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* RAKORDIR CARD */}
-                <Card className="border-none shadow-xl bg-linear-to-br from-[#125d72] to-[#0e4b5c] text-white rounded-2xl overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-32 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+            {/* --- TOP ROW: 3 CARDS --- */}
+            <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+
+                {/* 1. RAKORDIR CARD */}
+                <Card className="border-none shadow-xl bg-linear-to-br from-[#125d72] to-[#0e4b5c] text-white rounded-2xl overflow-hidden relative group">
+                    <div className="absolute top-0 right-0 p-24 bg-white/5 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none group-hover:bg-white/10 transition-all"></div>
                     <CardHeader className="pb-2 relative z-10">
                         <CardTitle className="text-lg font-black uppercase tracking-widest flex items-center gap-2 opacity-90"><FileText className="h-5 w-5 text-[#efe62f]" /> Rakordir</CardTitle>
-                        <p className="text-sm text-slate-300 font-medium">Rapat Koordinasi Direksi</p>
+                        <p className="text-xs text-slate-300 font-medium uppercase tracking-wide">Rapat Koordinasi</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <StatBox label="Dapat Dilanjutkan" value={stats.rakordir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/10 text-emerald-300" isLoading={loading} />
+                        <div className="grid grid-cols-2 gap-3">
+                            <StatBox label="Dapat Dilanjut" value={stats.rakordir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/10 text-emerald-300" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.rakordir.dijadwalkan} icon={Clock} color="bg-white/10 text-blue-300" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.rakordir.selesai} icon={CheckCircle2} color="bg-white/10 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.rakordir.dibatalkan} icon={XCircle} color="bg-white/10 text-red-300" isLoading={loading} />
                         </div>
-                        <div className="mt-6 pt-4 border-t border-white/10 flex justify-between items-center">
-                            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Total Agenda</span>
-                            <span className="text-2xl font-black">{loading ? "-" : stats.rakordir.total}</span>
+                        <div className="mt-5 pt-3 border-t border-white/10 flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Total Agenda</span>
+                            <span className="text-xl font-black">{loading ? "-" : stats.rakordir.total}</span>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* RADIR CARD */}
-                <Card className="border-none shadow-xl bg-linear-to-br from-[#14a2ba] to-[#118a9e] text-white rounded-2xl overflow-hidden relative">
-                    <div className="absolute bottom-0 left-0 p-32 bg-white/10 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none"></div>
+                {/* 2. RADIR CARD */}
+                <Card className="border-none shadow-xl bg-linear-to-br from-[#14a2ba] to-[#118a9e] text-white rounded-2xl overflow-hidden relative group">
+                    <div className="absolute bottom-0 left-0 p-24 bg-white/10 rounded-full blur-3xl -ml-12 -mb-12 pointer-events-none group-hover:bg-white/15 transition-all"></div>
                     <CardHeader className="pb-2 relative z-10">
                         <CardTitle className="text-lg font-black uppercase tracking-widest flex items-center gap-2 opacity-90"><BarChart3 className="h-5 w-5 text-white" /> Rapat Direksi</CardTitle>
-                        <p className="text-sm text-blue-100 font-medium">Pengambilan Keputusan Tertinggi</p>
+                        <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Rapat Keputusan</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <StatBox label="Dapat Dilanjutkan" value={stats.radir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/20 text-white" isLoading={loading} />
+                        <div className="grid grid-cols-2 gap-3">
+                            <StatBox label="Dapat Dilanjut" value={stats.radir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.radir.dijadwalkan} icon={Clock} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.radir.selesai} icon={CheckCircle2} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.radir.dibatalkan} icon={XCircle} color="bg-white/20 text-red-200" isLoading={loading} />
                         </div>
-                        <div className="mt-6 pt-4 border-t border-white/20 flex justify-between items-center">
-                            <span className="text-xs font-bold uppercase tracking-wider text-blue-100">Total Agenda</span>
-                            <span className="text-2xl font-black">{loading ? "-" : stats.radir.total}</span>
+                        <div className="mt-5 pt-3 border-t border-white/20 flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Total Agenda</span>
+                            <span className="text-xl font-black">{loading ? "-" : stats.radir.total}</span>
                         </div>
+                    </CardContent>
+                </Card>
+
+                {/* 3. TINDAK LANJUT CARD (NEW) */}
+                <Card className="border-none shadow-xl bg-linear-to-br from-slate-700 to-slate-800 text-white rounded-2xl overflow-hidden relative group">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-24 bg-purple-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/20 transition-all"></div>
+                    <CardHeader className="pb-2 relative z-10">
+                        <CardTitle className="text-lg font-black uppercase tracking-widest flex items-center gap-2 opacity-90"><ListTodo className="h-5 w-5 text-purple-400" /> Tindak Lanjut</CardTitle>
+                        <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Monitoring & Evaluasi</p>
+                    </CardHeader>
+                    <CardContent className="pt-4 relative z-10 space-y-4">
+
+                        {/* Section Keputusan Radir */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-300">
+                                <span>Keputusan Radir</span>
+                                <Activity className="h-3 w-3 text-slate-500" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <MonevStatBox label="In-Progress" value={stats.followUp.radir.inProgress} color="bg-amber-500/20 text-amber-300 border-amber-500/30" isLoading={loading} />
+                                <MonevStatBox label="Selesai" value={stats.followUp.radir.done} color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" isLoading={loading} />
+                            </div>
+                        </div>
+
+                        {/* Section Arahan Rakordir */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-300">
+                                <span>Arahan Rakordir</span>
+                                <Activity className="h-3 w-3 text-slate-500" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <MonevStatBox label="In-Progress" value={stats.followUp.rakordir.inProgress} color="bg-amber-500/20 text-amber-300 border-amber-500/30" isLoading={loading} />
+                                <MonevStatBox label="Selesai" value={stats.followUp.rakordir.done} color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" isLoading={loading} />
+                            </div>
+                        </div>
+
                     </CardContent>
                 </Card>
             </div>
@@ -138,12 +178,12 @@ export function DashboardClient() {
                                 <Users className="h-5 w-5" /> Persentase Kehadiran Direksi
                             </CardTitle>
                             <CardDescription className="font-medium text-slate-500">
-                                Akumulasi kehadiran berdasarkan rapat yang telah selesai (Radir & Rakordir)
+                                Akumulasi kehadiran per direktur berdasarkan rapat yang telah selesai
                             </CardDescription>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="p-6 h-100">
+                <CardContent className="p-6 h-112.5">
                     {loading ? (
                         <div className="h-full w-full flex flex-col items-center justify-center gap-2">
                             <ArrowRight className="h-8 w-8 text-slate-300 animate-spin" />
@@ -153,19 +193,18 @@ export function DashboardClient() {
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
                                 data={stats.directorChartData}
-                                margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
-                                barSize={40}
+                                margin={{ top: 20, right: 30, left: 0, bottom: 60 }} // Bottom margin lebih besar untuk label miring
+                                barSize={45}
                             >
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis
                                     dataKey="name"
-                                    tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
                                     tickLine={false}
                                     axisLine={false}
                                     interval={0}
-                                    angle={-15} // Miringkan sedikit text axis x agar muat
+                                    angle={-25} // Miringkan label agar muat semua
                                     textAnchor="end"
-                                    height={60}
                                 />
                                 <YAxis
                                     tick={{ fill: '#64748b', fontSize: 11 }}
@@ -212,12 +251,21 @@ export function DashboardClient() {
 
 function StatBox({ label, value, icon: Icon, color, isLoading }: any) {
     return (
-        <div className={cn("p-3 rounded-xl flex flex-col justify-between h-24 transition-all hover:scale-105 cursor-default shadow-sm border border-white/10", color)}>
+        <div className={cn("p-3 rounded-xl flex flex-col justify-between h-20 transition-all hover:scale-105 cursor-default shadow-sm border border-white/5", color)}>
             <div className="flex justify-between items-start">
-                <Icon className="h-5 w-5 opacity-80" />
-                {isLoading ? <div className="h-6 w-8 bg-current opacity-20 rounded animate-pulse"></div> : <span className="text-2xl font-black tracking-tight">{value}</span>}
+                <Icon className="h-4 w-4 opacity-70" />
+                {isLoading ? <div className="h-5 w-8 bg-current opacity-20 rounded animate-pulse"></div> : <span className="text-xl font-black tracking-tight">{value}</span>}
             </div>
-            <span className="text-[10px] font-bold uppercase opacity-80 leading-tight">{label}</span>
+            <span className="text-[9px] font-bold uppercase opacity-80 leading-tight">{label}</span>
+        </div>
+    )
+}
+
+function MonevStatBox({ label, value, color, isLoading }: any) {
+    return (
+        <div className={cn("px-3 py-2 rounded-lg flex items-center justify-between border h-10 transition-all hover:brightness-110 cursor-default", color)}>
+            <span className="text-[10px] font-bold uppercase opacity-90">{label}</span>
+            {isLoading ? <div className="h-4 w-6 bg-current opacity-20 rounded animate-pulse"></div> : <span className="text-sm font-black">{value}</span>}
         </div>
     )
 }

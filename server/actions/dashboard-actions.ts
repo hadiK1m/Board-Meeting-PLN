@@ -9,7 +9,6 @@ interface DashboardFilter {
     to: Date
 }
 
-// Mapping Nama Panjang di DB ke Nama Singkat untuk Chart
 const DIRECTORS_MAP: Record<string, string> = {
     "DIREKTUR UTAMA (DIRUT)": "DIRUT",
     "DIREKTUR KEUANGAN (DIR KEU)": "DIR KEU",
@@ -37,11 +36,14 @@ export async function getDashboardStats(filter: DashboardFilter) {
         const stats = {
             rakordir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
             radir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
-            // Data Per Direktur
+            // ✅ TAMBAHAN: Data Tindak Lanjut
+            followUp: {
+                radir: { inProgress: 0, done: 0 },
+                rakordir: { inProgress: 0, done: 0 }
+            },
             directorStats: {} as Record<string, { present: number, total: number, percentage: number }>
         }
 
-        // Inisialisasi Data Direktur (Agar urutannya tetap 11)
         Object.values(DIRECTORS_MAP).forEach(shortName => {
             stats.directorStats[shortName] = { present: 0, total: 0, percentage: 0 }
         })
@@ -49,33 +51,47 @@ export async function getDashboardStats(filter: DashboardFilter) {
         for (const item of data) {
             const type = item.meetingType === "RAKORDIR" ? "rakordir" : "radir"
 
-            // 1. Hitung Status
+            // 1. Hitung Status Agenda
             if (item.meetingStatus === "CANCELLED") stats[type].dibatalkan++
             else if (item.status === "RAPAT_SELESAI" || item.meetingStatus === "COMPLETED") {
                 stats[type].selesai++
 
-                // 2. Hitung Kehadiran Direktur (Hanya jika rapat selesai)
+                // 2. Hitung Kehadiran
                 if (item.attendanceData) {
                     try {
                         const attendance = typeof item.attendanceData === 'string'
                             ? JSON.parse(item.attendanceData)
                             : item.attendanceData
 
-                        // Loop setiap direktur di mapping
                         Object.keys(DIRECTORS_MAP).forEach(longName => {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const record = (attendance as any)[longName]
                             const shortName = DIRECTORS_MAP[longName]
-
                             if (record) {
-                                // Jika ada datanya di attendance, berarti diundang
                                 stats.directorStats[shortName].total++
-                                if (record.status === "Hadir") {
-                                    stats.directorStats[shortName].present++
-                                }
+                                if (record.status === "Hadir") stats.directorStats[shortName].present++
                             }
                         })
                     } catch (e) { console.error(e) }
+                }
+
+                // ✅ 3. Hitung Status Tindak Lanjut (Monev)
+                // Kita hitung per ITEM keputusan/arahan, bukan per agenda
+                if (item.meetingDecisions) {
+                    try {
+                        const decisions = Array.isArray(item.meetingDecisions)
+                            ? item.meetingDecisions
+                            : JSON.parse(item.meetingDecisions as string)
+
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        decisions.forEach((d: any) => {
+                            if (d.status === "DONE") {
+                                stats.followUp[type].done++
+                            } else {
+                                stats.followUp[type].inProgress++
+                            }
+                        })
+                    } catch (e) { console.error("Error parse decisions", e) }
                 }
 
             }
@@ -85,7 +101,6 @@ export async function getDashboardStats(filter: DashboardFilter) {
             stats[type].total++
         }
 
-        // 3. Hitung Persentase & Format Array untuk Chart
         const directorChartData = Object.entries(stats.directorStats).map(([name, val]) => {
             const percentage = val.total > 0 ? Math.round((val.present / val.total) * 100) : 0
             return {
@@ -93,7 +108,7 @@ export async function getDashboardStats(filter: DashboardFilter) {
                 percentage,
                 present: val.present,
                 total: val.total,
-                fill: percentage >= 80 ? "#10b981" : percentage >= 50 ? "#f59e0b" : "#ef4444" // Warna dinamis
+                fill: percentage >= 80 ? "#10b981" : percentage >= 50 ? "#f59e0b" : "#ef4444"
             }
         })
 

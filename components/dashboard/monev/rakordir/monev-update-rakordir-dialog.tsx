@@ -222,7 +222,7 @@ function ArahanItemCard({
                             </Badge>
                         ) : (
                             <Badge className="text-slate-500 border-slate-300 bg-white">
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" /> On Progress
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" /> In Progress
                             </Badge>
                         )}
                     </div>
@@ -305,7 +305,7 @@ function ArahanItemCard({
                                     <SelectContent>
                                         <SelectItem value="ON_PROGRESS">
                                             <div className="flex items-center gap-2 text-amber-600 font-bold">
-                                                <AlertCircle className="h-4 w-4" /> On Progress
+                                                <AlertCircle className="h-4 w-4" /> In Progress
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="DONE">

@@ -431,7 +431,7 @@ function StatusBadge({ status }: { status: string }) {
         )
     }
 
-    // Menangani status Sedang Berlangsung / On Progress
+    // Menangani status Sedang Berlangsung / In Progress
     if (status === "SEDANG_BERLANGSUNG" || status === "ON_PROGRESS") {
         return (
             <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
