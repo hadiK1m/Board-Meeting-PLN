@@ -2,16 +2,13 @@
 
 import React from "react"
 import {
-    FileText,
     CheckCircle2,
-    Circle,
     ChevronRight,
     LayoutList,
     Layers
 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { Agenda } from "@/db/schema/agendas"
 
