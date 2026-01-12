@@ -194,7 +194,6 @@ export function AttendanceAndLeadershipSection({
                                             >
                                                 <option value="Hadir">HADIR</option>
                                                 <option value="Tidak Hadir">TIDAK HADIR</option>
-                                                <option value="Kuasa">KUASA</option>
                                             </select>
                                         </div>
 
@@ -204,17 +203,6 @@ export function AttendanceAndLeadershipSection({
                                                 className="h-9 text-[10px] font-bold bg-white rounded-xl border-red-100"
                                                 value={data.reason || ""}
                                                 onChange={(e) => updateAttendanceField(name, "reason", e.target.value)}
-                                            />
-                                        )}
-
-                                        {data.status === "Kuasa" && (
-                                            <Select
-                                                isMulti
-                                                options={dirOptions.filter(o => o.value !== name)}
-                                                styles={customSelectStyles}
-                                                value={data.proxy}
-                                                onChange={(val: MultiValue<Option>) => updateAttendanceField(name, "proxy", val)}
-                                                placeholder="Pilih Penerima Kuasa..."
                                             />
                                         )}
                                     </div>

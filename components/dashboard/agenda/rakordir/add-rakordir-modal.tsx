@@ -160,38 +160,78 @@ export function AddRakordirModal() {
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setIsPending(true)
+
         const formData = new FormData(event.currentTarget)
 
-        // ✅ Penyesuaian Data Multi-Select dengan extractCode
-        formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "))
-        formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "))
-        formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
+        // ======================================================
+        // ✅ FIX UTAMA: Ambil tombol submit yang diklik
+        // ======================================================
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const submitter = (event.nativeEvent as any).submitter as HTMLButtonElement
+
+        if (submitter && submitter.name === "actionType") {
+            formData.append("actionType", submitter.value)
+        }
+
+        // ======================================================
+        // Penyesuaian Data Multi-Select
+        // ======================================================
+        formData.set(
+            "director",
+            selectedDir.map(item => extractCode(item.value)).join(", ")
+        )
+        formData.set(
+            "initiator",
+            selectedPemrakarsa.map(item => extractCode(item.value)).join(", ")
+        )
+        formData.set(
+            "support",
+            selectedSupport.map(item => extractCode(item.value)).join(", ")
+        )
         formData.set("priority", prioritas)
 
-        // ✅ TAMBAHKAN isComplete agar server bisa membacanya dengan benar
+        // ======================================================
+        // Informasi kelengkapan (untuk validasi server / audit)
+        // ======================================================
         formData.set("isComplete", String(isComplete))
 
-        // Status tetap dikirim (untuk fallback jika server tidak pakai isComplete)
-        formData.set("status", isComplete ? "DAPAT_DILANJUTKAN" : "DRAFT")
+        // ❌ JANGAN KIRIM STATUS DARI CLIENT
+        // ❌ BIARKAN SERVER ACTION MENENTUKAN STATUS
+        // formData.set("status", ...)
 
         formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
         formData.set("meetingType", "RAKORDIR")
 
         try {
             const result = await createRakordirAction(formData)
+
             if (result.success) {
                 toast.custom((t) => (
                     <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg min-w-87.5 animate-in slide-in-from-bottom-5">
                         <div className="shrink-0">
-                            <Image src="/logo-pln.png" alt="PLN" width={40} height={40} className="object-contain" />
+                            <Image
+                                src="/logo-pln.png"
+                                alt="PLN"
+                                width={40}
+                                height={40}
+                                className="object-contain"
+                            />
                         </div>
                         <div className="flex-1">
-                            <h4 className="text-sm font-bold text-[#125d72]">Data Berhasil Disimpan</h4>
+                            <h4 className="text-sm font-bold text-[#125d72]">
+                                Data Berhasil Disimpan
+                            </h4>
                             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
-                                Status: {isComplete ? "Siap Risalah (Dapat Dilanjutkan)" : "Draft"}
+                                Status:&nbsp;
+                                {submitter?.value === "submit"
+                                    ? "Siap Risalah (Dapat Dilanjutkan)"
+                                    : "Draft"}
                             </p>
                         </div>
-                        <button onClick={() => toast.dismiss(t)} className="text-slate-300 hover:text-red-500">
+                        <button
+                            onClick={() => toast.dismiss(t)}
+                            className="text-slate-300 hover:text-red-500"
+                        >
                             <X className="h-4 w-4" />
                         </button>
                     </div>
@@ -401,20 +441,61 @@ export function AddRakordirModal() {
                     </ScrollArea>
 
                     <DialogFooter className="p-6 bg-[#f8fafc] border-t shrink-0 flex items-center justify-end gap-3">
-                        <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending} className="font-bold text-slate-400 uppercase text-xs hover:bg-slate-100">Batal</Button>
+                        {/* 1. Tombol Batal */}
                         <Button
-                            type="submit"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setOpen(false)}
                             disabled={isPending}
-                            className={cn("h-12 px-10 font-black uppercase tracking-widest shadow-xl transition-all min-w-64 rounded-xl", isComplete ? 'bg-[#125d72] hover:bg-[#0e4b5d]' : 'bg-[#14a2ba] hover:bg-[#118a9e]', "text-white")}
+                            className="font-bold text-slate-400 uppercase text-xs hover:bg-slate-100 h-12 px-6 rounded-xl"
                         >
-                            {isPending ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memproses...</>
-                            ) : isComplete ? (
-                                <><Send className="mr-2 h-4 w-4" /> Lanjutkan Rapat</>
-                            ) : (
-                                <><FileText className="mr-2 h-4 w-4" /> Simpan Sebagai Draft</>
-                            )}
+                            Batal
                         </Button>
+
+                        {/* LOGIKA KONDISIONAL */}
+                        {!isComplete ? (
+                            // KONDISI A: Data Belum Lengkap -> Muncul Tombol Simpan Draft (Warna Biru Muda)
+                            <Button
+                                type="submit"
+                                name="actionType" // ✅ Kunci untuk Server Action
+                                value="draft"     // ✅ Value = draft
+                                disabled={isPending}
+                                className="h-12 px-8 font-bold uppercase tracking-widest shadow-lg transition-all min-w-56 rounded-xl bg-[#14a2ba] hover:bg-[#118a9e] text-white"
+                            >
+                                {isPending ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        <span>Menyimpan...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        <span>Simpan Draft</span>
+                                    </>
+                                )}
+                            </Button>
+                        ) : (
+                            // KONDISI B: Data Sudah Lengkap -> Muncul Tombol Lanjutkan (Warna Teal Gelap)
+                            <Button
+                                type="submit"
+                                name="actionType" // ✅ Kunci untuk Server Action
+                                value="submit"    // ✅ Value = submit (Dapat Dilanjutkan)
+                                disabled={isPending}
+                                className="h-12 px-10 font-black uppercase tracking-widest shadow-xl transition-all min-w-64 rounded-xl bg-[#125d72] hover:bg-[#0e4b5d] text-white"
+                            >
+                                {isPending ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        <span>Memproses...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="mr-2 h-4 w-4" />
+                                        <span>Lanjutkan Rapat</span>
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>
