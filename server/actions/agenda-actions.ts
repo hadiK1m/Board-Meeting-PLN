@@ -7,11 +7,8 @@ import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq, inArray } from "drizzle-orm"
 import { z } from "zod"
-// [SECURE] Import schema validasi agar konsisten antara Client & Server
-import { agendaFormSchema } from "@/lib/validations/agenda"
 
-// --- HELPER: AUTH GUARD ---
-// Fungsi ini memastikan hanya user yang login yang bisa memanggil action
+// [SECURE] HELPER: AUTH GUARD
 async function assertAuthenticated() {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -28,7 +25,7 @@ async function assertAuthenticated() {
 export async function getSignedFileUrl(path: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null; // [SECURE] Sudah aman (existing)
+    if (!user) return null;
 
     const { data, error } = await supabase.storage
         .from('agenda-attachments')
@@ -43,12 +40,9 @@ export async function getSignedFileUrl(path: string) {
  */
 export async function deleteBulkAgendasAction(ids: string[]) {
     try {
-        // [SECURE] 1. Cek Auth
         await assertAuthenticated()
-
         const supabase = await createClient()
 
-        // [SECURE] 2. Pastikan IDs valid
         if (!ids || ids.length === 0) throw new Error("Tidak ada data yang dipilih.")
 
         const dataAgendas = await db.select().from(agendas).where(inArray(agendas.id, ids))
@@ -62,13 +56,13 @@ export async function deleteBulkAgendasAction(ids: string[]) {
 
         dataAgendas.forEach(agenda => {
             FILE_FIELDS.forEach(field => {
-                // @ts-ignore - Dynamic access
-                const path = agenda[field]
+                // [FIX TS-7053] Casting agenda ke 'any' atau 'Record<string, any>' 
+                // agar bisa diakses dengan string index secara dinamis
+                const path = (agenda as Record<string, any>)[field]
                 if (typeof path === 'string' && path) filesToDelete.push(path)
             })
 
             if (agenda.supportingDocuments) {
-                // [FIX] Validasi parsing JSON
                 try {
                     const extra = Array.isArray(agenda.supportingDocuments)
                         ? agenda.supportingDocuments
@@ -102,7 +96,7 @@ export async function deleteBulkAgendasAction(ids: string[]) {
 }
 
 /**
- * Batalkan Agenda dengan Alasan (Universal).
+ * Batalkan Agenda dengan Alasan.
  */
 const cancelSchema = z.object({
     id: z.string().uuid(),
@@ -111,9 +105,7 @@ const cancelSchema = z.object({
 
 export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     try {
-        // [SECURE] Cek Auth
         await assertAuthenticated()
-
         const validated = cancelSchema.parse(data);
 
         await db.update(agendas).set({
@@ -136,10 +128,7 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
  */
 export async function resumeAgendaAction(id: string) {
     try {
-        // [SECURE] Cek Auth
         await assertAuthenticated()
-
-        // Validasi UUID sederhana untuk 'id'
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
             throw new Error("ID Agenda tidak valid.")
         }
@@ -160,19 +149,24 @@ export async function resumeAgendaAction(id: string) {
 }
 
 /**
- * CREATE AGENDA ACTION (BARU)
+ * CREATE AGENDA ACTION
  */
-// [SECURE] Schema parsial untuk create action (karena beberapa field mungkin dihandle berbeda di form data)
+// [SECURE] Schema validasi Server Side
+// [FIX ESLint] Schema ini sekarang digunakan di bawah
 const createAgendaServerSchema = z.object({
-    title: z.string().min(5),
-    // Pastikan enum match dengan database schema
-    urgency: z.enum(['Biasa', 'Segera', 'Sangat Segera']).optional(),
-    priority: z.enum(['Low', 'Medium', 'High']).optional(),
-    deadline: z.string().optional(), // Akan diparse ke Date
+    title: z.string().min(5, "Judul minimal 5 karakter"),
+    // Transform string kosong menjadi null/undefined agar sesuai dengan database optional
+    urgency: z.enum(['Biasa', 'Segera', 'Sangat Segera']).optional().or(z.literal('')),
+    priority: z.enum(['Low', 'Medium', 'High']).optional().or(z.literal('')),
+    deadline: z.string().optional().or(z.literal('')),
     director: z.string().optional(),
     initiator: z.string().optional(),
+    // Pastikan enum ini match persis dengan di DB
     meetingType: z.enum(["RADIR", "RAKORDIR", "KEPDIR_SIRKULER", "GRC"]),
-    // ...tambahkan field lain sesuai kebutuhan
+    support: z.string().optional(),
+    contactPerson: z.string().optional(),
+    position: z.string().optional(),
+    phone: z.string().optional(),
 })
 
 export async function createAgendaAction(formData: FormData) {
@@ -185,47 +179,56 @@ export async function createAgendaAction(formData: FormData) {
         const initialStatus = actionType === "draft" ? "DRAFT" : "DIUSULKAN"
 
         // [SECURE] 3. Validasi Data menggunakan Zod
-        // Kita construct object dari FormData agar bisa divalidasi
+        // [FIX TS-2769] Kita ekstrak data dari formData dan casting ke string agar Zod bisa memprosesnya
         const rawData = {
-            title: formData.get("title"),
-            urgency: formData.get("urgency"),
-            priority: formData.get("priority"),
-            deadline: formData.get("deadline"),
-            director: formData.get("director"),
-            initiator: formData.get("initiator"),
-            meetingType: formData.get("meetingType"),
+            title: formData.get("title")?.toString(),
+            urgency: formData.get("urgency")?.toString() || undefined,
+            priority: formData.get("priority")?.toString() || undefined,
+            deadline: formData.get("deadline")?.toString() || undefined,
+            director: formData.get("director")?.toString(),
+            initiator: formData.get("initiator")?.toString(),
+            meetingType: formData.get("meetingType")?.toString(),
+            support: formData.get("support")?.toString(),
+            contactPerson: formData.get("contactPerson")?.toString(),
+            position: formData.get("position")?.toString(),
+            phone: formData.get("phone")?.toString(),
         }
 
-        // Parse dengan Zod (safeParse agar tidak throw error jelek)
-        // Note: Anda perlu menyesuaikan schema di atas jika field di DB berbeda
-        // Untuk sekarang saya gunakan validasi manual minimal untuk field kritis
-        if (!rawData.title || (rawData.title as string).length < 5) {
-            throw new Error("Judul minimal 5 karakter")
+        // [FIX ESLint] Menggunakan schema yang sudah didefinisikan
+        const validatedFields = createAgendaServerSchema.safeParse(rawData)
+
+        if (!validatedFields.success) {
+            // Return error pertama yang ditemukan
+            const errorMsg = validatedFields.error.issues[0].message
+            throw new Error(errorMsg)
         }
 
-        const deadline = rawData.deadline ? new Date(rawData.deadline as string) : null
+        const data = validatedFields.data
+
+        // Konversi deadline string ke Date object jika ada
+        const deadlineDate = data.deadline ? new Date(data.deadline) : null
 
         // 4. Simpan ke Database
+        // [FIX TS-2769] Karena sudah divalidasi Zod, tipe datanya aman untuk Drizzle
         await db.insert(agendas).values({
-            title: rawData.title as string,
-            urgency: rawData.urgency as any, // Idealnya gunakan validatedData.urgency
-            deadline: deadline,
-            priority: rawData.priority as any,
-            director: rawData.director as string,
-            initiator: rawData.initiator as string,
+            title: data.title,
+            // Cast ke 'any' aman di sini karena Zod sudah memastikan value-nya valid sesuai Enum
+            urgency: (data.urgency as any) || null,
+            priority: (data.priority as any) || null,
+            deadline: deadlineDate,
+            director: data.director || null,
+            initiator: data.initiator || null,
+            meetingType: data.meetingType as any, // "RADIR" | "RAKORDIR" | ...
 
-            // Field tambahan dari form (pastikan sanitasi jika perlu)
-            support: formData.get("support") as string,
-            contactPerson: formData.get("contactPerson") as string,
-            position: formData.get("position") as string,
-            phone: formData.get("phone") as string,
+            support: data.support || null,
+            contactPerson: data.contactPerson || null,
+            position: data.position || null,
+            phone: data.phone || null,
 
             status: initialStatus,
-            // @ts-ignore - Pastikan tipe meetingType sesuai enum DB
-            meetingType: rawData.meetingType,
 
             // Audit Trail
-            createdById: user.id, // [SECURE] Simpan siapa yang membuat data!
+            createdById: user.id,
             createdAt: new Date(),
             updatedAt: new Date(),
         })

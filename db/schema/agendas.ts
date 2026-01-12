@@ -1,4 +1,5 @@
 import { uuid, text, varchar, timestamp, date, time, pgTable, jsonb } from "drizzle-orm/pg-core";
+import { users } from "./users";
 
 export const agendas = pgTable("agendas", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -75,6 +76,8 @@ export const agendas = pgTable("agendas", {
 
     risalahTtd: text("risalah_ttd"),
     monevStatus: text("monev_status").default("ON_PROGRESS"),
+
+    createdById: uuid("created_by_id").references(() => users.id),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
