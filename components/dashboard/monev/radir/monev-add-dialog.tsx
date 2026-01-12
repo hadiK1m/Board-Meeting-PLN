@@ -63,7 +63,7 @@ export function MonevAddDialog({ open, onOpenChange }: MonevAddDialogProps) {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="output">Target Output</Label>
+                            <Label htmlFor="output">Output</Label>
                             <Input id="output" name="output" placeholder="Contoh: Dokumen SK" />
                         </div>
                         <div className="space-y-2">

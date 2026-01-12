@@ -1,17 +1,17 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use server'
 
 import { db } from '@/db'
 import { users, loginLogs } from '@/db/schema'
 import { eq, ilike } from 'drizzle-orm'
-import { createSession, deleteSession } from '@/lib/session' // ✅ Added deleteSession
+import { createSession, deleteSession } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import { authenticator } from 'otplib'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import { z } from 'zod'
+// [FIX] Gunakan schema terpusat agar konsisten
+import { loginSchema } from '@/lib/validations/auth'
 
-// --- TYPES ---
-// ✅ Definisikan tipe untuk state form agar tidak perlu pakai 'any'
 type FormState = {
     error?: string | null
     message?: string | null
@@ -19,15 +19,10 @@ type FormState = {
     userId?: string
 } | null
 
-// --- SCHEMAS ---
-const loginSchema = z.object({
-    email: z.string().email({ message: "Format email tidak valid." }),
-    password: z.string().min(1, { message: "Kata sandi wajib diisi." }),
-})
-
 // --- HELPER: RECORD LOG ---
 async function recordLogin(userId: string) {
     const headersList = await headers()
+    // [NOTE] Pastikan server Anda (Vercel/Nginx) menimpa header ini dari upstream yang terpercaya.
     const ipAddress = headersList.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1'
     const userAgent = headersList.get('user-agent') || 'unknown'
 
@@ -39,26 +34,44 @@ async function recordLogin(userId: string) {
             timestamp: new Date()
         })
     } catch (error) {
-        console.error("Gagal mencatat log login:", error)
+        // Jangan log error detail database ke console production untuk menghindari kebocoran struktur
+        console.error("Gagal mencatat log login")
     }
 }
 
 // --- 1. LOGIN ACTION ---
 export async function loginAction(prevState: FormState, formData: FormData) {
-    const validatedFields = loginSchema.safeParse({
+    // [FIX] Mengambil data mentah untuk validasi
+    const rawData = {
         email: formData.get('email'),
         password: formData.get('password'),
-    })
+    }
+
+    const validatedFields = loginSchema.safeParse(rawData)
 
     if (!validatedFields.success) {
-        return { error: validatedFields.error.flatten().fieldErrors.email?.[0] || "Data tidak valid." }
+        // [SECURE] Jangan beritahu field mana yang salah secara spesifik jika itu password/email sensitif
+        return { error: "Format input tidak valid." }
     }
 
     const { email, password } = validatedFields.data
     const supabase = await createClient()
 
     try {
-        // A. Cek User di DB Lokal (Drizzle)
+        // [SECURE FLOW CHANGE] 
+        // 1. Login ke Supabase terlebih dahulu.
+        // Ini mencegah attacker mengetahui apakah email ada di DB lokal atau tidak (User Enumeration).
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        })
+
+        if (authError || !authData.user) {
+            // [SECURE] Pesan error GENERIC. Jangan bedakan antara email salah atau password salah.
+            return { error: "Email atau kata sandi tidak valid." }
+        }
+
+        // 2. Setelah password valid di Supabase, baru cek otorisasi di DB Lokal
         const userResult = await db.select()
             .from(users)
             .where(ilike(users.email, email))
@@ -67,17 +80,10 @@ export async function loginAction(prevState: FormState, formData: FormData) {
         const userProfile = userResult[0]
 
         if (!userProfile) {
-            return { error: "Akses Ditolak. Email tidak terdaftar di sistem." }
-        }
-
-        // B. Login ke Supabase
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        })
-
-        if (authError || !authData.user) {
-            return { error: "Email atau Password salah." }
+            // Kasus langka: User ada di Auth Supabase tapi tidak ada di DB User Profile.
+            // Tetap gunakan pesan error yang agak samar atau arahkan ke support.
+            await supabase.auth.signOut() // Force logout jika data tidak konsisten
+            return { error: "Akun tidak memiliki akses ke sistem ini." }
         }
 
         // C. Cek 2FA
@@ -94,8 +100,8 @@ export async function loginAction(prevState: FormState, formData: FormData) {
         await createSession(userProfile.id, userProfile.role)
 
     } catch (error) {
-        console.error('Login Error:', error)
-        return { error: "Terjadi kesalahan server." }
+        console.error('Login Error (Internal):', error)
+        return { error: "Terjadi kesalahan pada server." }
     }
 
     redirect('/dashboard')
@@ -104,7 +110,7 @@ export async function loginAction(prevState: FormState, formData: FormData) {
 // --- 2. VERIFY 2FA ACTION ---
 export async function verifyTwoFactorAction(userId: string, token: string) {
     if (!token || token.length !== 6) {
-        return { error: "Format kode OTP harus 6 digit." }
+        return { error: "Format kode OTP tidak valid." }
     }
 
     try {
@@ -115,9 +121,9 @@ export async function verifyTwoFactorAction(userId: string, token: string) {
 
         const user = userResult[0]
 
-        if (!user) return { error: "User tidak ditemukan." }
+        // [SECURE] Jika user tidak ditemukan saat verify step, jangan beri info detail
+        if (!user) return { error: "Verifikasi gagal." }
 
-        // Verifikasi OTP
         const isValid = user.twoFactorSecret && authenticator.verify({
             token,
             secret: user.twoFactorSecret
@@ -127,7 +133,6 @@ export async function verifyTwoFactorAction(userId: string, token: string) {
             return { error: "Kode OTP tidak valid atau kedaluwarsa." }
         }
 
-        // Sukses
         await recordLogin(user.id)
         await createSession(user.id, user.role)
 
@@ -142,13 +147,8 @@ export async function verifyTwoFactorAction(userId: string, token: string) {
 // --- 3. SIGNOUT ACTION ---
 export async function signOutAction() {
     const supabase = await createClient()
-
-    // 1. Logout dari Supabase
     await supabase.auth.signOut()
-
-    // 2. ✅ Hapus Session Cookie Custom (PENTING)
     await deleteSession()
-
     redirect("/login")
 }
 
@@ -163,7 +163,7 @@ export async function loginWithGoogleAction() {
     })
 
     if (error) {
-        return { error: error.message }
+        return { error: "Gagal menghubungkan ke Google." }
     }
 
     if (data.url) {

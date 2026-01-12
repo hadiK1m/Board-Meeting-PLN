@@ -219,7 +219,7 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                         <TableCell className="align-top py-4">
                                             {firstDecision ? (
                                                 <div className="space-y-3">
-                                                    <div><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><Target className="h-3 w-3" /> Target Output</div><p className="text-xs font-medium text-slate-800 leading-relaxed">{firstDecision.targetOutput || <span className="text-slate-400 italic">Belum diisi...</span>}</p></div>
+                                                    <div><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><Target className="h-3 w-3" /> Output</div><p className="text-xs font-medium text-slate-800 leading-relaxed">{firstDecision.targetOutput || <span className="text-slate-400 italic">Belum diisi...</span>}</p></div>
                                                     <div className="pl-2 border-l-2 border-slate-200"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><ArrowRight className="h-3 w-3" /> Progress Terkini</div><p className="text-xs text-slate-600">{firstDecision.currentProgress || <span className="text-slate-400 italic">Belum update...</span>}</p></div>
                                                     {decisionCount > 1 && <div className="text-[10px] text-slate-400 italic pt-1">+{decisionCount - 1} butir arahan lainnya...</div>}
                                                 </div>

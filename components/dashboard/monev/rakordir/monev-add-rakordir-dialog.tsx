@@ -46,7 +46,7 @@ export function MonevAddRakordirDialog({ open, onOpenChange }: MonevAddDialogPro
                         <Textarea id="judul" name="judul" placeholder="Masukan bunyi arahan..." required className="resize-none" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><Label htmlFor="output">Target Output</Label><Input id="output" name="output" placeholder="Contoh: Dokumen Laporan" /></div>
+                        <div className="space-y-2"><Label htmlFor="output">Output</Label><Input id="output" name="output" placeholder="Contoh: Dokumen Laporan" /></div>
                         <div className="space-y-2"><Label htmlFor="progress">Progress Terakhir</Label><Input id="progress" name="progress" placeholder="Contoh: Proses Draft" /></div>
                     </div>
                     <div className="space-y-2">

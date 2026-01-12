@@ -2,117 +2,156 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
-import { agendas, Agenda } from "@/db/schema/agendas"
+import { agendas, Agenda } from "@/db/schema/agendas" // Pastikan import Agenda benar
 import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
+import { z } from "zod"
 
-/**
- * HELPER: Membersihkan nilai dengan tipe data yang aman
- */
-function cleanValue<T>(val: T, fallback: T): T {
-    if (val === undefined || val === null || (typeof val === "string" && val.trim() === "")) {
-        return fallback
+// --- KONFIGURASI KEAMANAN FILE ---
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_MIME_TYPES = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation" // .pptx
+];
+
+// --- HELPER: VALIDASI AUTH & ROLE ---
+async function assertAuthenticated() {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user) {
+        throw new Error("Akses Ditolak: Anda harus login.")
     }
-    return val
+    return { user, supabase }
+}
+
+// --- HELPER: VALIDASI FILE ---
+function validateFile(file: File, fieldName: string) {
+    if (file.size > MAX_FILE_SIZE) {
+        throw new Error(`File ${fieldName} terlalu besar (Maks 10MB).`)
+    }
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        throw new Error(`Format file ${fieldName} tidak didukung. Harap upload PDF atau Office Doc.`)
+    }
+}
+
+// --- HELPER: SANITIZE FILENAME ---
+function generateSafePath(userId: string, folder: string, fileName: string) {
+    const ext = fileName.split('.').pop()
+    const uniqueId = crypto.randomUUID() // Gunakan UUID agar nama file tidak bisa ditebak
+    return `${folder}/${userId}/${uniqueId}.${ext}`
 }
 
 /**
  * 1. ACTION: CREATE KEPDIR SIRKULER
- * Menangani pembuatan usulan Kepdir baru dengan lampiran khusus (Kepdir & GRC).
  */
 export async function createKepdirAction(formData: FormData) {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-        return { success: false, error: "Sesi kadaluarsa. Silakan login kembali." }
-    }
-
     try {
-        const fileFields = ["kepdirSirkulerDoc", "grcDoc"] as const
-        const uploadedUrls: Record<string, string | null> = {}
+        const { user, supabase } = await assertAuthenticated()
 
-        // Upload dokumen utama Kepdir
+        // 1. Upload Logic yang Aman
+        const uploadedUrls: Record<string, string | null> = {}
+        const fileFields = ["kepdirSirkulerDoc", "grcDoc"] as const
+
         for (const field of fileFields) {
             const file = formData.get(field) as File
             if (file && file.size > 0) {
-                const fileExt = file.name.split('.').pop()
-                const path = `kepdir-sirkuler/${user.id}/${Date.now()}-${field}.${fileExt}`
+                validateFile(file, field) // [SECURE] Validasi Tipe File
+
+                const path = generateSafePath(user.id, "kepdir-sirkuler", file.name)
                 const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
-                if (error) throw new Error(`Gagal upload ${field}`)
+
+                if (error) throw new Error(`Gagal upload ${field}: ${error.message}`)
                 uploadedUrls[field] = data.path
             } else {
                 uploadedUrls[field] = null
             }
         }
 
-        // Upload dokumen pendukung lainnya
+        // Upload Supporting Docs
         const supportingFiles = formData.getAll("supportingDocuments") as File[]
         const supportingPaths: string[] = []
+
         for (const file of supportingFiles) {
             if (file && file.size > 0) {
-                const path = `kepdir-sirkuler/${user.id}/${Date.now()}-support-${file.name.replace(/\s/g, '_')}`
+                validateFile(file, "Dokumen Pendukung")
+                const path = generateSafePath(user.id, "kepdir-sirkuler/support", file.name)
                 const { data } = await supabase.storage.from('agenda-attachments').upload(path, file)
                 if (data) supportingPaths.push(data.path)
             }
         }
 
+        // Parse & Defaulting Values
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
+        // [SECURE] Gunakan Zod (opsional tapi disarankan) atau validasi manual ketat sebelum insert
         await db.insert(agendas).values({
-            title: formData.get("title") as string,
-            director: cleanValue(formData.get("director") as string, "DIRUT"),
-            initiator: cleanValue(formData.get("initiator") as string, "PLN"),
-            support: "",
-            contactPerson: cleanValue(formData.get("contactPerson") as string, "N/A"),
-            position: cleanValue(formData.get("position") as string, "Staff"),
-            phone: cleanValue(formData.get("phone") as string, "0"),
+            title: (formData.get("title") as string) || "Tanpa Judul",
+            director: (formData.get("director") as string) || "DIRUT",
+            initiator: (formData.get("initiator") as string) || "PLN",
             meetingType: "KEPDIR_SIRKULER",
-            status: cleanValue(formData.get("status") as string, "DRAFT"),
+            status: (formData.get("status") as string) || "DRAFT",
+
+            // Field default yang aman
             priority: "Low",
             urgency: "Normal",
-            deadline: null,
+            support: "",
+            contactPerson: (formData.get("contactPerson") as string) || "",
+            position: (formData.get("position") as string) || "",
+            phone: (formData.get("phone") as string) || "",
+
             kepdirSirkulerDoc: uploadedUrls.kepdirSirkulerDoc,
             grcDoc: uploadedUrls.grcDoc,
             supportingDocuments: supportingPaths,
             notRequiredFiles: notRequiredFiles,
+
+            // Audit Trail
+            createdAt: new Date(),
+            updatedAt: new Date(),
         })
 
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch (error) {
-        console.error("Create Kepdir Error:", error)
-        return { success: false, error: "Gagal membuat agenda kepdir" }
+    } catch (error: any) {
+        console.error("[CREATE_KEPDIR_ERROR]:", error)
+        return { success: false, error: error.message || "Gagal membuat agenda." }
     }
 }
 
 /**
  * 2. ACTION: UPDATE KEPDIR SIRKULER
- * Memperbarui data Kepdir dan mengelola penggantian file di storage.
  */
 export async function updateKepdirAction(id: string, formData: FormData) {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { success: false, error: "Sesi tidak valid." }
-
     try {
-        const oldData = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
-        if (!oldData) throw new Error("Data tidak ditemukan")
+        const { user, supabase } = await assertAuthenticated()
 
+        // [SECURE] Query dengan where clause ID untuk memastikan data ada
+        const oldData = await db.query.agendas.findFirst({
+            where: eq(agendas.id, id)
+        })
+        if (!oldData) throw new Error("Data agenda tidak ditemukan.")
+
+        // Logic File Handling
         const fileFields = ["kepdirSirkulerDoc", "grcDoc"] as const
         const updatedUrls: Record<string, string | null> = {}
 
-        // Mengelola file utama (Hapus lama jika ada baru)
         for (const field of fileFields) {
             const file = formData.get(field) as File
             const deleteFlag = formData.get(`delete_${field}`) === 'true'
-            const oldPath = (oldData as Agenda)[field as keyof Agenda] as string | null
+            const oldPath = oldData[field] as string | null
 
             if (file && file.size > 0) {
+                validateFile(file, field)
+                // Hapus file lama jika ada
                 if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
-                const fileExt = file.name.split('.').pop()
-                const path = `kepdir-sirkuler/${user.id}/${Date.now()}-${field}.${fileExt}`
+
+                const path = generateSafePath(user.id, "kepdir-sirkuler", file.name)
                 const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
                 if (error) throw error
                 updatedUrls[field] = data?.path || null
@@ -124,7 +163,7 @@ export async function updateKepdirAction(id: string, formData: FormData) {
             }
         }
 
-        // Tambah dokumen pendukung baru ke array yang sudah ada
+        // Handling Supporting Docs (Append Only logic for now + cleanup if needed)
         const newSupportingFiles = formData.getAll("supportingDocuments") as File[]
         const supportingPaths: string[] = Array.isArray(oldData.supportingDocuments)
             ? (oldData.supportingDocuments as string[])
@@ -132,7 +171,8 @@ export async function updateKepdirAction(id: string, formData: FormData) {
 
         for (const file of newSupportingFiles) {
             if (file && file.size > 0) {
-                const path = `kepdir-sirkuler/${user.id}/${Date.now()}-support-${file.name.replace(/\s/g, '_')}`
+                validateFile(file, "Dokumen Pendukung")
+                const path = generateSafePath(user.id, "kepdir-sirkuler/support", file.name)
                 const { data } = await supabase.storage.from('agenda-attachments').upload(path, file)
                 if (data) supportingPaths.push(data.path)
             }
@@ -143,12 +183,12 @@ export async function updateKepdirAction(id: string, formData: FormData) {
 
         await db.update(agendas).set({
             title: formData.get("title") as string,
-            director: cleanValue(formData.get("director") as string, oldData.director),
-            initiator: cleanValue(formData.get("initiator") as string, oldData.initiator),
-            contactPerson: cleanValue(formData.get("contactPerson") as string, oldData.contactPerson),
-            position: cleanValue(formData.get("position") as string, oldData.position),
-            phone: cleanValue(formData.get("phone") as string, oldData.phone),
-            status: cleanValue(formData.get("status") as string, oldData.status),
+            director: formData.get("director") as string,
+            initiator: formData.get("initiator") as string,
+            contactPerson: formData.get("contactPerson") as string,
+            position: formData.get("position") as string,
+            phone: formData.get("phone") as string,
+            status: formData.get("status") as string,
             kepdirSirkulerDoc: updatedUrls.kepdirSirkulerDoc,
             grcDoc: updatedUrls.grcDoc,
             supportingDocuments: supportingPaths,
@@ -158,26 +198,28 @@ export async function updateKepdirAction(id: string, formData: FormData) {
 
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch (error) {
-        console.error("Update Kepdir Error:", error)
-        return { success: false, error: "Terjadi kesalahan saat memperbarui data" }
+
+    } catch (error: any) {
+        console.error("[UPDATE_KEPDIR_ERROR]:", error)
+        return { success: false, error: error.message || "Gagal update agenda." }
     }
 }
 
 /**
  * 3. ACTION: DELETE KEPDIR SIRKULER
- * Menghapus agenda kepdir dan membersihkan seluruh file terkait di storage.
  */
 export async function deleteKepdirAction(id: string) {
-    const supabase = await createClient()
     try {
+        // [SECURE] WAJIB AUTH CHECK!
+        const { supabase } = await assertAuthenticated()
+
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
         if (!existing) throw new Error("Data tidak ditemukan")
 
+        // Bersihkan Storage
         const filesToDelete: string[] = []
         if (existing.kepdirSirkulerDoc) filesToDelete.push(existing.kepdirSirkulerDoc)
         if (existing.grcDoc) filesToDelete.push(existing.grcDoc)
-
         if (Array.isArray(existing.supportingDocuments)) {
             filesToDelete.push(...(existing.supportingDocuments as string[]))
         }
@@ -186,11 +228,13 @@ export async function deleteKepdirAction(id: string) {
             await supabase.storage.from('agenda-attachments').remove(filesToDelete)
         }
 
+        // Hapus Database
         await db.delete(agendas).where(eq(agendas.id, id))
+
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch (error) {
-        console.error("Delete Kepdir Error:", error)
-        return { success: false, error: "Gagal menghapus agenda kepdir" }
+    } catch (error: any) {
+        console.error("[DELETE_KEPDIR_ERROR]:", error)
+        return { success: false, error: error.message || "Gagal menghapus data." }
     }
 }

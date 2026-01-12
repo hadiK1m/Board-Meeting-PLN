@@ -1,59 +1,81 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { decrypt } from '@/lib/session'
-import { updateSession } from '@/lib/supabase/middleware' // Pastikan path ini sesuai dengan file supabase middleware Anda
+import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-    // 1. Update Session Supabase (Agar token refresh berjalan)
-    const response = await updateSession(request)
+    // 1. Jalankan Refresh Token Supabase
+    // Kita terima 'supabaseResponse' yang MUNGKIN berisi cookie baru.
+    const { supabaseResponse, user } = await updateSession(request)
 
-    // 2. Ambil Cookie Custom Session
+    // 2. Ambil Cookie Custom Session (untuk data tambahan seperti role/id)
     const cookie = request.cookies.get('session')?.value
     const session = await decrypt(cookie)
 
     // 3. Identifikasi Halaman
     const path = request.nextUrl.pathname
 
-    // Daftar halaman yang BOLEH diakses tanpa login (Public Routes)
     const isPublicRoute =
         path === '/login' ||
-        path.startsWith('/auth') || // Untuk callback google dsb
-        path === '/' // Landing page jika ada
+        path.startsWith('/auth') ||
+        path === '/'
 
-    // Daftar file statis yang harus diabaikan (Next.js internals)
     const isStaticFile =
         path.startsWith('/_next') ||
         path.startsWith('/static') ||
-        path.includes('.') // Mendeteksi file extension (.png, .svg, .ico)
+        path.includes('.')
 
-    // 4. LOGIKA PROTEKSI (The Gatekeeper)
+    // Jika file statis, langsung loloskan dengan response dari supabase (agar cookie tetap update)
+    if (isStaticFile) {
+        return supabaseResponse
+    }
 
-    // A. Jika bukan public route & bukan file statis & TIDAK ADA session -> TENDANG KE LOGIN
-    if (!isPublicRoute && !isStaticFile && !session?.userId) {
+    // --- 4. LOGIKA PROTEKSI TERPUSAT (The Gatekeeper) ---
+
+    // A. Proteksi Route Privat
+    // Syarat akses: Harus bukan public route AND (Harus ada User Supabase OR Harus ada Session Custom)
+    // [SECURE] Disarankan mewajibkan keduanya (User Supabase & Session Local) agar sinkron.
+    if (!isPublicRoute && (!user || !session?.userId)) {
+        // Buat URL redirect
         const loginUrl = new URL('/login', request.nextUrl)
-        // (Opsional) Simpan url tujuan agar setelah login bisa redirect balik
-        // loginUrl.searchParams.set('from', path) 
-        return NextResponse.redirect(loginUrl)
+
+        // Buat response redirect baru
+        const redirectResponse = NextResponse.redirect(loginUrl)
+
+        // [CRITICAL FIX] Salin cookie dari 'supabaseResponse' ke 'redirectResponse'
+        // Jika Supabase mencoba me-refresh token atau menghapus token, kita harus meneruskannya ke browser.
+        copyCookies(supabaseResponse, redirectResponse)
+
+        return redirectResponse
     }
 
-    // B. Jika user mengakses /login tapi SUDAH login -> LEMPAR KE DASHBOARD
-    if (path === '/login' && session?.userId) {
-        return NextResponse.redirect(new URL('/dashboard', request.nextUrl))
+    // B. Redirect User Login menjauh dari halaman Login
+    if (isPublicRoute && path !== '/' && user && session?.userId) {
+        const dashboardUrl = new URL('/dashboard', request.nextUrl)
+        const redirectResponse = NextResponse.redirect(dashboardUrl)
+
+        copyCookies(supabaseResponse, redirectResponse)
+
+        return redirectResponse
     }
 
-    // C. Lolos pemeriksaan
-    return response
+    // C. Jika lolos semua cek, kembalikan supabaseResponse yang asli
+    // (Ini penting karena response ini memegang set-cookie header jika ada refresh token)
+    return supabaseResponse
+}
+
+// --- HELPER: COPY COOKIES ---
+// Fungsi ini memastikan header Set-Cookie tidak hilang saat kita melakukan Redirect
+function copyCookies(sourceResponse: NextResponse, targetResponse: NextResponse) {
+    const setCookieHeader = sourceResponse.headers.get('set-cookie')
+    if (setCookieHeader) {
+        // Next.js mungkin menggabungkan multiple cookies dengan koma, atau split header
+        // Kita copy header 'set-cookie' mentah ke response baru
+        targetResponse.headers.set('set-cookie', setCookieHeader)
+    }
 }
 
 export const config = {
-    /*
-     * Matcher: Menangkap semua request path kecuali:
-     * 1. /api/ (API routes)
-     * 2. /_next/ (Next.js internals)
-     * 3. /_static (Inside /public)
-     * 4. /_vercel (Vercel internals)
-     * 5. File dengan ekstensi (e.g. favicon.ico, sitemap.xml)
-     */
     matcher: [
         '/((?!api|_next/static|_next/image|_vercel|.*\\..*).*)',
     ],

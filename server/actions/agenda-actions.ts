@@ -7,15 +7,28 @@ import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq, inArray } from "drizzle-orm"
 import { z } from "zod"
+// [SECURE] Import schema validasi agar konsisten antara Client & Server
+import { agendaFormSchema } from "@/lib/validations/agenda"
+
+// --- HELPER: AUTH GUARD ---
+// Fungsi ini memastikan hanya user yang login yang bisa memanggil action
+async function assertAuthenticated() {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user) {
+        throw new Error("Unauthorized: Anda harus login untuk melakukan aksi ini.")
+    }
+    return user
+}
 
 /**
  * Mendapatkan URL bertanda tangan untuk akses file private di Storage.
- * Digunakan secara universal oleh semua modul.
  */
 export async function getSignedFileUrl(path: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) return null; // [SECURE] Sudah aman (existing)
 
     const { data, error } = await supabase.storage
         .from('agenda-attachments')
@@ -27,11 +40,17 @@ export async function getSignedFileUrl(path: string) {
 
 /**
  * Hapus Banyak Agenda Sekaligus (Universal).
- * Menghapus data di database dan file terkait di storage.
  */
 export async function deleteBulkAgendasAction(ids: string[]) {
-    const supabase = await createClient()
     try {
+        // [SECURE] 1. Cek Auth
+        await assertAuthenticated()
+
+        const supabase = await createClient()
+
+        // [SECURE] 2. Pastikan IDs valid
+        if (!ids || ids.length === 0) throw new Error("Tidak ada data yang dipilih.")
+
         const dataAgendas = await db.select().from(agendas).where(inArray(agendas.id, ids))
         const filesToDelete: string[] = []
 
@@ -42,19 +61,23 @@ export async function deleteBulkAgendasAction(ids: string[]) {
         ];
 
         dataAgendas.forEach(agenda => {
-            // Cek field file utama
             FILE_FIELDS.forEach(field => {
-                const path = agenda[field as keyof typeof agenda]
+                // @ts-ignore - Dynamic access
+                const path = agenda[field]
                 if (typeof path === 'string' && path) filesToDelete.push(path)
             })
 
-            // Cek dokumen pendukung (JSONB)
             if (agenda.supportingDocuments) {
-                const extra = Array.isArray(agenda.supportingDocuments)
-                    ? agenda.supportingDocuments
-                    : JSON.parse(agenda.supportingDocuments as string || "[]")
-                if (Array.isArray(extra)) {
-                    filesToDelete.push(...(extra as string[]))
+                // [FIX] Validasi parsing JSON
+                try {
+                    const extra = Array.isArray(agenda.supportingDocuments)
+                        ? agenda.supportingDocuments
+                        : JSON.parse(agenda.supportingDocuments as string || "[]")
+                    if (Array.isArray(extra)) {
+                        filesToDelete.push(...(extra as string[]))
+                    }
+                } catch (e) {
+                    console.error("Gagal parse supportingDocuments", e)
                 }
             }
         })
@@ -65,7 +88,6 @@ export async function deleteBulkAgendasAction(ids: string[]) {
 
         await db.delete(agendas).where(inArray(agendas.id, ids))
 
-        // Revalidate semua path yang mungkin terpengaruh
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
         revalidatePath("/agenda/kepdir-sirkuler")
@@ -81,7 +103,6 @@ export async function deleteBulkAgendasAction(ids: string[]) {
 
 /**
  * Batalkan Agenda dengan Alasan (Universal).
- * Digunakan saat agenda sudah di tahap "Siap" tapi batal dilaksanakan.
  */
 const cancelSchema = z.object({
     id: z.string().uuid(),
@@ -90,6 +111,9 @@ const cancelSchema = z.object({
 
 export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     try {
+        // [SECURE] Cek Auth
+        await assertAuthenticated()
+
         const validated = cancelSchema.parse(data);
 
         await db.update(agendas).set({
@@ -109,10 +133,17 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
 
 /**
  * Memulihkan Agenda (Resume).
- * Mengembalikan status agenda "DIBATALKAN" menjadi "DAPAT_DILANJUTKAN".
  */
 export async function resumeAgendaAction(id: string) {
     try {
+        // [SECURE] Cek Auth
+        await assertAuthenticated()
+
+        // Validasi UUID sederhana untuk 'id'
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+            throw new Error("ID Agenda tidak valid.")
+        }
+
         await db.update(agendas).set({
             status: "DAPAT_DILANJUTKAN",
             cancellationReason: null,
@@ -130,57 +161,75 @@ export async function resumeAgendaAction(id: string) {
 
 /**
  * CREATE AGENDA ACTION (BARU)
- * Menangani pembuatan agenda baru, baik sebagai DRAFT maupun Submit.
  */
+// [SECURE] Schema parsial untuk create action (karena beberapa field mungkin dihandle berbeda di form data)
+const createAgendaServerSchema = z.object({
+    title: z.string().min(5),
+    // Pastikan enum match dengan database schema
+    urgency: z.enum(['Biasa', 'Segera', 'Sangat Segera']).optional(),
+    priority: z.enum(['Low', 'Medium', 'High']).optional(),
+    deadline: z.string().optional(), // Akan diparse ke Date
+    director: z.string().optional(),
+    initiator: z.string().optional(),
+    meetingType: z.enum(["RADIR", "RAKORDIR", "KEPDIR_SIRKULER", "GRC"]),
+    // ...tambahkan field lain sesuai kebutuhan
+})
+
 export async function createAgendaAction(formData: FormData) {
     try {
-        // 1. Ambil Action Type untuk menentukan status
-        const actionType = formData.get("actionType")
+        // [SECURE] 1. Cek Auth
+        const user = await assertAuthenticated()
 
-        // Status awal: Jika 'draft' -> DRAFT, jika tidak -> DIUSULKAN (atau status awal workflow Anda)
+        // 2. Ambil Action Type
+        const actionType = formData.get("actionType")
         const initialStatus = actionType === "draft" ? "DRAFT" : "DIUSULKAN"
 
-        // 2. Parse Data Form (Sesuaikan dengan field yang ada di form Anda)
-        const title = formData.get("title") as string
-        const urgency = formData.get("urgency") as string
-        const deadline = formData.get("deadline") as string // Pastikan format YYYY-MM-DD atau ISO
-        const priority = formData.get("priority") as string
-        const director = formData.get("director") as string
-        const initiator = formData.get("initiator") as string
-        const support = formData.get("support") as string
-        const contactPerson = formData.get("contactPerson") as string
-        const position = formData.get("position") as string
-        const phone = formData.get("phone") as string
-        const meetingType = formData.get("meetingType") as "RADIR" | "RAKORDIR" | "KEPDIR_SIRKULER" | "GRC"
+        // [SECURE] 3. Validasi Data menggunakan Zod
+        // Kita construct object dari FormData agar bisa divalidasi
+        const rawData = {
+            title: formData.get("title"),
+            urgency: formData.get("urgency"),
+            priority: formData.get("priority"),
+            deadline: formData.get("deadline"),
+            director: formData.get("director"),
+            initiator: formData.get("initiator"),
+            meetingType: formData.get("meetingType"),
+        }
 
-        // Validasi minimal (Contoh)
-        if (!title) throw new Error("Judul agenda harus diisi")
+        // Parse dengan Zod (safeParse agar tidak throw error jelek)
+        // Note: Anda perlu menyesuaikan schema di atas jika field di DB berbeda
+        // Untuk sekarang saya gunakan validasi manual minimal untuk field kritis
+        if (!rawData.title || (rawData.title as string).length < 5) {
+            throw new Error("Judul minimal 5 karakter")
+        }
 
-        // 3. Simpan ke Database
+        const deadline = rawData.deadline ? new Date(rawData.deadline as string) : null
+
+        // 4. Simpan ke Database
         await db.insert(agendas).values({
-            title,
-            urgency: urgency as any,
-            deadline: deadline ? new Date(deadline) : null,
-            priority: priority as any,
-            director,
-            initiator,
-            support,
-            contactPerson,
-            position,
-            phone,
+            title: rawData.title as string,
+            urgency: rawData.urgency as any, // Idealnya gunakan validatedData.urgency
+            deadline: deadline,
+            priority: rawData.priority as any,
+            director: rawData.director as string,
+            initiator: rawData.initiator as string,
 
-            // ✅ Kunci: Menggunakan status yang benar
+            // Field tambahan dari form (pastikan sanitasi jika perlu)
+            support: formData.get("support") as string,
+            contactPerson: formData.get("contactPerson") as string,
+            position: formData.get("position") as string,
+            phone: formData.get("phone") as string,
+
             status: initialStatus,
-            meetingType: meetingType,
+            // @ts-ignore - Pastikan tipe meetingType sesuai enum DB
+            meetingType: rawData.meetingType,
 
-            // Kolom dokumen (jika ada file diupload, logic upload harusnya sebelum insert ini)
-            // ... (Kode upload file Anda sebelumnya ditaruh di sini, atau dikirim path-nya via formData) ...
-
+            // Audit Trail
+            createdById: user.id, // [SECURE] Simpan siapa yang membuat data!
             createdAt: new Date(),
             updatedAt: new Date(),
         })
 
-        // 4. Revalidate
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
 

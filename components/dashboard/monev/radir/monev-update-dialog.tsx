@@ -213,9 +213,9 @@ function DecisionItemCard({
                         </div>
 
                         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-                            {/* Target Output */}
+                            {/* Output */}
                             <div className="space-y-2">
-                                <Label className="text-xs sm:text-sm font-bold uppercase text-slate-600 tracking-wide">Target Output</Label>
+                                <Label className="text-xs sm:text-sm font-bold uppercase text-slate-600 tracking-wide">Output</Label>
                                 <Input
                                     value={output}
                                     onChange={(e) => setOutput(e.target.value)}

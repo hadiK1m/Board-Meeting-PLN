@@ -230,7 +230,7 @@ function ArahanItemCard({
                     <form onSubmit={handleSubmit} className="p-6 bg-white space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label className="text-xs font-bold text-[#125d72] uppercase tracking-wide">Target Output</Label>
+                                <Label className="text-xs font-bold text-[#125d72] uppercase tracking-wide">Output</Label>
                                 <Input
                                     value={output}
                                     onChange={(e) => setOutput(e.target.value)}

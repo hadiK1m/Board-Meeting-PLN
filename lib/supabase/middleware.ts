@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+    // 1. Buat response awal. Ini akan menampung cookie baru jika token di-refresh.
     let supabaseResponse = NextResponse.next({
         request,
     })
@@ -15,9 +16,11 @@ export async function updateSession(request: NextRequest) {
                     return request.cookies.getAll()
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, }) =>
+                    // Update cookie di request (untuk diproses server sekarang)
+                    cookiesToSet.forEach(({ name, value }) =>
                         request.cookies.set(name, value)
                     )
+                    // Update cookie di response (untuk dikirim balik ke browser)
                     supabaseResponse = NextResponse.next({
                         request,
                     })
@@ -29,25 +32,14 @@ export async function updateSession(request: NextRequest) {
         }
     )
 
-    // IMPORTANT: Do not remove auth.getUser()
+    // 2. Ambil user untuk memastikan token valid & di-refresh jika perlu
     const {
         data: { user },
     } = await supabase.auth.getUser()
 
-    // STRICT RULES
-    // 1. Jika tidak login & mencoba akses dashboard -> lempar ke login
-    if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        return NextResponse.redirect(url)
-    }
+    // [SECURE] Hapus logika redirect dari sini. 
+    // Kita hanya mengembalikan user dan response yang sudah membawa cookie baru.
+    // Biarkan middleware.ts yang mengatur routing.
 
-    // 2. Jika sudah login & mencoba akses auth page -> lempar ke dashboard
-    if (user && request.nextUrl.pathname.startsWith('/login')) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/dashboard'
-        return NextResponse.redirect(url)
-    }
-
-    return supabaseResponse
+    return { supabaseResponse, user }
 }

@@ -364,7 +364,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                                                         </div>
                                                         <div>
                                                             <div className="font-medium text-slate-600 uppercase tracking-wide text-[9px] mb-0.5">
-                                                                Target Output
+                                                                Output
                                                             </div>
                                                             <p className="text-slate-700 leading-relaxed line-clamp-2">
                                                                 {firstDecision.targetOutput || <span className="text-slate-400 italic">Belum diisi</span>}
