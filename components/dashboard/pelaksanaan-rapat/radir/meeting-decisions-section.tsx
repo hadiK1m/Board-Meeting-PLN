@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/dashboard/pelaksanaan-rapat/radir/meeting-decisions-section.tsx
 "use client"
 

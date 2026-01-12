@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // app/(dashboard)/pelaksanaan-rapat/rakordir/live/page.tsx
 
 import { db } from "@/db"

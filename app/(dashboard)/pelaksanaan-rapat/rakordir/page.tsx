@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
 import { desc, eq, and, isNotNull, isNull } from "drizzle-orm";

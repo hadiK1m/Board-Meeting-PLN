@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -7,11 +9,8 @@ import {
     Save,
     Loader2,
     ChevronRight,
-    FileText,
     CheckCircle2,
     ArrowLeft,
-    Clock,
-    LayoutGrid
 } from "lucide-react"
 
 // UI Components

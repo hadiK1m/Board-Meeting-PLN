@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React from "react"
@@ -195,7 +196,7 @@ export function ArahanDireksiSection({
                                 <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-100 rounded-[32px] bg-slate-50/30">
                                     <AlertCircle className="h-10 w-10 text-slate-200 mb-3" />
                                     <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic text-center">
-                                        Belum ada butir arahan.<br />Klik tombol "Tambah Poin" untuk memulai.
+                                        Belum ada butir arahan.<br />Klik tombol &quot;Tambah Poin&quot; untuk memulai.
                                     </p>
                                 </div>
                             ) : (

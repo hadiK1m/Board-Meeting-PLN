@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -73,25 +73,19 @@ export function BulkMeetingClient({
     const router = useRouter()
     const [activeAgendaId, setActiveAgendaId] = useState<string>(agendas[0]?.id || "")
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [risalahGroupId, setRisalahGroupId] = useState<string | null>(null)
 
     const activeAgenda = agendas.find((a) => a.id === activeAgendaId) || agendas[0]
-
-    useEffect(() => {
-        const savedGroupId = localStorage.getItem("lastRisalahGroupId")
-        if (savedGroupId) setRisalahGroupId(savedGroupId)
-    }, [])
 
     // ── PERBAIKAN GLOBAL STATE: DEFAULT HADIR ──
     const [globalDraft, setGlobalDraft] = useState<GlobalDraft>(() => {
         // Cek apakah data dari database sudah ada
-        const existingAttendance = agendas[0]?.attendanceData as Record<string, AttendanceRecord>;
+        const existingAttendance = agendas[0]?.attendanceData as Record<string, AttendanceRecord> | undefined
 
         // Jika data attendance di DB kosong/null, buat default HADIR untuk SEMUA direktur
         const defaultAttendance = DIREKTURE_PEMRAKARSA.reduce((acc, name) => ({
             ...acc,
             [name]: { status: "Hadir", reason: "", proxy: [] }
-        }), {});
+        }), {} as Record<string, AttendanceRecord>)
 
         return {
             startTime: agendas[0]?.startTime || "",
@@ -147,7 +141,13 @@ export function BulkMeetingClient({
     ) => {
         setGlobalDraft((prev) => {
             const currentValue = prev[field]
-            const newValue = typeof value === "function" ? (value as Function)(currentValue) : value
+            let newValue: GlobalDraft[K]
+            if (typeof value === "function") {
+                const fn = value as (p: GlobalDraft[K]) => GlobalDraft[K]
+                newValue = fn(currentValue)
+            } else {
+                newValue = value as GlobalDraft[K]
+            }
             return { ...prev, [field]: newValue }
         })
     }
@@ -163,7 +163,13 @@ export function BulkMeetingClient({
                 meetingDecisions: [],
                 dissentingOpinion: "",
             }
-            const newValue = typeof value === "function" ? (value as Function)(current[field]) : value
+            let newValue: AgendaSpecificDraft[K]
+            if (typeof value === "function") {
+                const fn = value as (p: AgendaSpecificDraft[K]) => AgendaSpecificDraft[K]
+                newValue = fn(current[field])
+            } else {
+                newValue = value as AgendaSpecificDraft[K]
+            }
             return {
                 ...prev,
                 [activeAgendaId]: { ...current, [field]: newValue },
@@ -179,7 +185,6 @@ export function BulkMeetingClient({
                 groupId = uuidv4()
                 localStorage.setItem("lastRisalahGroupId", groupId)
             }
-            setRisalahGroupId(groupId)
 
             const savePromises = agendas.map((agenda) => {
                 const draft = specificDrafts[agenda.id];
@@ -214,7 +219,8 @@ export function BulkMeetingClient({
             } else {
                 toast.error("Gagal menyimpan beberapa agenda.");
             }
-        } catch (error) {
+        } catch (err: unknown) {
+            console.error(err)
             toast.error("Terjadi kesalahan sistem.");
         } finally {
             setIsSubmitting(false)
@@ -243,7 +249,8 @@ export function BulkMeetingClient({
             } else {
                 toast.error(result.error || "Gagal export.");
             }
-        } catch (error) {
+        } catch (err: unknown) {
+            console.error(err)
             toast.error("Kesalahan sistem saat export.");
         } finally {
             setIsSubmitting(false);
