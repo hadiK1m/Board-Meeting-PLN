@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
@@ -124,5 +125,73 @@ export async function resumeAgendaAction(id: string) {
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Gagal memulihkan agenda.";
         return { success: false, error: errorMessage };
+    }
+}
+
+/**
+ * CREATE AGENDA ACTION (BARU)
+ * Menangani pembuatan agenda baru, baik sebagai DRAFT maupun Submit.
+ */
+export async function createAgendaAction(formData: FormData) {
+    try {
+        // 1. Ambil Action Type untuk menentukan status
+        const actionType = formData.get("actionType")
+
+        // Status awal: Jika 'draft' -> DRAFT, jika tidak -> DIUSULKAN (atau status awal workflow Anda)
+        const initialStatus = actionType === "draft" ? "DRAFT" : "DIUSULKAN"
+
+        // 2. Parse Data Form (Sesuaikan dengan field yang ada di form Anda)
+        const title = formData.get("title") as string
+        const urgency = formData.get("urgency") as string
+        const deadline = formData.get("deadline") as string // Pastikan format YYYY-MM-DD atau ISO
+        const priority = formData.get("priority") as string
+        const director = formData.get("director") as string
+        const initiator = formData.get("initiator") as string
+        const support = formData.get("support") as string
+        const contactPerson = formData.get("contactPerson") as string
+        const position = formData.get("position") as string
+        const phone = formData.get("phone") as string
+        const meetingType = formData.get("meetingType") as "RADIR" | "RAKORDIR" | "KEPDIR_SIRKULER" | "GRC"
+
+        // Validasi minimal (Contoh)
+        if (!title) throw new Error("Judul agenda harus diisi")
+
+        // 3. Simpan ke Database
+        await db.insert(agendas).values({
+            title,
+            urgency: urgency as any,
+            deadline: deadline ? new Date(deadline) : null,
+            priority: priority as any,
+            director,
+            initiator,
+            support,
+            contactPerson,
+            position,
+            phone,
+
+            // ✅ Kunci: Menggunakan status yang benar
+            status: initialStatus,
+            meetingType: meetingType,
+
+            // Kolom dokumen (jika ada file diupload, logic upload harusnya sebelum insert ini)
+            // ... (Kode upload file Anda sebelumnya ditaruh di sini, atau dikirim path-nya via formData) ...
+
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        })
+
+        // 4. Revalidate
+        revalidatePath("/agenda/radir")
+        revalidatePath("/agenda/rakordir")
+
+        const successMsg = actionType === "draft"
+            ? "Agenda berhasil disimpan sebagai Draft."
+            : "Usulan agenda berhasil dikirim."
+
+        return { success: true, message: successMsg }
+
+    } catch (error: any) {
+        console.error("[CREATE_AGENDA_ERROR]", error)
+        return { success: false, error: error.message }
     }
 }

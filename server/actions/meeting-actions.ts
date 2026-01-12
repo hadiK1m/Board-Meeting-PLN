@@ -354,3 +354,33 @@ export async function resetRakordirSessionAction(meetingNumber: string, meetingY
         return { success: false, error: "Gagal mereset sesi rapat." };
     }
 }
+
+export async function finishMeetingAction(meetingNumber: string, meetingYear: string) {
+    try {
+        await db.update(agendas)
+            .set({
+                meetingStatus: "COMPLETED",
+
+                // ✅ UBAH BAGIAN INI:
+                status: "RAPAT_SELESAI", // Sebelumnya "SELESAI_SIDANG"
+
+                endTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(agendas.meetingNumber, meetingNumber),
+                    eq(agendas.meetingYear, meetingYear)
+                )
+            )
+
+        revalidatePath("/agenda/radir")
+        revalidatePath("/agenda-siap/radir")
+        revalidatePath("/pelaksanaan-rapat/radir")
+        revalidatePath("/monev/radir")
+
+        return { success: true, message: "Rapat selesai." }
+    } catch (error: any) {
+        return { success: false, error: error.message }
+    }
+}

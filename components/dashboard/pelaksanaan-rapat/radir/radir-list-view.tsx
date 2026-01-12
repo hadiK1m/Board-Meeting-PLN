@@ -26,7 +26,8 @@ import {
     Clock,
     Upload,
     Trash2, // Icon Trash
-    FileCheck // Icon File Check
+    FileCheck, // Icon File Check
+    Activity
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -421,14 +422,25 @@ function ActionDropdown({
 }
 
 function StatusBadge({ status }: { status: string }) {
-    if (status === "COMPLETED") {
+    // Menangani status Rapat Selesai
+    if (status === "RAPAT_SELESAI" || status === "SELESAI_SIDANG" || status === "COMPLETED") {
         return (
             <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
-                <CheckCircle2 className="h-2.5 w-2.5" /> SELESAI
+                <CheckCircle2 className="h-2.5 w-2.5" /> RAPAT SELESAI
             </Badge>
         )
     }
 
+    // Menangani status Sedang Berlangsung / On Progress
+    if (status === "SEDANG_BERLANGSUNG" || status === "ON_PROGRESS") {
+        return (
+            <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
+                <Activity className="h-2.5 w-2.5" /> SEDANG BERLANGSUNG
+            </Badge>
+        )
+    }
+
+    // Default (Dijadwalkan)
     return (
         <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
             <Clock className="h-2.5 w-2.5" /> DIJADWALKAN

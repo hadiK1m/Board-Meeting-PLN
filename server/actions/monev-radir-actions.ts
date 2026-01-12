@@ -7,6 +7,7 @@ import { eq, and, desc } from "drizzle-orm"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { MonevDecisionItem } from "@/lib/types/monev" // Pastikan path import sesuai lokasi file types Anda
+import { randomUUID } from "crypto" // Import crypto untuk generate UUID
 
 /**
  * 1. FETCH: Ambil Data Monev Radir
@@ -17,15 +18,13 @@ export async function getMonevRadirList() {
         const data = await db.query.agendas.findMany({
             where: and(
                 eq(agendas.meetingType, "RADIR"),
-                // Hanya ambil yang sudah selesai rapatnya (COMPLETED)
-                // eq(agendas.status, "COMPLETED") // Uncomment jika data dummy Anda sudah status COMPLETED semua
+
+                // ✅ FILTER UTAMA: Hanya tampilkan yang statusnya "RAPAT_SELESAI"
+                eq(agendas.status, "RAPAT_SELESAI")
             ),
-            orderBy: [desc(agendas.executionDate)],
+            orderBy: [desc(agendas.executionDate), desc(agendas.createdAt)],
         })
 
-        // Filter manual untuk memastikan hanya yang COMPLETED jika di query bermasalah dengan enum
-        // Atau biarkan logic where di atas jika type-safe.
-        // Untuk saat ini kita return semua RADIR agar Anda bisa melihat datanya dulu.
         return { success: true, data }
     } catch (error: any) {
         console.error("[GET_MONEV_RADIR_ERROR]", error)
@@ -77,7 +76,7 @@ export async function updateMonevDecisionAction(
 
             // Hapus file lama jika ada
             if (evidencePath) {
-                await supabase.storage.from("monev-evidence").remove([evidencePath])
+                await supabase.storage.from("agenda-attachments").remove([evidencePath])
             }
 
             // Upload file baru
@@ -136,4 +135,71 @@ export async function getEvidenceUrlAction(path: string) {
         .createSignedUrl(path, 3600) // 1 Jam
 
     return data?.signedUrl || null
+}
+
+/**
+ * 4. ACTION: Create Manual Monev (Tambah Monev Manual)
+ */
+export async function createManualMonevAction(formData: FormData) {
+    const supabase = await createClient()
+
+    try {
+        // Ambil data form
+        const judul = formData.get("judul") as string
+        const output = formData.get("output") as string
+        const progress = formData.get("progress") as string
+        const status = formData.get("status") as "ON_PROGRESS" | "DONE"
+        const file = formData.get("evidenceFile") as File
+
+        if (!judul) throw new Error("Judul keputusan harus diisi")
+
+        // 1. Handle File Upload
+        let evidencePath = ""
+        if (file && file.size > 0) {
+            const fileName = `evidence/manual/${Date.now()}_${file.name}`.replace(/\s+/g, '_')
+            const { error: uploadError } = await supabase.storage
+                .from("agenda-attachments")
+                .upload(fileName, file)
+
+            if (uploadError) throw new Error("Upload gagal: " + uploadError.message)
+            evidencePath = fileName
+        }
+
+        // 2. Susun Struktur Keputusan (JSON)
+        const decisionItem = {
+            id: randomUUID(), // Generate UUID unik
+            text: judul, // Judul keputusan menjadi isi keputusan
+            targetOutput: output,
+            currentProgress: progress,
+            status: status,
+            evidencePath: evidencePath,
+            lastUpdated: new Date().toISOString()
+        }
+
+        // 3. Insert ke Database Agendas
+        // Kita buat sebagai agenda 'dummy' tipe RADIR dengan status selesai agar muncul di list
+        await db.insert(agendas).values({
+            title: judul, // Judul Agenda = Judul Keputusan
+            meetingType: "RADIR",
+            status: "RAPAT_SELESAI", // Agar muncul di list Monev
+            meetingStatus: "COMPLETED",
+            meetingNumber: "MANUAL", // Penanda data manual
+            meetingYear: new Date().getFullYear().toString(),
+            meetingDecisions: [decisionItem], // Simpan sebagai array JSON
+            monevStatus: status, // Status global mengikuti input
+
+            // Field wajib lainnya diisi default/null
+            urgency: "Normal",
+            priority: "Medium",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        })
+
+        revalidatePath("/monev/radir")
+        return { success: true, message: "Data Monev berhasil ditambahkan" }
+
+    } catch (error: any) {
+        console.error("Create Monev Error:", error)
+        return { success: false, error: error.message }
+    }
 }

@@ -315,31 +315,62 @@ export function AddRadirModal() {
                             </div>
                         </div>
                     </ScrollArea>
-
                     <DialogFooter className="p-6 bg-[#f8fafc] border-t shrink-0 flex items-center justify-end gap-3">
-                        <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending}>Batal</Button>
+                        {/* 1. Tombol Batal (Selalu Muncul) */}
                         <Button
-                            type="submit"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setOpen(false)}
                             disabled={isPending}
-                            className={`${isComplete ? 'bg-[#125d72]' : 'bg-[#14a2ba]'} hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all rounded-xl h-12`}
                         >
-                            {isPending ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    <span>Menyimpan...</span>
-                                </>
-                            ) : isComplete ? (
-                                <>
-                                    <Send className="mr-2 h-4 w-4" />
-                                    <span>Lanjutkan Rapat</span>
-                                </>
-                            ) : (
-                                <>
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    <span>Simpan Usulan Agenda (Draft)</span>
-                                </>
-                            )}
+                            Batal
                         </Button>
+
+                        {/* LOGIKA KONDISIONAL */}
+                        {!isComplete ? (
+                            // KONDISI A: Data Belum Lengkap -> Muncul Tombol Draft
+                            <Button
+                                type="submit"
+                                name="actionType"
+                                value="draft"
+                                variant="outline"
+                                disabled={isPending}
+                                className="border-slate-300 text-slate-600 hover:bg-slate-50 font-bold px-6 rounded-xl h-12"
+                            >
+                                {isPending ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        <span>Menyimpan Draft...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        <span>Simpan Usulan Agenda (Draft)</span>
+                                    </>
+                                )}
+                            </Button>
+                        ) : (
+                            // KONDISI B: Data Sudah Lengkap -> Muncul Tombol Lanjutkan (Submit)
+                            <Button
+                                type="submit"
+                                name="actionType"
+                                value="submit"
+                                disabled={isPending}
+                                className="bg-[#125d72] hover:opacity-90 text-white font-bold px-8 shadow-lg min-w-55 transition-all rounded-xl h-12"
+                            >
+                                {isPending ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        <span>Menyimpan...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="mr-2 h-4 w-4" />
+                                        <span>Lanjutkan Rapat</span>
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

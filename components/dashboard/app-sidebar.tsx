@@ -43,7 +43,6 @@ const data = {
             title: "Dashboard",
             url: "/dashboard",
             icon: PieChart,
-            isActive: true,
             items: [
                 {
                     title: "Ringkasan",
@@ -95,11 +94,11 @@ const data = {
             icon: Gavel,
             items: [
                 {
-                    title: "Live Radir",
+                    title: "Radir",
                     url: "/pelaksanaan-rapat/radir",
                 },
                 {
-                    title: "Live Rakordir",
+                    title: "Rakordir",
                     url: "/pelaksanaan-rapat/rakordir",
                 },
             ],
@@ -116,7 +115,7 @@ const data = {
                 },
                 {
                     title: "Monev Rakordir",
-                    url: "/monev/rakordir", // Placeholder untuk pengembangan selanjutnya
+                    url: "/monev/rakordir",
                 },
             ],
         },
