@@ -17,36 +17,39 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import Link from "next/link" // Pastikan import Link jika menggunakan Next.js
+import Link from "next/link"
 
-// Definisi tipe data untuk props (sesuaikan jika berbeda)
+// Definisi tipe data untuk props
 interface NavItem {
     title: string
     url: string
     icon?: LucideIcon
     isActive?: boolean
-    items?: { // Submenu bersifat opsional
+    items?: {
         title: string
         url: string
     }[]
 }
 
 export function NavMain({ items }: { items: NavItem[] }) {
-    // 1. PERBAIKAN STATE: Lazy Initialization
-    // Membaca localStorage langsung saat inisialisasi state, bukan di useEffect
+    // ✅ PERBAIKAN: Inisialisasi state dari localStorage secara langsung di useState
     const [openStates, setOpenStates] = useState<Record<string, boolean>>(() => {
-        // Cek apakah kode berjalan di browser (penting untuk Next.js)
         if (typeof window !== "undefined") {
             const savedState = localStorage.getItem("sidebar-menu-state")
             if (savedState) {
-                return JSON.parse(savedState)
+                try {
+                    return JSON.parse(savedState)
+                } catch (e) {
+                    console.error("Gagal memuat state sidebar:", e)
+                }
             }
         }
-        return {} // Default jika tidak ada save
+        return {}
     })
 
-    // Effect hanya untuk MENYIMPAN perubahan ke localStorage
+    // Effect untuk MENYIMPAN perubahan ke localStorage
     useEffect(() => {
+        // Kita cek apakah state tidak kosong agar tidak menimpa storage saat initial render
         if (Object.keys(openStates).length > 0) {
             localStorage.setItem("sidebar-menu-state", JSON.stringify(openStates))
         }
@@ -64,11 +67,9 @@ export function NavMain({ items }: { items: NavItem[] }) {
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => {
-                    // 2. LOGIKA UI: Cek apakah item punya submenu
                     const hasSubmenu = item.items && item.items.length > 0
 
-                    // JIKA TIDAK ADA SUBMENU (Contoh: Dashboard, Jadwal Rapat)
-                    // Render link biasa tanpa panah/collapsible
+                    // 1. JIKA TIDAK ADA SUBMENU
                     if (!hasSubmenu) {
                         return (
                             <SidebarMenuItem key={item.title}>
@@ -82,13 +83,13 @@ export function NavMain({ items }: { items: NavItem[] }) {
                         )
                     }
 
-                    // JIKA ADA SUBMENU
-                    // Render dengan Collapsible dan Panah
+                    // 2. JIKA ADA SUBMENU (Render Collapsible)
                     return (
                         <Collapsible
                             key={item.title}
                             asChild
-                            open={openStates[item.title]} // Menggunakan state dari localStorage
+                            // Gunakan double negation (!!) untuk memastikan nilai boolean, default false
+                            open={!!openStates[item.title]}
                             onOpenChange={() => toggleOpen(item.title)}
                             className="group/collapsible"
                         >
@@ -97,7 +98,6 @@ export function NavMain({ items }: { items: NavItem[] }) {
                                     <SidebarMenuButton tooltip={item.title}>
                                         {item.icon && <item.icon />}
                                         <span>{item.title}</span>
-                                        {/* Tanda panah hanya muncul di sini */}
                                         <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                                     </SidebarMenuButton>
                                 </CollapsibleTrigger>
