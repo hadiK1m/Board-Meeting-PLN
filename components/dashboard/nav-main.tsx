@@ -37,11 +37,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
         if (typeof window !== "undefined") {
             const savedState = localStorage.getItem("sidebar-menu-state")
             if (savedState) {
-                try {
-                    return JSON.parse(savedState)
-                } catch (e) {
-                    console.error("Gagal memuat state sidebar:", e)
-                }
+                return JSON.parse(savedState)
             }
         }
         return {}
