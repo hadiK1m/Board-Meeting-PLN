@@ -1,15 +1,23 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use server'
 
 import { db } from '@/db'
 import { users, loginLogs } from '@/db/schema'
 import { eq, ilike } from 'drizzle-orm'
-import { createSession } from '@/lib/session'
+import { createSession, deleteSession } from '@/lib/session' // ✅ Added deleteSession
 import { redirect } from 'next/navigation'
 import { authenticator } from 'otplib'
 import { headers } from 'next/headers'
-import { createClient } from '@/lib/supabase/server' // Sesuaikan path ini jika utility supabase Anda ada di folder lain
+import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+
+// --- TYPES ---
+// ✅ Definisikan tipe untuk state form agar tidak perlu pakai 'any'
+type FormState = {
+    error?: string | null
+    message?: string | null
+    twoFactorRequired?: boolean
+    userId?: string
+} | null
 
 // --- SCHEMAS ---
 const loginSchema = z.object({
@@ -24,7 +32,6 @@ async function recordLogin(userId: string) {
     const userAgent = headersList.get('user-agent') || 'unknown'
 
     try {
-        // Pastikan tabel loginLogs ada di schema Anda
         await db.insert(loginLogs).values({
             userId,
             ipAddress,
@@ -37,7 +44,7 @@ async function recordLogin(userId: string) {
 }
 
 // --- 1. LOGIN ACTION ---
-export async function loginAction(prevState: any, formData: FormData) {
+export async function loginAction(prevState: FormState, formData: FormData) {
     const validatedFields = loginSchema.safeParse({
         email: formData.get('email'),
         password: formData.get('password'),
@@ -135,7 +142,13 @@ export async function verifyTwoFactorAction(userId: string, token: string) {
 // --- 3. SIGNOUT ACTION ---
 export async function signOutAction() {
     const supabase = await createClient()
+
+    // 1. Logout dari Supabase
     await supabase.auth.signOut()
+
+    // 2. ✅ Hapus Session Cookie Custom (PENTING)
+    await deleteSession()
+
     redirect("/login")
 }
 
