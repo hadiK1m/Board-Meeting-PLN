@@ -73,9 +73,11 @@ export const agendas = pgTable("agendas", {
     // GROUPING UNTUK RISALAH
     risalahGroupId: uuid("risalah_group_id").defaultRandom(),
 
+    risalahTtd: text("risalah_ttd"),
+    monevStatus: text("monev_status").default("ON_PROGRESS"),
+
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    risalahTtd: text("risalah_ttd"),
 });
 
 export type Agenda = typeof agendas.$inferSelect;

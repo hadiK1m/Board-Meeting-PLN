@@ -1,15 +1,19 @@
 "use client"
 
 import * as React from "react"
-import dynamic from "next/dynamic"
 import {
-    BookOpen,
-    LayoutDashboard,
-    CalendarCheck,
-    Presentation, // Ikon untuk Pelaksanaan Rapat
+    Command,
+    LifeBuoy,
+    PieChart,
+    Settings2,
+    Calendar,
+    Gavel,
+    FileText,
+    Activity, // Icon untuk Monev
 } from "lucide-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
+import { NavProjects } from "@/components/dashboard/nav-projects"
 import { NavUser } from "@/components/dashboard/nav-user"
 import { TeamSwitcher } from "@/components/dashboard/team-switcher"
 import {
@@ -20,85 +24,118 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar"
 
-// Data dummy
+// Data Menu Aplikasi
 const data = {
     user: {
-        name: "Admin Board",
+        name: "Admin Sekretariat",
         email: "admin@pln.co.id",
-        avatar: "/avatars/01.png",
+        avatar: "/avatars/shadcn.jpg",
     },
     teams: [
         {
-            name: "PT PLN (Persero)",
-            logo: "/logo-pln.png",
-            plan: "Board Meeting",
+            name: "Board Meeting",
+            logo: Command,
+            plan: "PT PLN (Persero)",
         },
     ],
     navMain: [
         {
             title: "Dashboard",
             url: "/dashboard",
-            icon: LayoutDashboard,
-        },
-        {
-            title: "Usulan Agenda",
-            url: "#",
-            icon: BookOpen,
+            icon: PieChart,
+            isActive: true,
             items: [
                 {
-                    title: "Radir",
-                    url: "/agenda/radir",
+                    title: "Ringkasan",
+                    url: "/dashboard",
                 },
                 {
-                    title: "Rakordir",
-                    url: "/agenda/rakordir",
-                },
-                {
-                    title: "Kepdir Sirkuler",
-                    url: "/agenda/kepdir-sirkuler",
+                    title: "Jadwal Rapat",
+                    url: "/jadwal-rapat",
                 },
             ],
         },
         {
-            title: "Daftar Agenda Siap",
+            title: "Usulan Agenda",
             url: "#",
-            icon: CalendarCheck,
+            icon: FileText,
             items: [
                 {
-                    title: "Radir Siap",
+                    title: "Kepdir Sirkuler",
+                    url: "/agenda/kepdir-sirkuler",
+                },
+                {
+                    title: "Rapat Direksi (RADIR)",
+                    url: "/agenda/radir",
+                },
+                {
+                    title: "Rapat Koordinasi (RAKORDIR)",
+                    url: "/agenda/rakordir",
+                },
+            ],
+        },
+        {
+            title: "Agenda Siap Sidang",
+            url: "#",
+            icon: Calendar,
+            items: [
+                {
+                    title: "Siap Sidang Radir",
                     url: "/agenda-siap/radir",
                 },
                 {
-                    title: "Rakordir Siap",
+                    title: "Siap Sidang Rakordir",
                     url: "/agenda-siap/rakordir",
                 },
             ],
         },
         {
-            title: "Jadwal Rapat",
-            url: "/jadwal-rapat",
-            icon: CalendarCheck,
-        },
-        {
-            title: "Pelaksanaan Rapat", // ✅ Menu Induk Baru
+            title: "Pelaksanaan Rapat",
             url: "#",
-            icon: Presentation,
+            icon: Gavel,
             items: [
                 {
-                    title: "Radir",
+                    title: "Live Radir",
                     url: "/pelaksanaan-rapat/radir",
                 },
                 {
-                    title: "Rakordir",
+                    title: "Live Rakordir",
                     url: "/pelaksanaan-rapat/rakordir",
                 },
             ],
         },
-
+        // ✅ MENU BARU: MONITORING & EVALUASI
+        {
+            title: "Monitoring & Evaluasi",
+            url: "#",
+            icon: Activity,
+            items: [
+                {
+                    title: "Monev Radir",
+                    url: "/monev/radir",
+                },
+                {
+                    title: "Monev Rakordir",
+                    url: "/monev/rakordir", // Placeholder untuk pengembangan selanjutnya
+                },
+            ],
+        },
+    ],
+    projects: [
+        {
+            name: "Pengaturan",
+            url: "#",
+            icon: Settings2,
+        },
+        {
+            name: "Bantuan",
+            url: "#",
+            icon: LifeBuoy,
+        },
     ],
 }
 
-function SidebarBase({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return (
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
@@ -106,6 +143,7 @@ function SidebarBase({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarHeader>
             <SidebarContent>
                 <NavMain items={data.navMain} />
+                <NavProjects projects={data.projects} />
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={data.user} />
@@ -114,8 +152,3 @@ function SidebarBase({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </Sidebar>
     )
 }
-
-export const AppSidebar = dynamic(() => Promise.resolve(SidebarBase), {
-    ssr: false,
-    loading: () => <div className="w-(--sidebar-width) bg-sidebar border-r flex flex-col h-screen" />,
-})

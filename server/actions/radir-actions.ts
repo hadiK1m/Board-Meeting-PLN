@@ -284,3 +284,56 @@ export async function uploadRisalahTtdAction(agendaId: string, formData: FormDat
         return { success: false, error: error.message }
     }
 }
+/**
+ * 5. ACTION: Get Download URL Risalah (Signed URL)
+ * Digunakan untuk mendapatkan akses unduh sementara yang aman.
+ */
+export async function getRisalahDownloadUrlAction(filePath: string) {
+    const supabase = await createClient()
+
+    try {
+        // Buat Signed URL yang valid selama 1 jam (3600 detik)
+        // Ini memastikan file tidak bisa diakses sembarangan tanpa izin.
+        const { data, error } = await supabase.storage
+            .from("agenda-attachments")
+            .createSignedUrl(filePath, 3600)
+
+        if (error) throw new Error(error.message)
+
+        return { success: true, url: data.signedUrl }
+    } catch (error: any) {
+        console.error("Get Download URL Error:", error)
+        return { success: false, error: error.message }
+    }
+}
+
+/**
+ * 6. ACTION: Delete Risalah Final
+ * Menghapus file dari storage dan mengosongkan kolom di database.
+ */
+export async function deleteRisalahTtdAction(agendaId: string, filePath: string) {
+    const supabase = await createClient()
+
+    try {
+        // 1. Hapus file fisik dari Storage agar tidak memenuhi kuota
+        const { error: storageError } = await supabase.storage
+            .from("agenda-attachments")
+            .remove([filePath])
+
+        if (storageError) throw new Error(`Storage Delete Error: ${storageError.message}`)
+
+        // 2. Update Database (Set kolom risalahTtd menjadi null)
+        await db
+            .update(agendas)
+            .set({ risalahTtd: null })
+            .where(eq(agendas.id, agendaId))
+
+        // 3. Refresh data pada halaman terkait
+        revalidatePath("/pelaksanaan-rapat/radir")
+
+        return { success: true, message: "Risalah berhasil dihapus" }
+    } catch (error: any) {
+        console.error("Delete Risalah Error:", error)
+        return { success: false, error: error.message }
+    }
+}

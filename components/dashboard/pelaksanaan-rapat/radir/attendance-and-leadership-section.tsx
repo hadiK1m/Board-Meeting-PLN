@@ -1,15 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// components/dashboard/pelaksanaan-rapat/radir/attendance-and-leadership-section.tsx
 "use client"
 
 import React, { useEffect } from "react"
 import {
     Users,
     UserCheck,
-    AlertCircle,
-    UserCircle2,
     ShieldCheck,
-    ChevronRight,
     Users2,
     UserCircle,
     Trash2,
@@ -158,18 +153,14 @@ export function AttendanceAndLeadershipSection({
                                 key={name}
                                 className={`p-4 rounded-xl border transition-all ${attendance[name]?.status === "Hadir"
                                     ? "bg-emerald-50/30 border-emerald-200"
-                                    : attendance[name]?.status === "Tidak Hadir"
-                                        ? "bg-red-50/30 border-red-200"
-                                        : "bg-amber-50/30 border-amber-200"
+                                    : "bg-amber-50/30 border-amber-200"
                                     }`}
                             >
                                 <div className="flex items-start gap-3">
                                     <div
                                         className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${attendance[name]?.status === "Hadir"
                                             ? "bg-emerald-500"
-                                            : attendance[name]?.status === "Tidak Hadir"
-                                                ? "bg-red-500"
-                                                : "bg-amber-500"
+                                            : "bg-amber-500"
                                             }`}
                                     >
                                         {name.charAt(0)}
@@ -184,18 +175,8 @@ export function AttendanceAndLeadershipSection({
                                             onChange={(e) => handleStatusChange(name, e.target.value)}
                                         >
                                             <option value="Hadir">Hadir</option>
-                                            <option value="Tidak Hadir">Tidak Hadir</option>
                                             <option value="Kuasa">Kuasa</option>
                                         </select>
-
-                                        {attendance[name]?.status === "Tidak Hadir" && (
-                                            <textarea
-                                                placeholder="Alasan tidak hadir..."
-                                                className="mt-2 w-full min-h-15 p-2 text-xs border border-red-200 rounded-lg focus:ring-red-400"
-                                                value={attendance[name]?.reason || ""}
-                                                onChange={(e) => handleFieldChange(name, "reason", e.target.value)}
-                                            />
-                                        )}
 
                                         {attendance[name]?.status === "Kuasa" && (
                                             <Select

@@ -24,7 +24,9 @@ import {
     Eye,
     CheckCircle2,
     Clock,
-    Upload, // Import icon Upload
+    Upload,
+    Trash2, // Icon Trash
+    FileCheck // Icon File Check
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -40,7 +42,9 @@ import { id } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
-import { UploadRisalahDialog } from "./upload-risalah-dialog" // Import Dialog
+import { getRisalahDownloadUrlAction } from "@/server/actions/radir-actions" // Action baru
+import { UploadRisalahDialog } from "./upload-risalah-dialog"
+import { DeleteRisalahDialog } from "./delete-risalah-dialog" // Dialog baru
 
 interface RadirListViewProps {
     initialData: any[] // grouped meetings
@@ -54,8 +58,28 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
 
     // State untuk Upload Dialog
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+
+    // State untuk Delete Dialog
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [fileToDelete, setFileToDelete] = useState("")
+
+    // Shared State
     const [selectedAgendaId, setSelectedAgendaId] = useState("")
-    const [selectedAgendaTitle, setSelectedAgendaTitle] = useState("")
+    const [selectedMeetingTitle, setSelectedMeetingTitle] = useState("")
+
+    // Handler Buka Upload
+    const handleOpenUpload = (agendaId: string, meetingNumber: string) => {
+        setSelectedAgendaId(agendaId)
+        setSelectedMeetingTitle(`Meeting #${meetingNumber}`)
+        setUploadDialogOpen(true)
+    }
+
+    // Handler Buka Delete
+    const handleOpenDelete = (agendaId: string, filePath: string) => {
+        setSelectedAgendaId(agendaId)
+        setFileToDelete(filePath)
+        setDeleteDialogOpen(true)
+    }
 
     const filteredData = initialData.filter((item) => {
         const search = searchTerm.toLowerCase()
@@ -64,13 +88,6 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
             (item.location?.toLowerCase() || "").includes(search)
         )
     })
-
-    // Handler untuk membuka dialog upload
-    const handleOpenUpload = (agendaId: string, meetingNumber: string) => {
-        setSelectedAgendaId(agendaId)
-        setSelectedAgendaTitle(`Meeting #${meetingNumber}`)
-        setUploadDialogOpen(true)
-    }
 
     if (viewMode === "grid") {
         return (
@@ -96,11 +113,13 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                         group={group}
                                         isExporting={isExporting}
                                         setIsExporting={setIsExporting}
-                                        onOpenUpload={handleOpenUpload} // Pass handler
+                                        onOpenUpload={handleOpenUpload}
+                                        onOpenDelete={handleOpenDelete} // Pass delete handler
                                     />
                                 </div>
                             </div>
 
+                            {/* ... Content Card Info (Sama seperti sebelumnya) ... */}
                             <div className="space-y-3 mb-6">
                                 <div className="flex items-center gap-2 text-slate-500">
                                     <Calendar className="h-3.5 w-3.5" />
@@ -138,12 +157,19 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                     ))}
                 </div>
 
-                {/* Render Dialog Upload */}
+                {/* Dialogs */}
                 <UploadRisalahDialog
                     open={uploadDialogOpen}
                     onOpenChange={setUploadDialogOpen}
                     agendaId={selectedAgendaId}
-                    title={selectedAgendaTitle}
+                    title={selectedMeetingTitle}
+                />
+
+                <DeleteRisalahDialog
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    agendaId={selectedAgendaId}
+                    filePath={fileToDelete}
                 />
             </>
         )
@@ -152,6 +178,7 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     // Table View
     return (
         <div className="space-y-4">
+            {/* ... Search Bar ... */}
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
@@ -166,69 +193,44 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                 <Table>
                     <TableHeader className="bg-slate-50">
                         <TableRow>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                Nomor Meeting
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                Tanggal & Waktu
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                Lokasi
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                Agenda
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">
-                                Status
-                            </TableHead>
-                            <TableHead className="text-right text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                Aksi
-                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Nomor Meeting</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Tanggal & Waktu</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Lokasi</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500">Agenda</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">Status</TableHead>
+                            <TableHead className="text-right text-[10px] font-black uppercase tracking-wider text-slate-500">Aksi</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-slate-500 text-xs italic">
-                                    Data tidak ditemukan...
-                                </TableCell>
+                                <TableCell colSpan={6} className="h-32 text-center text-slate-500 text-xs italic">Data tidak ditemukan...</TableCell>
                             </TableRow>
                         ) : (
                             filteredData.map((group) => (
                                 <TableRow key={group.groupKey} className="hover:bg-slate-50/50 transition-colors">
                                     <TableCell className="py-4">
                                         <div className="font-black text-[#125d72] text-sm">#{group.meetingNumber}</div>
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase">
-                                            Tahun {group.meetingYear}
-                                        </div>
+                                        <div className="text-[9px] font-bold text-slate-400 uppercase">Tahun {group.meetingYear}</div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="text-xs font-bold text-slate-700">
-                                            {group.executionDate
-                                                ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id })
-                                                : "-"}
+                                            {group.executionDate ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id }) : "-"}
                                         </div>
-                                        <div className="text-[10px] text-slate-500 font-medium">
-                                            {group.startTime} - {group.endTime}
-                                        </div>
+                                        <div className="text-[10px] text-slate-500 font-medium">{group.startTime} - {group.endTime}</div>
                                     </TableCell>
-                                    <TableCell className="text-xs font-medium text-slate-600">
-                                        {group.location || "-"}
-                                    </TableCell>
+                                    <TableCell className="text-xs font-medium text-slate-600">{group.location || "-"}</TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className="text-[9px] font-black border-slate-300">
-                                            {group.agendas.length} AGENDA
-                                        </Badge>
+                                        <Badge variant="outline" className="text-[9px] font-black border-slate-300">{group.agendas.length} AGENDA</Badge>
                                     </TableCell>
-                                    <TableCell className="text-center">
-                                        <StatusBadge status={group.status} />
-                                    </TableCell>
+                                    <TableCell className="text-center"><StatusBadge status={group.status} /></TableCell>
                                     <TableCell className="text-right">
                                         <ActionDropdown
                                             group={group}
                                             isExporting={isExporting}
                                             setIsExporting={setIsExporting}
-                                            onOpenUpload={handleOpenUpload} // Pass handler
+                                            onOpenUpload={handleOpenUpload}
+                                            onOpenDelete={handleOpenDelete} // Pass delete handler
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -238,32 +240,65 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                 </Table>
             </div>
 
-            {/* Render Dialog Upload (untuk Table View) */}
+            {/* Dialogs */}
             <UploadRisalahDialog
                 open={uploadDialogOpen}
                 onOpenChange={setUploadDialogOpen}
                 agendaId={selectedAgendaId}
-                title={selectedAgendaTitle}
+                title={selectedMeetingTitle}
+            />
+
+            <DeleteRisalahDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                agendaId={selectedAgendaId}
+                filePath={fileToDelete}
             />
         </div>
     )
 }
 
-// Updated ActionDropdown with Upload Option
+// ----------------------------------------------------------------------
+// Component: Action Dropdown
+// ----------------------------------------------------------------------
 function ActionDropdown({
     group,
     isExporting,
     setIsExporting,
-    onOpenUpload, // Receive handler props
+    onOpenUpload,
+    onOpenDelete,
 }: {
     group: any
     isExporting: boolean
     setIsExporting: (val: boolean) => void
     onOpenUpload: (agendaId: string, meetingNumber: string) => void
+    onOpenDelete: (agendaId: string, filePath: string) => void
 }) {
     const router = useRouter()
 
-    const handleDownload = async (type: "ISI" | "TTD") => {
+    // Cek apakah ada risalah yang sudah diupload pada agenda pertama
+    const firstAgenda = group.agendas && group.agendas[0]
+    const risalahTtdPath = firstAgenda?.risalahTtd
+
+    // Handler Download Risalah TTD
+    const handleDownloadRisalahTtd = async () => {
+        if (!risalahTtdPath) return
+        toast.info("Mengunduh Risalah Final...")
+
+        try {
+            const res = await getRisalahDownloadUrlAction(risalahTtdPath)
+            if (res.success && res.url) {
+                // Buka link di tab baru untuk download
+                window.open(res.url, "_blank")
+            } else {
+                toast.error("Gagal mendapatkan link download", { description: res.error })
+            }
+        } catch (err) {
+            toast.error("Terjadi kesalahan saat download")
+        }
+    }
+
+    const handleExport = async (type: "ISI" | "TTD") => {
         setIsExporting(true)
         toast.info(`Menyiapkan ${type === "ISI" ? "Risalah Isi" : "Risalah TTD"}...`)
 
@@ -297,7 +332,7 @@ function ActionDropdown({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-xl border-slate-200">
                 <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">
-                    Opsi Risalah
+                    Opsi Sesi Rapat
                 </DropdownMenuLabel>
 
                 <DropdownMenuItem
@@ -314,29 +349,52 @@ function ActionDropdown({
 
                 <DropdownMenuSeparator />
 
-                {/* Tombol Upload Baru */}
-                <DropdownMenuItem
-                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-orange-50 group"
-                    onClick={() => {
-                        // Kita ambil ID agenda pertama di dalam grup ini sebagai referensi upload
-                        const firstAgendaId = group.agendas[0]?.id
-                        if (firstAgendaId) {
-                            onOpenUpload(firstAgendaId, group.meetingNumber)
-                        } else {
-                            toast.error("Data agenda tidak ditemukan")
-                        }
-                    }}
-                >
-                    <Upload className="h-4 w-4 text-orange-600 group-hover:text-orange-700" />
-                    <span className="text-xs font-bold text-slate-700">Upload Risalah Final (TTD)</span>
-                </DropdownMenuItem>
+                {/* LOGIKA KONDISIONAL TOMBOL RISALAH TTD */}
+                {risalahTtdPath ? (
+                    // KONDISI 1: File ADA -> Tampilkan Download & Hapus
+                    <div className="flex items-center gap-1 px-2 py-1">
+                        <div
+                            className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-green-50 rounded-md text-green-700 transition-colors"
+                            onClick={handleDownloadRisalahTtd}
+                            title="Download Risalah Final"
+                        >
+                            <FileCheck className="h-4 w-4" />
+                            <span className="text-xs font-bold">Download TTD</span>
+                        </div>
+                        <div
+                            className="flex-none p-1.5 cursor-pointer hover:bg-red-50 rounded-md text-red-600 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onOpenDelete(firstAgenda.id, risalahTtdPath)
+                            }}
+                            title="Hapus File"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </div>
+                    </div>
+                ) : (
+                    // KONDISI 2: File TIDAK ADA -> Tampilkan Upload
+                    <DropdownMenuItem
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-orange-50 group"
+                        onClick={() => {
+                            if (firstAgenda) {
+                                onOpenUpload(firstAgenda.id, group.meetingNumber)
+                            } else {
+                                toast.error("Data agenda tidak ditemukan")
+                            }
+                        }}
+                    >
+                        <Upload className="h-4 w-4 text-orange-600 group-hover:text-orange-700" />
+                        <span className="text-xs font-bold text-slate-700">Upload Risalah Final (TTD)</span>
+                    </DropdownMenuItem>
+                )}
 
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
                     disabled={isExporting}
-                    onClick={() => handleDownload("ISI")}
+                    onClick={() => handleExport("ISI")}
                 >
                     <FileText className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
                     <span className="text-xs font-bold text-slate-700">Export Risalah Isi (1.2)</span>
@@ -345,7 +403,7 @@ function ActionDropdown({
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
                     disabled={isExporting}
-                    onClick={() => handleDownload("TTD")}
+                    onClick={() => handleExport("TTD")}
                 >
                     <Download className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
                     <span className="text-xs font-bold text-slate-700">Export Risalah TTD (1.3)</span>
