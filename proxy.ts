@@ -3,9 +3,13 @@ import type { NextRequest } from 'next/server'
 import { decrypt } from '@/lib/session'
 import { updateSession } from '@/lib/supabase/middleware'
 
-export async function middleware(request: NextRequest) {
+/**
+ * Konvensi baru Next.js 16+: Menggunakan fungsi 'proxy' 
+ * sebagai pengganti 'middleware'.
+ */
+export async function proxy(request: NextRequest) {
     // 1. Jalankan Refresh Token Supabase
-    // Kita terima 'supabaseResponse' yang MUNGKIN berisi cookie baru.
+    // Kita menerima 'supabaseResponse' yang mungkin berisi cookie baru.
     const { supabaseResponse, user } = await updateSession(request)
 
     // 2. Ambil Cookie Custom Session (untuk data tambahan seperti role/id)
@@ -25,7 +29,7 @@ export async function middleware(request: NextRequest) {
         path.startsWith('/static') ||
         path.includes('.')
 
-    // Jika file statis, langsung loloskan dengan response dari supabase (agar cookie tetap update)
+    // Jika file statis, langsung loloskan dengan response dari supabase
     if (isStaticFile) {
         return supabaseResponse
     }
@@ -33,17 +37,11 @@ export async function middleware(request: NextRequest) {
     // --- 4. LOGIKA PROTEKSI TERPUSAT (The Gatekeeper) ---
 
     // A. Proteksi Route Privat
-    // Syarat akses: Harus bukan public route AND (Harus ada User Supabase OR Harus ada Session Custom)
-    // [SECURE] Disarankan mewajibkan keduanya (User Supabase & Session Local) agar sinkron.
     if (!isPublicRoute && (!user || !session?.userId)) {
-        // Buat URL redirect
         const loginUrl = new URL('/login', request.nextUrl)
-
-        // Buat response redirect baru
         const redirectResponse = NextResponse.redirect(loginUrl)
 
-        // [CRITICAL FIX] Salin cookie dari 'supabaseResponse' ke 'redirectResponse'
-        // Jika Supabase mencoba me-refresh token atau menghapus token, kita harus meneruskannya ke browser.
+        // Salin cookie dari 'supabaseResponse' ke 'redirectResponse' agar token tetap sinkron
         copyCookies(supabaseResponse, redirectResponse)
 
         return redirectResponse
@@ -59,24 +57,34 @@ export async function middleware(request: NextRequest) {
         return redirectResponse
     }
 
-    // C. Jika lolos semua cek, kembalikan supabaseResponse yang asli
-    // (Ini penting karena response ini memegang set-cookie header jika ada refresh token)
+    // C. Jika lolos semua cek, kembalikan supabaseResponse asli
     return supabaseResponse
 }
 
-// --- HELPER: COPY COOKIES ---
-// Fungsi ini memastikan header Set-Cookie tidak hilang saat kita melakukan Redirect
+/**
+ * HELPER: COPY COOKIES
+ * Memastikan header Set-Cookie tidak hilang saat melakukan Redirect.
+ */
 function copyCookies(sourceResponse: NextResponse, targetResponse: NextResponse) {
     const setCookieHeader = sourceResponse.headers.get('set-cookie')
     if (setCookieHeader) {
-        // Next.js mungkin menggabungkan multiple cookies dengan koma, atau split header
-        // Kita copy header 'set-cookie' mentah ke response baru
         targetResponse.headers.set('set-cookie', setCookieHeader)
     }
 }
 
+/**
+ * MATCHER CONFIG
+ * Menentukan rute mana saja yang akan melewati fungsi proxy ini.
+ */
 export const config = {
     matcher: [
+        /*
+         * Cocokkan semua jalur permintaan kecuali:
+         * - api (jalur API)
+         * - _next/static (file statis)
+         * - _next/image (optimasi gambar)
+         * - favicon.ico (file favicon)
+         */
         '/((?!api|_next/static|_next/image|_vercel|.*\\..*).*)',
     ],
 }

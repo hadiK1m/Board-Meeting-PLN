@@ -74,9 +74,15 @@ export function DetailKepdirSheet({ data: agenda, isOpen: open, onOpenChange }: 
     const handleSecureView = async (path: string) => {
         if (!path || path === "null") return
         try {
-            const signedUrl = await getSignedFileUrl(path)
-            if (!signedUrl) return
-            const response = await fetch(signedUrl)
+            const result = await getSignedFileUrl(path) // Kita ganti nama variabel agar lebih jelas
+
+            // Cek apakah sukses dan URL-nya ada
+            if (!result.success || !result.url) {
+                console.error(result.error)
+                return
+            }
+
+            const response = await fetch(result.url) // Gunakan result.url yang berupa string
             if (!response.ok) return
             const blob = await response.blob()
             const localBlobUrl = URL.createObjectURL(blob)

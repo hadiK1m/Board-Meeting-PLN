@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { Metadata } from "next"
 import { getMonevRadirList } from "@/server/actions/monev-radir-actions"
 import { MonevRadirClient } from "@/components/dashboard/monev/radir/monev-radir-client"

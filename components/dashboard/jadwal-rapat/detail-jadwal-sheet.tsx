@@ -40,7 +40,12 @@ export function DetailJadwalSheet({ agenda, open, onOpenChange }: DetailJadwalSh
         try {
             const signedUrl = await getSignedFileUrl(path)
             if (!signedUrl) return
-            const response = await fetch(signedUrl)
+            const result = await getSignedFileUrl(path)
+            if (!result.success || !result.url) {
+                console.error(result.error)
+                return
+            }
+            const response = await fetch(result.url)
             if (!response.ok) return
             const blob = await response.blob()
             const localBlobUrl = URL.createObjectURL(blob)
