@@ -88,34 +88,29 @@ export function DetailRakordirSheet({ agenda, open, onOpenChange }: DetailAgenda
 
     const handleSecureView = async (path: string) => {
         if (!path || path === "null") return
+
+        // Tampilkan loading toast agar user tahu proses sedang berjalan
+        const loadingToast = toast.loading("Menyiapkan dokumen...")
+
         try {
-            // 1. Dapatkan hasil dari Server Action
+            // 1. Dapatkan Signed URL dari Server Action
             const result = await getSignedFileUrl(path)
 
-            // 2. Cek apakah sukses dan URL-nya ada
             if (!result.success || !result.url) {
-                console.error(result.error)
-                toast.error("Gagal mendapatkan akses ke dokumen.")
+                toast.error("Gagal mendapatkan akses ke dokumen.", { id: loadingToast })
                 return
             }
 
-            // 3. Gunakan result.url yang berupa string untuk fetch
-            const response = await fetch(result.url)
-            if (!response.ok) {
-                toast.error("Gagal mengunduh dokumen.")
-                return
-            }
+            // 2. LANGSUNG BUKA URL (Tanpa fetch blob)
+            // Ini akan membuat file terbuka secara streaming/langsung di browser
+            window.open(result.url, '_blank')
 
-            // 4. Proses Blob untuk pratinjau aman di tab baru
-            const blob = await response.blob()
-            const localBlobUrl = URL.createObjectURL(blob)
-            window.open(localBlobUrl, '_blank')
+            // Hilangkan loading toast
+            toast.dismiss(loadingToast)
 
-            // Bersihkan memori setelah 1 menit
-            setTimeout(() => URL.revokeObjectURL(localBlobUrl), 60_000)
         } catch (err) {
             console.error('Error secure view', err)
-            toast.error("Terjadi kesalahan sistem.")
+            toast.error("Terjadi kesalahan sistem.", { id: loadingToast })
         }
     }
 
