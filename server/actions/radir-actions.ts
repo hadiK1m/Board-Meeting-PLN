@@ -136,7 +136,7 @@ export async function createRadirAction(formData: FormData) {
 export async function updateRadirAction(id: string, formData: FormData) {
     try {
         // [SECURE] Auth Check
-        const { user, supabase } = await assertAuthenticated()
+        const { supabase } = await assertAuthenticated()
 
         const oldData = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
         if (!oldData) return { success: false, error: "Data tidak ditemukan." }
@@ -149,37 +149,53 @@ export async function updateRadirAction(id: string, formData: FormData) {
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : oldData.notRequiredFiles
 
+        // Perbaikan: Ambil path baru dari client (bukan file biner)
         for (const field of FILE_FIELDS) {
-            const file = formData.get(field) as File
+            // Ambil path baru dari client (jika ada upload baru)
+            const newPath = formData.get(`${field}Path`) as string | null
             const deleteFlag = formData.get(`delete_${field}`) === 'true'
             const oldPath = (oldData as any)[field]
 
-            if (file && file.size > 0) {
-                validateFile(file)
-                if (typeof oldPath === 'string' && oldPath) {
-                    await supabase.storage.from('agenda-attachments').remove([oldPath])
-                }
-
-                const fileExt = file.name.split('.').pop()
-                const uniqueId = crypto.randomUUID()
-                const path = `radir/${user.id}/${uniqueId}-${field}.${fileExt}`
-
-                const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
-                if (error) throw error
-                updatedUrls[field] = data?.path || null
+            if (newPath) {
+                // Jika ada file baru, hapus file lama di storage
+                if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
+                updatedUrls[field] = newPath
             } else if (deleteFlag) {
-                if (typeof oldPath === 'string' && oldPath) {
-                    await supabase.storage.from('agenda-attachments').remove([oldPath])
-                }
+                // Jika user menekan tombol hapus
+                if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
                 updatedUrls[field] = null
             } else {
-                updatedUrls[field] = oldPath as string | null
+                // Tetap gunakan path lama
+                updatedUrls[field] = oldPath
             }
         }
 
+        // Handle supportingDocuments (multiple files)
+        let supportingDocuments = oldData.supportingDocuments
+        const newSupportingPathsRaw = formData.get("supportingDocumentsPaths") as string | null
+        const deleteSupportingFlag = formData.get("delete_supportingDocuments") === 'true'
+
+        if (newSupportingPathsRaw) {
+            const newPaths: string[] = JSON.parse(newSupportingPathsRaw)
+
+            // Hapus file lama jika ada
+            if (oldData.supportingDocuments && Array.isArray(oldData.supportingDocuments)) {
+                await supabase.storage.from('agenda-attachments').remove(oldData.supportingDocuments)
+            }
+
+            supportingDocuments = newPaths
+        } else if (deleteSupportingFlag) {
+            // Hapus semua file supportingDocuments
+            if (oldData.supportingDocuments && Array.isArray(oldData.supportingDocuments)) {
+                await supabase.storage.from('agenda-attachments').remove(oldData.supportingDocuments)
+            }
+            supportingDocuments = null
+        }
+
+        // Logic Status
         const allFilesHandled = FILE_FIELDS.every(field =>
             (updatedUrls[field] !== null) || (Array.isArray(notRequiredFiles) && notRequiredFiles.includes(field))
-        );
+        ) && (supportingDocuments !== null || notRequiredFiles.includes("supportingDocuments"));
 
         await db.update(agendas).set({
             title: formData.get("title") as string,
@@ -193,6 +209,7 @@ export async function updateRadirAction(id: string, formData: FormData) {
             position: cleanValue(formData.get("position") as string, oldData.position),
             phone: cleanValue(formData.get("phone") as string, oldData.phone),
             ...updatedUrls,
+            supportingDocuments: supportingDocuments,
             notRequiredFiles: notRequiredFiles,
             status: allFilesHandled ? "DAPAT_DILANJUTKAN" : "DRAFT",
             updatedAt: new Date(),
@@ -202,6 +219,7 @@ export async function updateRadirAction(id: string, formData: FormData) {
         revalidatePath("/agenda-siap/radir")
         return { success: true }
     } catch (error: any) {
+        console.error("Update Radir Error:", error)
         return { success: false, error: error.message || "Gagal update data." }
     }
 }
@@ -258,6 +276,7 @@ export async function uploadRisalahTtdAction(agendaId: string, formData: FormDat
 
         const file = formData.get("file") as File
         if (!file) throw new Error("File tidak ditemukan")
+        validateFile(file)
 
         // 1. Validasi Tipe File (PDF Only)
         if (file.type !== "application/pdf") {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -54,6 +55,9 @@ import {
     SUPPORT,
     extractCode
 } from "@/lib/MasterData"
+import { createClient } from "@/lib/supabase/client" // Import supabase client
+
+const supabase = createClient()
 
 interface Option {
     label: string;
@@ -72,6 +76,12 @@ const FILE_FIELDS = [
     { id: "recommendationNote", label: "Nota Analisa Rekomendasi" },
     { id: "proposalNote", label: "ND Usulan Agenda" },
     { id: "presentationMaterial", label: "Materi Presentasi" },
+] as const;
+
+// Tambahkan supportingDocuments ke dalam list file yang akan diupload
+const ALL_FILE_FIELDS = [
+    ...FILE_FIELDS,
+    { id: "supportingDocuments", label: "Dokumen Pendukung" }
 ] as const;
 
 const selectStyles: StylesConfig<Option, true> = {
@@ -125,6 +135,7 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
     const [existingFiles, setExistingFiles] = useState<Record<string, string | null>>({})
     const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
     const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null)
+    const [uploadedFilePaths, setUploadedFilePaths] = useState<Record<string, string[]>>({}) // Untuk supportingDocuments multiple files
 
     useEffect(() => {
         setMounted(true)
@@ -155,6 +166,15 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
             FILE_FIELDS.forEach(f => {
                 filesObj[f.id] = (agenda as unknown as Record<string, string | null>)[f.id] ?? null;
             });
+
+            // Handle supportingDocuments (bisa array atau null)
+            if (Array.isArray(agenda.supportingDocuments) && agenda.supportingDocuments.length > 0) {
+                // Simpan sebagai string JSON untuk display
+                filesObj["supportingDocuments"] = JSON.stringify(agenda.supportingDocuments);
+            } else {
+                filesObj["supportingDocuments"] = null;
+            }
+
             setExistingFiles(filesObj);
 
             if (agenda.notRequiredFiles) {
@@ -167,6 +187,9 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                     setNotRequired([]);
                 }
             }
+
+            // Reset uploaded file paths saat modal dibuka
+            setUploadedFilePaths({});
         }
     }, [agenda, open]);
 
@@ -174,10 +197,13 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
         const filesOk = FILE_FIELDS.every(doc =>
             existingFiles[doc.id] !== null || fileStatus[doc.id] || notRequired.includes(doc.id)
         );
-        const supportingOk = fileStatus["supportingDocuments"] || notRequired.includes("supportingDocuments") || (Array.isArray(agenda.supportingDocuments) && agenda.supportingDocuments.length > 0);
+        const supportingOk = fileStatus["supportingDocuments"] ||
+            notRequired.includes("supportingDocuments") ||
+            (Array.isArray(agenda.supportingDocuments) && agenda.supportingDocuments.length > 0) ||
+            (uploadedFilePaths["supportingDocuments"] && uploadedFilePaths["supportingDocuments"].length > 0);
 
         return filesOk && supportingOk;
-    }, [existingFiles, fileStatus, notRequired, agenda.supportingDocuments]);
+    }, [existingFiles, fileStatus, notRequired, agenda.supportingDocuments, uploadedFilePaths]);
 
     const handleDeadlineChange = (val: string) => {
         setDeadline(val)
@@ -198,27 +224,113 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
         setFileStatus(prev => ({ ...prev, [fieldId]: hasFile }));
     }
 
+    const handleRemoveSupportingDoc = (index: number) => {
+        setExistingFiles(prev => {
+            try {
+                // Mengambil data dokumen pendukung lama dari state
+                const currentDocs = JSON.parse(prev["supportingDocuments"] || '[]');
+                const updatedDocs = [...currentDocs];
+
+                // Menghapus file berdasarkan index yang dipilih
+                updatedDocs.splice(index, 1);
+
+                return {
+                    ...prev,
+                    "supportingDocuments": updatedDocs.length > 0 ? JSON.stringify(updatedDocs) : null
+                };
+            } catch {
+                return prev;
+            }
+        });
+    };
+
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
         setIsPending(true)
         const formData = new FormData(event.currentTarget)
 
-        formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "))
-        formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "))
-        formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
-        formData.set("priority", prioritas)
-        formData.set("notRequiredFiles", JSON.stringify(notRequired))
-        formData.set("status", isComplete ? "DAPAT_DILANJUTKAN" : "DRAFT")
-
-        FILE_FIELDS.forEach(f => {
-            const originalPath = (agenda as unknown as Record<string, string | null>)[f.id];
-            if (originalPath && existingFiles[f.id] === null) {
-                formData.append(`delete_${f.id}`, 'true')
-            }
-        })
-
         try {
+            // Ambil User ID untuk path folder
+            const { data: { user } } = await supabase.auth.getUser()
+            const userId = user?.id || "anonymous"
+
+            // Proses upload untuk semua file fields
+            // Di dalam handleSubmit...
+            for (const field of ALL_FILE_FIELDS) {
+                const fileInput = document.querySelector(`input[name="${field.id}"]`) as HTMLInputElement
+                formData.delete(field.id) // Tetap hapus biner
+
+                if (field.id === "supportingDocuments" && fileInput?.files) {
+                    const files = Array.from(fileInput.files)
+                    if (files.length > 0) {
+                        const uploadedPaths: string[] = []
+                        for (const file of files) {
+                            try {
+                                const fileExt = file.name.split(".").pop()?.toLowerCase() || "pdf"
+                                const uniqueId = crypto.randomUUID()
+                                const path = `radir/${userId}/${uniqueId}-${field.id}.${fileExt}`
+
+                                // Hapus 'uploadData' karena tidak digunakan
+                                const { error: uploadError } = await supabase.storage
+                                    .from("agenda-attachments")
+                                    .upload(path, file)
+
+                                if (uploadError) throw uploadError
+                                uploadedPaths.push(path)
+                            } catch { // Gunakan '_err' untuk menandakan variabel sengaja tidak dipakai
+                                toast.error(`Gagal unggah salah satu file ${field.label}`)
+                                setIsPending(false)
+                                return
+                            }
+                        }
+                        formData.set(`${field.id}Paths`, JSON.stringify(uploadedPaths))
+                        setUploadedFilePaths(prev => ({ ...prev, [field.id]: uploadedPaths }))
+                    }
+                } else if (fileInput?.files?.[0]) {
+                    const file = fileInput.files[0]
+                    try {
+                        const fileExt = file.name.split(".").pop()?.toLowerCase() || "pdf"
+                        const uniqueId = crypto.randomUUID()
+                        const path = `radir/${userId}/${uniqueId}-${field.id}.${fileExt}`
+
+                        const { error: uploadError } = await supabase.storage
+                            .from("agenda-attachments")
+                            .upload(path, file)
+
+                        if (uploadError) throw uploadError
+                        formData.set(`${field.id}Path`, path)
+                    } catch {
+                        toast.error(`Gagal unggah ${field.label}`)
+                        setIsPending(false)
+                        return
+                    }
+                }
+            }
+
+            // Set data lainnya
+            formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "))
+            formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "))
+            formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
+            formData.set("priority", prioritas)
+            formData.set("notRequiredFiles", JSON.stringify(notRequired))
+            formData.set("status", isComplete ? "DAPAT_DILANJUTKAN" : "DRAFT")
+
+            // Handle penghapusan file yang ada
+            FILE_FIELDS.forEach(f => {
+                const originalPath = (agenda as unknown as Record<string, string | null>)[f.id];
+                if (originalPath && existingFiles[f.id] === null) {
+                    formData.append(`delete_${f.id}`, 'true')
+                }
+            })
+
+            // Handle penghapusan supportingDocuments
+            if (existingFiles["supportingDocuments"] !== null && !fileStatus["supportingDocuments"]) {
+                formData.append("delete_supportingDocuments", 'true')
+            }
+
+            // Kirim ke Server Action (hanya metadata, tanpa file biner)
             const result = await updateRadirAction(agenda.id, formData)
+
             if (result.success) {
                 toast.custom((t) => (
                     <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg">
@@ -234,7 +346,8 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
             } else {
                 toast.error(result.error || "Gagal memperbarui data")
             }
-        } catch {
+        } catch (error) {
+            console.error("Submit error:", error)
             toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsPending(false)
@@ -273,7 +386,6 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                                     <Input value={judul} onChange={(e) => setJudul(e.target.value)} name="title" required className="h-11 border-slate-200" />
                                 </div>
                                 <div className="grid gap-3">
-                                    {/* Penambahan Preview Judul Agenda */}
                                     {judul && (
                                         <div className="p-4 bg-[#e7f6f9] border-l-4 border-[#14a2ba] rounded-sm animate-in fade-in slide-in-from-top-1">
                                             <p className="text-[10px] font-bold text-[#125d72] uppercase opacity-60 tracking-wider">Preview Teks Surat:</p>
@@ -344,7 +456,6 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                                     </div>
                                 </div>
                             </div>
-
                             <div className="space-y-6">
                                 <div className="flex items-center gap-2 border-b-2 border-[#e7f6f9] pb-2">
                                     <Paperclip className="h-5 w-5 text-[#14a2ba]" />
@@ -356,7 +467,9 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                                         Perhatian: Kosongkan input file jika tidak ingin mengganti dokumen lama.
                                     </p>
                                 </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Hanya render field-file utama (kecuali supportingDocuments) */}
                                     {FILE_FIELDS.map((doc) => (
                                         <div key={doc.id} className={`p-4 rounded-xl border-2 transition-all ${notRequired.includes(doc.id) ? 'bg-slate-50 border-slate-200 opacity-60' : 'border-dashed border-[#14a2ba] bg-[#e7f6f9]/20'}`}>
                                             <div className="flex justify-between items-center mb-3">
@@ -365,14 +478,21 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                                                     {notRequired.includes(doc.id) ? <><Eye className="h-3 w-3 mr-1" /> Diperlukan</> : <><EyeOff className="h-3 w-3 mr-1" /> Tidak Diperlukan</>}
                                                 </Button>
                                             </div>
+
                                             {!notRequired.includes(doc.id) && (
                                                 existingFiles[doc.id] ? (
                                                     <div className="flex items-center justify-between p-2.5 border rounded-lg bg-white">
                                                         <div className="flex items-center gap-2 truncate">
                                                             <FileText className="w-4 h-4 text-[#14a2ba]" />
-                                                            <span className="text-[10px] font-bold text-[#125d72] truncate">{existingFiles[doc.id]?.split('/').pop()}</span>
+                                                            <span className="text-[10px] font-bold text-[#125d72] truncate">
+                                                                {/* Hanya menampilkan nama file untuk field-file utama */}
+                                                                {typeof existingFiles[doc.id] === 'string' && existingFiles[doc.id]?.split('/').pop()}
+                                                            </span>
                                                         </div>
-                                                        <button type="button" onClick={() => setConfirmDeleteField(doc.id)} className="p-1 text-red-500"><X className="w-4 h-4" /></button>
+                                                        <button type="button" onClick={() => setConfirmDeleteField(doc.id)} className="p-1 text-red-500">
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+
                                                         <AlertDialog open={confirmDeleteField === doc.id} onOpenChange={(o) => !o && setConfirmDeleteField(null)}>
                                                             <AlertDialogContent className="border-none shadow-2xl">
                                                                 <AlertDialogHeader>
@@ -381,27 +501,81 @@ export function EditRadirModal({ agenda, open, onOpenChange }: EditRadirModalPro
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
                                                                     <AlertDialogCancel className="text-[10px] font-bold uppercase">Batal</AlertDialogCancel>
-                                                                    <AlertDialogAction className="bg-red-500 text-white text-[10px] font-bold uppercase" onClick={() => { setExistingFiles(prev => ({ ...prev, [doc.id]: null })); setConfirmDeleteField(null); }}>Hapus</AlertDialogAction>
+                                                                    <AlertDialogAction
+                                                                        className="bg-red-500 text-white text-[10px] font-bold uppercase"
+                                                                        onClick={() => {
+                                                                            setExistingFiles(prev => ({ ...prev, [doc.id]: null }));
+                                                                            setConfirmDeleteField(null);
+                                                                        }}
+                                                                    >
+                                                                        Hapus
+                                                                    </AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>
                                                     </div>
                                                 ) : (
-                                                    <Input name={doc.id} type="file" accept=".pdf" onChange={(e) => handleFileChange(doc.id, !!e.target.files?.[0])} className="h-10 text-[10px]" />
+                                                    <Input
+                                                        name={doc.id}
+                                                        type="file"
+                                                        accept=".pdf"
+                                                        onChange={(e) => handleFileChange(doc.id, !!e.target.files?.[0])}
+                                                        className="h-10 text-[10px]"
+                                                    />
                                                 )
                                             )}
                                         </div>
                                     ))}
-                                    <div className={`p-4 rounded-xl border-2 transition-all col-span-1 md:col-span-2 ${notRequired.includes('supportingDocuments') ? 'bg-slate-50 border-slate-200 opacity-60' : 'border-dashed border-slate-300 bg-slate-50'}`}>
-                                        <div className="flex justify-between items-center mb-3">
-                                            <Label className="text-[10px] font-black text-[#125d72] uppercase">3. Tambahkan Dokumen Pendukung Lainnya (Multi-File)</Label>
-                                            <Button type="button" variant="outline" size="sm" onClick={() => toggleNotRequired('supportingDocuments')} className={`h-7 text-[9px] px-2 ${notRequired.includes('supportingDocuments') ? 'bg-blue-50 text-blue-600 border-blue-200' : 'text-slate-500'}`}>
-                                                {notRequired.includes('supportingDocuments') ? <><Eye className="h-3 w-3 mr-1" /> Diperlukan</> : <><EyeOff className="h-3 w-3 mr-1" /> Tidak Diperlukan</>}
-                                            </Button>
-                                        </div>
-                                        {!notRequired.includes('supportingDocuments') && (
-                                            <Input name="supportingDocuments" type="file" multiple accept=".pdf" onChange={(e) => handleFileChange('supportingDocuments', !!e.target.files?.length)} className="h-10 text-[10px] file:bg-[#125d72] file:text-white file:border-none file:rounded cursor-pointer" />
+
+                                    {/* SEKSI KHUSUS DOKUMEN PENDUKUNG (Multiple) */}
+                                    <div className="p-4 rounded-xl border-2 border-dashed border-[#14a2ba] bg-[#e7f6f9]/10 col-span-1 md:col-span-2">
+                                        <Label className="text-[10px] font-black text-[#125d72] uppercase mb-3 block">
+                                            Dokumen Pendukung Lainnya
+                                            <span className="text-xs font-normal text-gray-500 ml-2">(Opsional, dapat upload multiple)</span>
+                                        </Label>
+
+                                        {/* Render file pendukung yang sudah ada */}
+                                        {existingFiles["supportingDocuments"] && (
+                                            <div className="space-y-2 mb-3">
+                                                {(() => {
+                                                    try {
+                                                        const files = JSON.parse(existingFiles["supportingDocuments"] || '[]');
+                                                        return files.map((path: string, idx: number) => (
+                                                            <div key={idx} className="flex items-center justify-between p-2 border rounded bg-white">
+                                                                <div className="flex items-center gap-2 truncate">
+                                                                    <FileText className="w-4 h-4 text-[#14a2ba]" />
+                                                                    <span className="text-[10px] text-[#125d72] truncate">
+                                                                        {path.split('/').pop()}
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemoveSupportingDoc(idx)}
+                                                                    className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </button>
+                                                            </div>
+                                                        ));
+                                                    } catch (error) {
+                                                        return null;
+                                                    }
+                                                })()}
+                                            </div>
                                         )}
+
+                                        <Input
+                                            name="supportingDocuments"
+                                            type="file"
+                                            multiple
+                                            accept=".pdf"
+                                            onChange={(e) => handleFileChange("supportingDocuments", !!e.target.files?.length)}
+                                            className="h-10 text-[10px]"
+                                        />
+
+                                        <p className="text-[10px] text-gray-500 mt-2">
+                                            * Anda dapat memilih lebih dari satu file dengan menekan Ctrl/Cmd + Klik
+                                        </p>
                                     </div>
                                 </div>
                             </div>
