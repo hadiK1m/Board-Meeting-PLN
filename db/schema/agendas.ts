@@ -8,7 +8,7 @@ export const agendas = pgTable("agendas", {
     // Informasi Utama Agenda
     title: text("title").notNull(),
 
-    // ── PERUBAHAN: Menjadi text agar mendukung penjelasan panjang dari Textarea ──
+    // ── DISESUAIKAN: Menjadi text agar mendukung penjelasan panjang dari Textarea ──
     urgency: text("urgency"),
 
     deadline: timestamp("deadline"),
@@ -65,20 +65,18 @@ export const agendas = pgTable("agendas", {
     executiveSummary: text("executive_summary"),
     considerations: text("considerations"),
     risalahBody: text("risalah_body"),
-    catatanRapat: text("catatan_rapat"), // Khusus untuk export Notulensi Rakordir
+    catatanRapat: text("catatan_rapat"),
 
-    // ── FIELD KHUSUS RAKORDIR ──
-    // Arahan Direksi disimpan sebagai JSON Array
+    // Arahan Direksi (RAKORDIR)
     arahanDireksi: jsonb("arahan_direksi").default([]),
 
-    // ── FIELD KHUSUS RADIR ──
-    // Keputusan Rapat RADIR
+    // Keputusan Rapat (RADIR)
     meetingDecisions: jsonb("meeting_decisions").default([]),
 
     dissentingOpinion: text("dissenting_opinion"),
     meetingStatus: text("meeting_status").default("PENDING"),
 
-    // GROUPING & TRACKING
+    // GROUPING UNTUK RISALAH
     risalahGroupId: uuid("risalah_group_id").defaultRandom(),
     risalahTtd: text("risalah_ttd"),
     monevStatus: text("monev_status").default("ON_PROGRESS"),
@@ -89,6 +87,5 @@ export const agendas = pgTable("agendas", {
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Type Definitions untuk TypeScript
 export type Agenda = typeof agendas.$inferSelect;
 export type NewAgenda = typeof agendas.$inferInsert;

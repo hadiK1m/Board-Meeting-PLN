@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -23,7 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea" // ✅ Import Textarea
+import { Textarea } from "@/components/ui/textarea"
 
 import { createRakordirAction } from "@/server/actions/rakordir-actions"
 import {
@@ -32,6 +31,11 @@ import {
     SUPPORT,
     extractCode
 } from "@/lib/MasterData"
+
+// Tambahan: Client Supabase
+import { createClient } from "@/lib/supabase/client"
+
+const supabase = createClient()
 
 const FILE_LIST = [
     { id: "proposalNote", label: "ND Usulan Agenda" },
@@ -89,6 +93,9 @@ export function AddRakordirModal() {
     const [notRequiredFiles, setNotRequiredFiles] = useState<string[]>([])
     const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({})
 
+    // Tambahan state untuk tracking upload
+    const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set())
+
     const [selectedDir, setSelectedDir] = useState<MultiValue<Option>>([])
     const [selectedPemrakarsa, setSelectedPemrakarsa] = useState<MultiValue<Option>>([])
     const [selectedSupport, setSelectedSupport] = useState<MultiValue<Option>>([])
@@ -114,6 +121,7 @@ export function AddRakordirModal() {
         setJudul(""); setDeadline(""); setSelectedDir([]); setSelectedPemrakarsa([]); setSelectedSupport([]);
         setContactPerson(""); setPosition(""); setPhone("");
         setNotRequiredFiles([]); setFileStatus({});
+        setUploadingFiles(new Set());
     }
 
     const toggleNotRequired = (fieldId: string) => {
@@ -158,7 +166,7 @@ export function AddRakordirModal() {
         setIsPending(true)
 
         const formData = new FormData(event.currentTarget)
-        const submitter = (event.nativeEvent as any).submitter as HTMLButtonElement
+        const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
 
         if (submitter && submitter.name === "actionType") {
             formData.append("actionType", submitter.value)
@@ -171,6 +179,56 @@ export function AddRakordirModal() {
         formData.set("isComplete", String(isComplete))
         formData.set("notRequiredFiles", JSON.stringify(notRequiredFiles))
         formData.set("meetingType", "RAKORDIR")
+
+        // Ambil user ID dari client Supabase
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            toast.error("Anda harus login terlebih dahulu")
+            setIsPending(false)
+            return
+        }
+        const userId = user.id
+
+        // Proses upload client-side untuk setiap field wajib
+        for (const doc of FILE_LIST) {
+            const fieldId = doc.id
+            if (notRequiredFiles.includes(fieldId)) continue
+
+            const input = document.getElementById(fieldId) as HTMLInputElement | null
+            const file = input?.files?.[0]
+            if (!file) continue
+
+            setUploadingFiles(prev => new Set([...prev, fieldId]))
+
+            try {
+                const fileExt = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+                const uniqueId = crypto.randomUUID()
+                const path = `rakordir/${userId}/${uniqueId}-${fieldId}.${fileExt}`
+
+                const { data, error } = await supabase.storage
+                    .from('agenda-attachments')
+                    .upload(path, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    })
+
+                if (error) throw error
+
+                // Ganti File menjadi string path di formData
+                formData.set(fieldId, data.path)
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : "Gagal unggah file"
+                toast.error(`Gagal unggah ${doc.label}: ${message}`)
+                setIsPending(false)
+                return // batalkan submit jika ada error upload
+            } finally {
+                setUploadingFiles(prev => {
+                    const next = new Set(prev)
+                    next.delete(fieldId)
+                    return next
+                })
+            }
+        }
 
         try {
             const result = await createRakordirAction(formData)
@@ -255,7 +313,6 @@ export function AddRakordirModal() {
                                     )}
                                 </div>
 
-                                {/* ✅ PERUBAHAN: Urgensi menjadi Textarea Full Width */}
                                 <div className="grid gap-2">
                                     <Label className="font-bold text-[#125d72] text-xs uppercase">Urgensi</Label>
                                     <Textarea
@@ -336,7 +393,15 @@ export function AddRakordirModal() {
                                                 </Button>
                                             </div>
                                             {!notRequiredFiles.includes(doc.id) && (
-                                                <Input name={doc.id} type="file" accept=".pdf" onChange={(e) => handleFileChange(doc.id, !!e.target.files?.[0])} className="h-9 text-[10px] file:bg-[#14a2ba] file:text-white file:border-none file:rounded-md cursor-pointer" />
+                                                <Input
+                                                    id={doc.id}
+                                                    name={doc.id}
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    onChange={(e) => handleFileChange(doc.id, !!e.target.files?.[0])}
+                                                    className="h-9 text-[10px] file:bg-[#14a2ba] file:text-white file:border-none file:rounded-md cursor-pointer"
+                                                    disabled={uploadingFiles.has(doc.id)}
+                                                />
                                             )}
                                         </div>
                                     ))}
@@ -355,7 +420,15 @@ export function AddRakordirModal() {
                                             </Button>
                                         </div>
                                         {!notRequiredFiles.includes('supportingDocuments') && (
-                                            <Input name="supportingDocuments" type="file" multiple accept=".pdf" onChange={(e) => handleFileChange('supportingDocuments', !!e.target.files?.length)} className="h-10 text-[10px] file:bg-[#125d72] file:text-white cursor-pointer" />
+                                            <Input
+                                                name="supportingDocuments"
+                                                type="file"
+                                                multiple
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileChange('supportingDocuments', !!e.target.files?.length)}
+                                                className="h-10 text-[10px] file:bg-[#125d72] file:text-white cursor-pointer"
+                                                disabled={uploadingFiles.has('supportingDocuments')}
+                                            />
                                         )}
                                     </div>
                                 </div>
@@ -367,12 +440,12 @@ export function AddRakordirModal() {
                         <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending} className="font-bold text-slate-400 uppercase text-xs hover:bg-slate-100 h-12 px-6 rounded-xl">Batal</Button>
 
                         {!isComplete ? (
-                            <Button type="submit" name="actionType" value="draft" disabled={isPending} className="h-12 px-8 font-bold uppercase tracking-widest shadow-lg transition-all min-w-56 rounded-xl bg-[#14a2ba] hover:bg-[#118a9e] text-white">
-                                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Menyimpan...</span></> : <><FileText className="mr-2 h-4 w-4" /><span>Simpan Draft</span></>}
+                            <Button type="submit" name="actionType" value="draft" disabled={isPending || uploadingFiles.size > 0} className="h-12 px-8 font-bold uppercase tracking-widest shadow-lg transition-all min-w-56 rounded-xl bg-[#14a2ba] hover:bg-[#118a9e] text-white">
+                                {uploadingFiles.size > 0 ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Mengunggah...</span></> : isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Menyimpan...</span></> : <><FileText className="mr-2 h-4 w-4" /><span>Simpan Draft</span></>}
                             </Button>
                         ) : (
-                            <Button type="submit" name="actionType" value="submit" disabled={isPending} className="h-12 px-10 font-black uppercase tracking-widest shadow-xl transition-all min-w-64 rounded-xl bg-[#125d72] hover:bg-[#0e4b5d] text-white">
-                                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Memproses...</span></> : <><Send className="mr-2 h-4 w-4" /><span>Lanjutkan Rapat</span></>}
+                            <Button type="submit" name="actionType" value="submit" disabled={isPending || uploadingFiles.size > 0} className="h-12 px-10 font-black uppercase tracking-widest shadow-xl transition-all min-w-64 rounded-xl bg-[#125d72] hover:bg-[#0e4b5d] text-white">
+                                {uploadingFiles.size > 0 ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Mengunggah...</span></> : isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /><span>Memproses...</span></> : <><Send className="mr-2 h-4 w-4" /><span>Lanjutkan Rapat</span></>}
                             </Button>
                         )}
                     </DialogFooter>
@@ -382,6 +455,6 @@ export function AddRakordirModal() {
     )
 }
 
-function cn(...inputs: any[]) {
+function cn(...inputs: unknown[]) {
     return inputs.filter(Boolean).join(' ');
 }

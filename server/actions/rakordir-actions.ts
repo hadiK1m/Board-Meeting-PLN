@@ -103,29 +103,15 @@ async function deleteFromStorage(supabase: any, paths: string[]) {
  */
 export async function createRakordirAction(formData: FormData) {
     try {
-        // [SECURE] Auth Check
-        const { user, supabase } = await assertAuthenticated()
+        const { user } = await assertAuthenticated()
 
-        // 🔑 ACTION TYPE
         const actionType = formData.get("actionType")
         const status = actionType === "submit" ? "DAPAT_DILANJUTKAN" : "DRAFT"
 
-        // Upload file utama
-        const proposalNoteFile = formData.get("proposalNote") as File
-        const presentationMaterialFile = formData.get("presentationMaterial") as File
-
-        // [SECURE] Upload menggunakan helper
-        const proposalNotePath = await uploadToStorage(supabase, proposalNoteFile, "proposal", user.id)
-        const presentationMaterialPath = await uploadToStorage(supabase, presentationMaterialFile, "presentation", user.id)
-
-        // Upload supporting documents
-        const supportingFiles = formData.getAll("supportingDocuments") as File[]
-        const supportingPaths: string[] = []
-
-        for (const file of supportingFiles) {
-            const path = await uploadToStorage(supabase, file, "supporting", user.id)
-            if (path) supportingPaths.push(path)
-        }
+        // SEKARANG: Ambil PATH (string), bukan FILE object
+        const proposalNotePath = formData.get("proposalNote") as string | null
+        const presentationMaterialPath = formData.get("presentationMaterial") as string | null
+        const supportingDocuments = formData.get("supportingDocuments") as string || "[]"
 
         // Insert Database
         await db.insert(agendas).values({
@@ -141,12 +127,14 @@ export async function createRakordirAction(formData: FormData) {
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
 
+            // Simpan path yang sudah jadi string
             proposalNote: proposalNotePath,
             presentationMaterial: presentationMaterialPath,
-            supportingDocuments: JSON.stringify(supportingPaths),
+            supportingDocuments: supportingDocuments,
             notRequiredFiles: (formData.get("notRequiredFiles") as string) || "[]",
 
             status,
+            createdById: user.id, // Pastikan audit trail tersimpan
             createdAt: new Date(),
             updatedAt: new Date(),
         })
@@ -164,57 +152,11 @@ export async function createRakordirAction(formData: FormData) {
  */
 export async function updateRakordirAction(id: string, formData: FormData) {
     try {
-        // [SECURE] Auth Check
-        const { user, supabase } = await assertAuthenticated()
-
-        const existing = await db.query.agendas.findFirst({
-            where: eq(agendas.id, id),
-        })
-
-        if (!existing) throw new Error("Agenda tidak ditemukan")
+        await assertAuthenticated()
 
         const actionType = formData.get("actionType")
 
-        // Proposal Note Logic
-        let proposalNotePath = existing.proposalNote
-        const newProposalFile = formData.get("proposalNote") as File
-
-        if (newProposalFile && newProposalFile.size > 0) {
-            // Hapus file lama jika ada pengganti
-            if (existing.proposalNote) {
-                await deleteFromStorage(supabase, [existing.proposalNote])
-            }
-            proposalNotePath = await uploadToStorage(supabase, newProposalFile, "proposal", user.id)
-        }
-
-        // Presentation Material Logic
-        let presentationMaterialPath = existing.presentationMaterial
-        const newPresentationFile = formData.get("presentationMaterial") as File
-
-        if (newPresentationFile && newPresentationFile.size > 0) {
-            if (existing.presentationMaterial) {
-                await deleteFromStorage(supabase, [existing.presentationMaterial])
-            }
-            presentationMaterialPath = await uploadToStorage(supabase, newPresentationFile, "presentation", user.id)
-        }
-
-        // Supporting Documents Logic
-        let currentSupporting: string[] = []
-        try {
-            currentSupporting = JSON.parse((existing.supportingDocuments as string) || "[]")
-        } catch { currentSupporting = [] }
-
-        // Tambah file baru ke list yang sudah ada
-        const newSupportingFiles = formData.getAll("supportingDocuments") as File[]
-        for (const file of newSupportingFiles) {
-            const path = await uploadToStorage(supabase, file, "supporting", user.id)
-            if (path) currentSupporting.push(path)
-        }
-
-        // Catatan: Mekanisme penghapusan item spesifik dari supporting docs biasanya butuh UI terpisah 
-        // yang mengirim flag 'delete_supporting_xyz', disini kita hanya append file baru.
-
-        // DATA UPDATE
+        // DATA UPDATE: Langsung ambil nilai dari FormData (sudah diproses di Client)
         const updateData: Record<string, any> = {
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
@@ -226,10 +168,13 @@ export async function updateRakordirAction(id: string, formData: FormData) {
             contactPerson: formData.get("contactPerson") as string,
             position: formData.get("position") as string,
             phone: formData.get("phone") as string,
-            proposalNote: proposalNotePath,
-            presentationMaterial: presentationMaterialPath,
-            supportingDocuments: JSON.stringify(currentSupporting),
-            notRequiredFiles: formData.get("notRequiredFiles") as string,
+
+            // Client mengirim path baru jika file diganti, atau path lama jika tidak berubah
+            proposalNote: formData.get("proposalNote") as string | null,
+            presentationMaterial: formData.get("presentationMaterial") as string | null,
+            supportingDocuments: formData.get("supportingDocuments") as string || "[]",
+
+            notRequiredFiles: (formData.get("notRequiredFiles") as string) || "[]",
             updatedAt: new Date(),
         }
 

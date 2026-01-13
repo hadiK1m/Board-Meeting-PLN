@@ -48,27 +48,68 @@ async function assertAgendaExists(agendaIds: string | string[]) {
 }
 
 // ────────────────────────────────────────────────
-// 2. ACTION: GET SIGNED URL
+// 2. ACTION: GET SIGNED URL (VERSI TERBARU & AMAN)
 // ────────────────────────────────────────────────
 
+/**
+ * Menghasilkan signed URL sementara untuk mengakses file private di Supabase Storage.
+ * @param path Path file di bucket (contoh: "radir/uuid/filename.pdf")
+ * @returns Object dengan signed URL atau error
+ */
 export async function getSignedFileUrl(path: string) {
     try {
-        // [SECURE] Hanya user login yang bisa melihat file private
-        await assertAuthenticated()
+        // 1. Pastikan user sudah login (wajib untuk akses file private)
+        const user = await assertAuthenticated();
 
-        const supabase = await createClient()
+        // 2. Validasi path sederhana (opsional tapi mencegah abuse)
+        if (!path || typeof path !== "string" || !path.startsWith("radir/")) {
+            throw new Error("Path file tidak valid atau tidak diizinkan.");
+        }
+
+        const supabase = await createClient();
+
+        // 3. Buat signed URL dengan expiry 1 jam (3600 detik)
+        //    Bisa diubah ke 7200 (2 jam) jika dokumen panjang
         const { data, error } = await supabase.storage
-            .from('agenda-attachments')
-            .createSignedUrl(path, 60) // Berlaku 60 detik
+            .from("agenda-attachments")
+            .createSignedUrl(path, 3600, {
+                // Opsi tambahan untuk keamanan (opsional)
+                download: false, // default: false → buka di browser, bukan force download
+            });
 
-        if (error) throw error
-        return data.signedUrl
+        if (error) {
+            console.error("[SIGNED_URL_GENERATION_ERROR]", {
+                path,
+                userId: user.id,
+                errorMessage: error.message,
+            });
+            throw error;
+        }
+
+        if (!data?.signedUrl) {
+            throw new Error("Gagal menghasilkan signed URL.");
+        }
+
+        return {
+            success: true,
+            url: data.signedUrl,
+        };
+
     } catch (error: unknown) {
-        console.error("[SIGNED_URL_ERROR]", error instanceof Error ? error.message : "Failed to generate signed URL")
-        return null
+        const errorMessage =
+            error instanceof Error ? error.message : "Gagal menghasilkan link akses file.";
+
+        console.error("[GET_SIGNED_URL_ERROR]", {
+            path,
+            error: errorMessage,
+        });
+
+        return {
+            success: false,
+            error: errorMessage,
+        };
     }
 }
-
 // ────────────────────────────────────────────────
 // 3. ACTION: BULK DELETE AGENDA
 // ────────────────────────────────────────────────

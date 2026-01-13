@@ -77,60 +77,26 @@ function cleanValue<T>(val: T, fallback: T): T {
 export async function createRadirAction(formData: FormData) {
     try {
         // [SECURE] 1. Auth Check
-        const { user, supabase } = await assertAuthenticated()
+        const { user } = await assertAuthenticated()  // supabase tidak lagi diperlukan di sini
 
-        const uploadedUrls: Partial<Record<AgendaFileField, string | null>> = {}
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
-        // Upload Dokumen Utama
+        // Ambil path dari client (sudah di-upload di sisi client)
+        const uploadedUrls: Partial<Record<AgendaFileField, string | null>> = {}
+
         for (const field of FILE_FIELDS) {
-            const file = formData.get(field) as File
-            if (file && file.size > 0) {
-                validateFile(file)
-                const fileExt = file.name.split('.').pop()
-                // [SECURE] Gunakan UUID
-                const uniqueId = crypto.randomUUID()
-                const path = `radir/${user.id}/${uniqueId}-${field}.${fileExt}`
-
-                const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
-                if (error) throw error
-                uploadedUrls[field] = data.path
-            } else {
-                uploadedUrls[field] = null
-            }
+            const path = formData.get(`${field}Path`) as string | null
+            uploadedUrls[field] = path || null
         }
 
-        // Upload Dokumen Pendukung
-        const supportingFiles = formData.getAll("supportingDocuments") as File[]
-        const supportingPaths: string[] = []
+        // Ambil array path dokumen pendukung (JSON string dari client)
+        const supportingPathsRaw = formData.get("supportingDocumentsPaths") as string | null
+        const supportingPaths: string[] = supportingPathsRaw ? JSON.parse(supportingPathsRaw) : []
 
-        for (const file of supportingFiles) {
-            if (file && file.size > 0 && file.name !== 'undefined') {
-                validateFile(file)
-                const uniqueId = crypto.randomUUID()
-                // Sanitasi nama file
-                const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-                const path = `radir/${user.id}/${uniqueId}-${cleanName}`
-
-                const { data, error: uploadError } = await supabase.storage
-                    .from('agenda-attachments')
-                    .upload(path, file, {
-                        cacheControl: '3600',
-                        upsert: false
-                    })
-
-                if (uploadError) {
-                    console.error(`[STORAGE-ERROR] Gagal unggah dokumen pendukung:`, uploadError.message)
-                    continue
-                }
-                if (data) supportingPaths.push(data.path)
-            }
-        }
-
-        // Logic Status
+        // Logic Status (sama seperti sebelumnya)
         const allFilesHandled = FILE_FIELDS.every(field =>
-            (uploadedUrls[field] !== null) || (Array.isArray(notRequiredFiles) && notRequiredFiles.includes(field))
+            (uploadedUrls[field] !== null) || notRequiredFiles.includes(field)
         );
 
         const insertData: NewAgenda = {
@@ -149,15 +115,18 @@ export async function createRadirAction(formData: FormData) {
             notRequiredFiles: notRequiredFiles,
             status: allFilesHandled ? "DAPAT_DILANJUTKAN" : "DRAFT",
             meetingType: "RADIR",
+            // createdById bisa ditambahkan jika diperlukan
+            createdById: user.id,
         };
 
         await db.insert(agendas).values(insertData);
-        revalidatePath("/agenda/radir")
-        return { success: true }
+        revalidatePath("/agenda/radir");
+
+        return { success: true };
 
     } catch (error: any) {
-        console.error("Create Radir Error:", error)
-        return { success: false, error: error.message || "Gagal menyimpan data." }
+        console.error("Create Radir Error:", error);
+        return { success: false, error: error.message || "Gagal menyimpan data." };
     }
 }
 
