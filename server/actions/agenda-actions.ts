@@ -62,7 +62,8 @@ export async function getSignedFileUrl(path: string) {
         const user = await assertAuthenticated();
 
         // 2. Validasi path sederhana (opsional tapi mencegah abuse)
-        if (!path || typeof path !== "string" || !path.startsWith("radir/")) {
+        if (!path || typeof path !== "string" ||
+            (!path.startsWith("radir/") && !path.startsWith("rakordir/"))) {
             throw new Error("Path file tidak valid atau tidak diizinkan.");
         }
 

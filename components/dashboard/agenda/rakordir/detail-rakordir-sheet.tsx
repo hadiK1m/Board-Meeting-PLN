@@ -28,6 +28,7 @@ import { getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 // ✅ Pastikan interface ini mencakup semua field yang dikirim dari Client
 export interface RakordirAgendaDetail {
@@ -88,22 +89,33 @@ export function DetailRakordirSheet({ agenda, open, onOpenChange }: DetailAgenda
     const handleSecureView = async (path: string) => {
         if (!path || path === "null") return
         try {
-            const result = await getSignedFileUrl(path) // Kita ganti nama variabel agar lebih jelas
+            // 1. Dapatkan hasil dari Server Action
+            const result = await getSignedFileUrl(path)
 
-            // Cek apakah sukses dan URL-nya ada
+            // 2. Cek apakah sukses dan URL-nya ada
             if (!result.success || !result.url) {
                 console.error(result.error)
+                toast.error("Gagal mendapatkan akses ke dokumen.")
                 return
             }
 
-            const response = await fetch(result.url) // Gunakan result.url yang berupa string
-            if (!response.ok) return
+            // 3. Gunakan result.url yang berupa string untuk fetch
+            const response = await fetch(result.url)
+            if (!response.ok) {
+                toast.error("Gagal mengunduh dokumen.")
+                return
+            }
+
+            // 4. Proses Blob untuk pratinjau aman di tab baru
             const blob = await response.blob()
             const localBlobUrl = URL.createObjectURL(blob)
             window.open(localBlobUrl, '_blank')
+
+            // Bersihkan memori setelah 1 menit
             setTimeout(() => URL.revokeObjectURL(localBlobUrl), 60_000)
         } catch (err) {
             console.error('Error secure view', err)
+            toast.error("Terjadi kesalahan sistem.")
         }
     }
 
