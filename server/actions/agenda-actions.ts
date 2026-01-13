@@ -5,13 +5,17 @@ import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
-import { eq, inArray, and } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 // ────────────────────────────────────────────────
-// HELPER: AUTH & OWNERSHIP
+// 1. HELPER: AUTHENTICATION
 // ────────────────────────────────────────────────
 
+/**
+ * Memastikan user sudah login.
+ * Mengembalikan objek user untuk keperluan audit trail (createdById).
+ */
 async function assertAuthenticated() {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -22,41 +26,40 @@ async function assertAuthenticated() {
     return user
 }
 
-async function assertAgendaOwnership(agendaIds: string | string[]) {
-    const user = await assertAuthenticated()
+/**
+ * HELPER: Cek Eksistensi Agenda (Kolaboratif)
+ * Menggantikan assertAgendaOwnership. 
+ * Fungsi ini memastikan data ada di DB tanpa membatasi siapa pengelolanya.
+ */
+async function assertAgendaExists(agendaIds: string | string[]) {
+    await assertAuthenticated() // Wajib login
     const ids = Array.isArray(agendaIds) ? agendaIds : [agendaIds]
 
-    if (ids.length === 0) return user
+    if (ids.length === 0) return
 
-    const owned = await db
+    const found = await db
         .select({ id: agendas.id })
         .from(agendas)
-        .where(and(inArray(agendas.id, ids), eq(agendas.createdById, user.id)))
+        .where(inArray(agendas.id, ids))
 
-    if (owned.length !== ids.length) {
-        throw new Error("Forbidden: Anda tidak memiliki hak atas salah satu agenda.")
+    if (found.length !== ids.length) {
+        throw new Error("Error: Satu atau lebih data tidak ditemukan di database.")
     }
-    return user
 }
 
 // ────────────────────────────────────────────────
-// ACTION: Mendapatkan Signed URL (dengan ownership check)
+// 2. ACTION: GET SIGNED URL
 // ────────────────────────────────────────────────
 
 export async function getSignedFileUrl(path: string) {
     try {
+        // [SECURE] Hanya user login yang bisa melihat file private
         await assertAuthenticated()
-        // Regex fleksibel: mencari UUID di mana saja dalam path
-        const match = path.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
-        if (!match) throw new Error("Format path file tidak valid.")
-
-        const agendaId = match[1]
-        await assertAgendaOwnership(agendaId)
 
         const supabase = await createClient()
         const { data, error } = await supabase.storage
             .from('agenda-attachments')
-            .createSignedUrl(path, 60)
+            .createSignedUrl(path, 60) // Berlaku 60 detik
 
         if (error) throw error
         return data.signedUrl
@@ -67,15 +70,16 @@ export async function getSignedFileUrl(path: string) {
 }
 
 // ────────────────────────────────────────────────
-// ACTION: Bulk Delete Agenda (dengan transaction)
+// 3. ACTION: BULK DELETE AGENDA
 // ────────────────────────────────────────────────
 
 export async function deleteBulkAgendasAction(ids: string[]) {
     try {
         if (!ids || ids.length === 0) throw new Error("Tidak ada data yang dipilih.")
-        if (ids.length > 50) throw new Error("Maksimal 50 agenda per aksi untuk mencegah abuse.")
+        if (ids.length > 50) throw new Error("Maksimal 50 agenda per aksi untuk keamanan.")
 
-        await assertAgendaOwnership(ids)
+        // Cek login & pastikan data ada (Collaborative Access)
+        await assertAgendaExists(ids)
         const supabase = await createClient()
 
         await db.transaction(async (tx) => {
@@ -98,15 +102,16 @@ export async function deleteBulkAgendasAction(ids: string[]) {
                 "grcDoc",
             ] as const
 
+            // Kumpulkan semua path file dari agenda yang akan dihapus
             dataAgendas.forEach((agenda) => {
                 FILE_FIELDS.forEach((field) => {
-                    // Casting diperlukan karena Drizzle tidak infer dynamic key access dengan baik
-                    const path = (agenda as any)[field]
-                    if (typeof path === "string" && path) {
-                        filesToDelete.push(path)
+                    const pathValue = (agenda as any)[field]
+                    if (typeof pathValue === "string" && pathValue) {
+                        filesToDelete.push(pathValue)
                     }
                 })
 
+                // Parsing Supporting Documents (JSONB)
                 if (agenda.supportingDocuments) {
                     try {
                         const extra = Array.isArray(agenda.supportingDocuments)
@@ -117,24 +122,28 @@ export async function deleteBulkAgendasAction(ids: string[]) {
                             filesToDelete.push(...extra.filter((p): p is string => typeof p === "string"))
                         }
                     } catch (parseErr) {
-                        console.error(
-                            "[PARSE_SUPPORTING_DOCS_ERROR]",
-                            parseErr instanceof Error ? parseErr.message : "Parse failed"
-                        )
+                        console.error("[PARSE_SUPPORTING_DOCS_ERROR]", parseErr)
                     }
                 }
             })
 
-            // Hapus dari DB dulu
+            // 1. Hapus dari Database
             await tx.delete(agendas).where(inArray(agendas.id, ids))
 
-            // Baru hapus file di storage
+            // 2. Hapus file fisik di Storage
             if (filesToDelete.length > 0) {
-                const { error } = await supabase.storage.from("agenda-attachments").remove(filesToDelete)
-                if (error) throw new Error(`Gagal hapus file: ${error.message}`)
+                const { error: storageError } = await supabase.storage
+                    .from("agenda-attachments")
+                    .remove(filesToDelete)
+
+                if (storageError) {
+                    // Log warning tapi jangan gagalkan transaksi DB jika file sudah hilang di storage
+                    console.warn("[STORAGE_DELETE_WARNING]:", storageError.message)
+                }
             }
         })
 
+        // Revalidasi semua halaman terkait
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
         revalidatePath("/agenda/kepdir-sirkuler")
@@ -149,7 +158,7 @@ export async function deleteBulkAgendasAction(ids: string[]) {
 }
 
 // ────────────────────────────────────────────────
-// ACTION: Cancel Agenda
+// 4. ACTION: CANCEL AGENDA
 // ────────────────────────────────────────────────
 
 const cancelSchema = z.object({
@@ -160,7 +169,9 @@ const cancelSchema = z.object({
 export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     try {
         const validated = cancelSchema.parse(data)
-        await assertAgendaOwnership(validated.id)
+
+        // Cek login & pastikan data ada (Collaborative Access)
+        await assertAgendaExists(validated.id)
 
         await db.update(agendas).set({
             status: "DIBATALKAN",
@@ -180,16 +191,18 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
 }
 
 // ────────────────────────────────────────────────
-// ACTION: Resume Agenda
+// 5. ACTION: RESUME AGENDA
 // ────────────────────────────────────────────────
 
 export async function resumeAgendaAction(id: string) {
     try {
+        // Validasi format UUID sederhana
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
             throw new Error("ID Agenda tidak valid.")
         }
 
-        await assertAgendaOwnership(id)
+        // Cek login & pastikan data ada (Collaborative Access)
+        await assertAgendaExists(id)
 
         await db.update(agendas).set({
             status: "DAPAT_DILANJUTKAN",
@@ -209,12 +222,12 @@ export async function resumeAgendaAction(id: string) {
 }
 
 // ────────────────────────────────────────────────
-// ACTION: Create Agenda (FIX parameter mismatch)
+// 6. ACTION: CREATE AGENDA
 // ────────────────────────────────────────────────
 
 const createAgendaServerSchema = z.object({
     title: z.string().min(5, "Judul minimal 5 karakter"),
-    urgency: z.string().min(1, "Urgensi harus diisi"), // textarea → string panjang
+    urgency: z.string().min(1, "Urgensi harus diisi"),
     priority: z.enum(["Low", "Medium", "High"]).optional(),
     deadline: z.string().optional(),
     director: z.string().optional(),
@@ -228,11 +241,13 @@ const createAgendaServerSchema = z.object({
 
 export async function createAgendaAction(formData: FormData) {
     try {
+        // 1. Dapatkan user untuk Audit Trail (createdById)
         const user = await assertAuthenticated()
 
         const actionType = formData.get("actionType") as string | null
         const initialStatus = actionType === "draft" ? "DRAFT" : "DIUSULKAN"
 
+        // 2. Kumpulkan data dari FormData
         const rawData = {
             title: formData.get("title")?.toString(),
             urgency: formData.get("urgency")?.toString(),
@@ -247,45 +262,41 @@ export async function createAgendaAction(formData: FormData) {
             phone: formData.get("phone")?.toString(),
         }
 
+        // 3. Validasi dengan Zod
         const validated = createAgendaServerSchema.parse(rawData)
-
         const deadlineDate = validated.deadline ? new Date(validated.deadline) : null
 
-        // ── INSERT HANYA KOLOM YANG ADA ──
-        // Ini yang menghilangkan error parameter mismatch
+        // 4. Insert ke Database
         await db.insert(agendas).values({
             title: validated.title,
             urgency: validated.urgency,
-            priority: validated.priority ?? null,
+            priority: (validated.priority as any) ?? null,
             deadline: deadlineDate,
             director: validated.director ?? null,
             initiator: validated.initiator ?? null,
-            meetingType: validated.meetingType,
+            meetingType: validated.meetingType as any,
             support: validated.support ?? null,
             contactPerson: validated.contactPerson ?? null,
             position: validated.position ?? null,
             phone: validated.phone ?? null,
 
             status: initialStatus,
-            createdById: user.id,
+            createdById: user.id, // Audit trail: Siapa yang membuat
             createdAt: new Date(),
             updatedAt: new Date(),
-
-            // Kolom lain (legal_review, grc_doc, risalah_*, dll.) akan pakai DEFAULT / NULL dari schema DB
         })
 
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
 
-        const successMsg =
-            actionType === "draft"
-                ? "Agenda berhasil disimpan sebagai Draft."
-                : "Usulan agenda berhasil dikirim."
+        const successMsg = actionType === "draft"
+            ? "Agenda berhasil disimpan sebagai Draft."
+            : "Usulan agenda berhasil dikirim."
 
         return { success: true, message: successMsg }
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "Gagal membuat agenda."
-        console.error("[CREATE_AGENDA_ERROR]:", msg, error)
+        console.error("[CREATE_AGENDA_ERROR]:", msg)
         return { success: false, error: msg }
     }
 }
