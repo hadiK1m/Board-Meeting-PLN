@@ -1,28 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
+import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
 import { eq } from "drizzle-orm"
-
-// --- KONFIGURASI KEAMANAN ---
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-
-// ✅ Whitelist Tipe File (Security Hardening)
-const ALLOWED_MIME_TYPES = [
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
-    "text/plain",
-    "image/jpeg",
-    "image/png"
-];
 
 // --- HELPER: AUTH GUARD ---
 async function assertAuthenticated() {
@@ -30,72 +13,16 @@ async function assertAuthenticated() {
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
-        throw new Error("Akses Ditolak: Anda harus login untuk melakukan aksi ini.")
+        throw new Error("Unauthorized: Anda harus login untuk akses ini.")
     }
     return { user, supabase }
 }
 
-// --- HELPER: FILE VALIDATION ---
-function validateFile(file: File) {
-    // 1. Cek Ukuran
-    if (file.size > MAX_FILE_SIZE) {
-        throw new Error(`File ${file.name} terlalu besar (Maks 50MB).`)
+function cleanValue<T>(val: T, fallback: T): T {
+    if (val === undefined || val === null || (typeof val === "string" && val.trim() === "")) {
+        return fallback
     }
-
-    // 2. Cek Tipe File (Mencegah file .exe, .php, .sh dll)
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        throw new Error(`Tipe file ${file.name} tidak didukung. Harap unggah PDF, Office Doc, atau Gambar.`)
-    }
-}
-
-/**
- * HELPER: Upload file ke bucket 'agenda-attachments' dengan nama aman
- */
-async function uploadToStorage(
-    supabase: any,
-    file: File,
-    folder: string,
-    userId: string
-): Promise<string | null> {
-    if (!file || file.size === 0 || file.name === 'undefined') return null
-
-    try {
-        validateFile(file)
-
-        const fileExt = file.name.split(".").pop()
-        // [SECURE] Menggunakan UUID v4 agar nama file tidak bisa ditebak
-        const uniqueId = crypto.randomUUID()
-
-        // Path terstruktur: rakordir / user_id / jenis_dokumen / uuid.ext
-        const path = `rakordir/${userId}/${folder}/${uniqueId}.${fileExt}`
-
-        const { data, error } = await supabase.storage
-            .from("agenda-attachments")
-            .upload(path, file)
-
-        if (error) throw new Error(error.message)
-
-        return data.path
-    } catch (error: any) {
-        console.error(`[STORAGE-UPLOAD-ERROR] ${folder}:`, error.message)
-        throw error // Re-throw agar proses utama tahu ada kegagalan dan bisa membatalkan DB insert jika perlu
-    }
-}
-
-/**
- * HELPER: Hapus file dari storage
- */
-async function deleteFromStorage(supabase: any, paths: string[]) {
-    const validPaths = paths.filter(p => p && p !== "" && p !== "null")
-    if (validPaths.length === 0) return
-
-    try {
-        await supabase.storage
-            .from("agenda-attachments")
-            .remove(validPaths)
-    } catch (error) {
-        console.error("[STORAGE-DELETE-ERROR]:", error)
-    }
+    return val
 }
 
 /**
@@ -152,47 +79,107 @@ export async function createRakordirAction(formData: FormData) {
  */
 export async function updateRakordirAction(id: string, formData: FormData) {
     try {
-        await assertAuthenticated()
+        const { supabase } = await assertAuthenticated()
 
-        const actionType = formData.get("actionType")
+        const oldData = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
+        if (!oldData) return { success: false, error: "Data tidak ditemukan." }
 
-        // DATA UPDATE: Langsung ambil nilai dari FormData (sudah diproses di Client)
-        const updateData: Record<string, any> = {
+        if (oldData.status === "DIJADWALKAN" || oldData.status === "SELESAI_RAPAT") {
+            return { success: false, error: "Agenda sudah dikunci." }
+        }
+
+        // Ambil path baru dari client (bukan file biner)
+        const proposalNotePath = formData.get("proposalNote") as string | null
+        const presentationMaterialPath = formData.get("presentationMaterial") as string | null
+        const newSupportingDocsRaw = formData.get("supportingDocuments") as string | null
+
+        // Handle file deletion flags
+        const deleteProposalNote = formData.get("delete_proposalNote") === 'true'
+        const deletePresentationMaterial = formData.get("delete_presentationMaterial") === 'true'
+        const deleteSupportingDocs = formData.get("delete_supportingDocuments") === 'true'
+
+        // Process proposalNote
+        let finalProposalNote = oldData.proposalNote
+        if (proposalNotePath) {
+            // Hapus file lama jika ada
+            if (oldData.proposalNote) {
+                await supabase.storage.from('agenda-attachments').remove([oldData.proposalNote])
+            }
+            finalProposalNote = proposalNotePath
+        } else if (deleteProposalNote && oldData.proposalNote) {
+            await supabase.storage.from('agenda-attachments').remove([oldData.proposalNote])
+            finalProposalNote = null
+        }
+
+        // Process presentationMaterial
+        let finalPresentationMaterial = oldData.presentationMaterial
+        if (presentationMaterialPath) {
+            // Hapus file lama jika ada
+            if (oldData.presentationMaterial) {
+                await supabase.storage.from('agenda-attachments').remove([oldData.presentationMaterial])
+            }
+            finalPresentationMaterial = presentationMaterialPath
+        } else if (deletePresentationMaterial && oldData.presentationMaterial) {
+            await supabase.storage.from('agenda-attachments').remove([oldData.presentationMaterial])
+            finalPresentationMaterial = null
+        }
+
+        // Process supportingDocuments
+        let finalSupportingDocuments = oldData.supportingDocuments
+        if (newSupportingDocsRaw) {
+            // Hapus file lama jika ada
+            if (oldData.supportingDocuments && typeof oldData.supportingDocuments === 'string') {
+                try {
+                    const oldPaths = JSON.parse(oldData.supportingDocuments)
+                    if (Array.isArray(oldPaths) && oldPaths.length > 0) {
+                        await supabase.storage.from('agenda-attachments').remove(oldPaths)
+                    }
+                } catch {
+                    // Ignore parse error
+                }
+            }
+            finalSupportingDocuments = newSupportingDocsRaw
+        } else if (deleteSupportingDocs && oldData.supportingDocuments) {
+            // Hapus semua supporting documents
+            if (typeof oldData.supportingDocuments === 'string') {
+                try {
+                    const oldPaths = JSON.parse(oldData.supportingDocuments)
+                    if (Array.isArray(oldPaths) && oldPaths.length > 0) {
+                        await supabase.storage.from('agenda-attachments').remove(oldPaths)
+                    }
+                } catch {
+                    // Ignore parse error
+                }
+            }
+            finalSupportingDocuments = null
+        }
+
+        await db.update(agendas).set({
             title: formData.get("title") as string,
             urgency: formData.get("urgency") as string,
-            deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string) : null,
-            priority: formData.get("priority") as string,
-            initiator: formData.get("initiator") as string,
-            director: formData.get("director") as string,
-            support: formData.get("support") as string,
-            contactPerson: formData.get("contactPerson") as string,
-            position: formData.get("position") as string,
-            phone: formData.get("phone") as string,
+            priority: cleanValue(formData.get("priority") as string, oldData.priority),
+            deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string) : oldData.deadline,
+            director: cleanValue(formData.get("director") as string, oldData.director),
+            initiator: cleanValue(formData.get("initiator") as string, oldData.initiator),
+            support: formData.get("support") as string || "",
+            contactPerson: cleanValue(formData.get("contactPerson") as string, oldData.contactPerson),
+            position: cleanValue(formData.get("position") as string, oldData.position),
+            phone: cleanValue(formData.get("phone") as string, oldData.phone),
 
-            // Client mengirim path baru jika file diganti, atau path lama jika tidak berubah
-            proposalNote: formData.get("proposalNote") as string | null,
-            presentationMaterial: formData.get("presentationMaterial") as string | null,
-            supportingDocuments: formData.get("supportingDocuments") as string || "[]",
+            // Gunakan path yang sudah diproses
+            proposalNote: finalProposalNote,
+            presentationMaterial: finalPresentationMaterial,
+            supportingDocuments: finalSupportingDocuments,
 
-            notRequiredFiles: (formData.get("notRequiredFiles") as string) || "[]",
+            notRequiredFiles: formData.get("notRequiredFiles") as string || oldData.notRequiredFiles,
             updatedAt: new Date(),
-        }
-
-        if (actionType === "submit") {
-            updateData.status = "DAPAT_DILANJUTKAN"
-        } else if (actionType === "draft") {
-            updateData.status = "DRAFT"
-        }
-
-        await db.update(agendas)
-            .set(updateData)
-            .where(eq(agendas.id, id))
+        }).where(eq(agendas.id, id))
 
         revalidatePath("/agenda/rakordir")
         return { success: true }
     } catch (error: any) {
         console.error("[ACTION-UPDATE-ERROR]:", error)
-        return { success: false, error: error.message || "Gagal update agenda Rakordir" }
+        return { success: false, error: error.message || "Gagal update data Rakordir" }
     }
 }
 
@@ -201,40 +188,49 @@ export async function updateRakordirAction(id: string, formData: FormData) {
  */
 export async function deleteRakordirAction(id: string) {
     try {
-        // [SECURE] Auth Check
         const { supabase } = await assertAuthenticated()
 
-        const existing = await db.query.agendas.findFirst({
-            where: eq(agendas.id, id),
-        })
-        if (!existing) throw new Error("Agenda tidak ditemukan")
+        const dataAgenda = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
+        if (!dataAgenda) return { success: false, error: "Data tidak ditemukan." }
 
+        // Kumpulkan semua file untuk dihapus
         const filesToDelete: string[] = []
 
-        // Kumpulkan semua file terkait untuk dihapus bersih
-        if (existing.proposalNote) filesToDelete.push(existing.proposalNote)
-        if (existing.presentationMaterial) filesToDelete.push(existing.presentationMaterial)
+        // Hapus proposalNote
+        if (dataAgenda.proposalNote && typeof dataAgenda.proposalNote === 'string') {
+            filesToDelete.push(dataAgenda.proposalNote)
+        }
 
-        if (existing.supportingDocuments) {
+        // Hapus presentationMaterial
+        if (dataAgenda.presentationMaterial && typeof dataAgenda.presentationMaterial === 'string') {
+            filesToDelete.push(dataAgenda.presentationMaterial)
+        }
+
+        // Hapus supportingDocuments
+        if (dataAgenda.supportingDocuments && typeof dataAgenda.supportingDocuments === 'string') {
             try {
-                const supporting = JSON.parse(existing.supportingDocuments as string)
-                if (Array.isArray(supporting)) {
-                    filesToDelete.push(...supporting)
+                const extra = JSON.parse(dataAgenda.supportingDocuments)
+                if (Array.isArray(extra)) {
+                    filesToDelete.push(...extra.map(String))
                 }
-            } catch { /* ignore JSON parse error */ }
+            } catch {
+                // Ignore parse error
+            }
         }
 
+        // Hapus file dari storage
         if (filesToDelete.length > 0) {
-            await deleteFromStorage(supabase, filesToDelete)
+            await supabase.storage.from('agenda-attachments').remove(filesToDelete)
         }
 
+        // Hapus dari database
         await db.delete(agendas).where(eq(agendas.id, id))
 
         revalidatePath("/agenda/rakordir")
         return { success: true }
     } catch (error: any) {
         console.error("[ACTION-DELETE-ERROR]:", error)
-        return { success: false, error: "Gagal menghapus agenda" }
+        return { success: false, error: error.message || "Gagal menghapus data Rakordir" }
     }
 }
 
@@ -242,56 +238,109 @@ export async function deleteRakordirAction(id: string) {
  * 4. ACTION: UPDATE RAKORDIR (LIVE / PELAKSANAAN)
  */
 export async function updateRakordirLiveAction(payloads: any[]) {
+
     try {
+
         // [SECURE] Auth Check
+
         await assertAuthenticated()
 
+
+
         // Menggunakan Transaction agar jika satu gagal, semua batal (Atomic)
+
         await db.transaction(async (tx) => {
+
             for (const data of payloads) {
+
                 // Sanitasi input list arahan
+
                 const listArahan = Array.isArray(data.arahanDireksi) ? data.arahanDireksi : [];
 
+
+
                 // Generate keputusan rapat awal
+
                 const meetingDecisions = listArahan.map((item: any) => ({
+
                     id: item.id || crypto.randomUUID(),
+
                     text: item.text || item.value,
+
                     targetOutput: "",
+
                     currentProgress: "",
+
                     evidencePath: null,
+
                     status: "ON_PROGRESS",
+
                     lastUpdated: new Date().toISOString()
+
                 }));
 
+
+
                 await tx.update(agendas)
+
                     .set({
+
                         meetingNumber: data.number,
+
                         meetingYear: data.year,
+
                         executionDate: data.date,
+
                         meetingLocation: data.location,
+
                         startTime: data.startTime,
+
                         endTime: data.endTime,
+
                         attendanceData: data.attendance, // Pastikan JSON valid dari client
+
                         guestParticipants: data.guests,  // Pastikan JSON valid dari client
+
                         pimpinanRapat: JSON.stringify(data.selectedPimpinan),
+
                         catatanRapat: data.catatanKetidakhadiran,
+
                         executiveSummary: data.executiveSummary,
+
                         arahanDireksi: listArahan,
+
                         meetingDecisions: meetingDecisions,
+
                         status: "RAPAT_SELESAI",
+
                         meetingStatus: "COMPLETED",
+
                         monevStatus: "ON_PROGRESS",
+
                         updatedAt: new Date(),
+
                     })
+
                     .where(eq(agendas.id, data.id))
+
             }
+
         })
 
+
+
         revalidatePath("/pelaksanaan-rapat/rakordir")
+
         revalidatePath("/monev/rakordir")
+
         return { success: true }
+
     } catch (error: any) {
+
         console.error("[ACTION-LIVE-ERROR]:", error)
+
         return { success: false, error: "Gagal menyimpan data pelaksanaan." }
+
     }
+
 }

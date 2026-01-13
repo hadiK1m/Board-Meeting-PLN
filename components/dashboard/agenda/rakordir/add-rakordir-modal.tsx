@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -183,49 +184,56 @@ export function AddRakordirModal() {
         // Ambil user ID dari client Supabase
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
-            toast.error("Anda harus login terlebih dahulu")
+            toast.error("Anda harus login")
             setIsPending(false)
             return
         }
-        const userId = user.id
 
-        // Proses upload client-side untuk setiap field wajib
-        for (const doc of FILE_LIST) {
-            const fieldId = doc.id
-            if (notRequiredFiles.includes(fieldId)) continue
+        // 1. Definisikan semua field file yang mungkin ada
+        const allFileIds = ["proposalNote", "presentationMaterial", "supportingDocuments"]
 
+        for (const fieldId of allFileIds) {
             const input = document.getElementById(fieldId) as HTMLInputElement | null
-            const file = input?.files?.[0]
-            if (!file) continue
+            const files = input?.files ? Array.from(input.files) : []
+
+            // [PENTING] Hapus data biner dari formData agar tidak dikirim ke Vercel
+            formData.delete(fieldId)
+
+            if (notRequiredFiles.includes(fieldId) || files.length === 0) continue
 
             setUploadingFiles(prev => new Set([...prev, fieldId]))
 
             try {
-                const fileExt = file.name.split('.').pop()?.toLowerCase() || 'pdf'
-                const uniqueId = crypto.randomUUID()
-                const path = `rakordir/${userId}/${uniqueId}-${fieldId}.${fileExt}`
-
-                const { data, error } = await supabase.storage
-                    .from('agenda-attachments')
-                    .upload(path, file, {
-                        cacheControl: '3600',
-                        upsert: false
-                    })
-
-                if (error) throw error
-
-                // Ganti File menjadi string path di formData
-                formData.set(fieldId, data.path)
-            } catch (err: unknown) {
-                const message = err instanceof Error ? err.message : "Gagal unggah file"
-                toast.error(`Gagal unggah ${doc.label}: ${message}`)
-                setIsPending(false)
-                return // batalkan submit jika ada error upload
+                if (fieldId === "supportingDocuments") {
+                    // Logic untuk Multiple Files (Supporting Docs)
+                    const paths: string[] = []
+                    for (const file of files) {
+                        const uniqueId = crypto.randomUUID()
+                        const path = `rakordir/${user.id}/supporting/${uniqueId}-${file.name}`
+                        const { data, error } = await supabase.storage
+                            .from('agenda-attachments').upload(path, file)
+                        if (error) throw error
+                        paths.push(data.path)
+                    }
+                    formData.set("supportingDocuments", JSON.stringify(paths))
+                } else {
+                    // Logic untuk Single File (Proposal/Presentation)
+                    const file = files[0]
+                    const uniqueId = crypto.randomUUID()
+                    const path = `rakordir/${user.id}/${fieldId}/${uniqueId}-${file.name}`
+                    const { data, error } = await supabase.storage
+                        .from('agenda-attachments').upload(path, file)
+                    if (error) throw error
+                    formData.set(fieldId, data.path)
+                }
+            } catch (err) {
+                toast.error(`Gagal unggah ${fieldId}`)
+                setIsPending(false); return;
             } finally {
                 setUploadingFiles(prev => {
-                    const next = new Set(prev)
-                    next.delete(fieldId)
-                    return next
+                    const next = new Set(prev);
+                    next.delete(fieldId);
+                    return next;
                 })
             }
         }
@@ -455,6 +463,6 @@ export function AddRakordirModal() {
     )
 }
 
-function cn(...inputs: unknown[]) {
-    return inputs.filter(Boolean).join(' ');
+function cn(...classes: (string | boolean | undefined | null)[]) {
+    return classes.filter(Boolean).join(' ');
 }
