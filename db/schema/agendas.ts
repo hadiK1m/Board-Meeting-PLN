@@ -2,12 +2,18 @@ import { uuid, text, varchar, timestamp, date, time, pgTable, jsonb } from "driz
 import { users } from "./users";
 
 export const agendas = pgTable("agendas", {
+    // ID Utama
     id: uuid("id").defaultRandom().primaryKey(),
-    title: text("title").notNull(), // Judul wajib
-    urgency: varchar("urgency", { length: 50 }),
+
+    // Informasi Utama Agenda
+    title: text("title").notNull(),
+
+    // ── PERUBAHAN: Menjadi text agar mendukung penjelasan panjang dari Textarea ──
+    urgency: text("urgency"),
+
     deadline: timestamp("deadline"),
 
-    // Field opsional fleksibel untuk RADIR/RAKORDIR
+    // Field Opsional Fleksibel (RADIR/RAKORDIR)
     priority: text("priority"),
     director: text("director"),
     initiator: text("initiator"),
@@ -16,7 +22,7 @@ export const agendas = pgTable("agendas", {
     position: text("position"),
     phone: text("phone"),
 
-    // File Attachments (Storage Paths)
+    // File Attachments (Storage Paths) - Semuanya Opsional
     legalReview: text("legal_review"),
     riskReview: text("risk_review"),
     complianceReview: text("compliance_review"),
@@ -26,7 +32,7 @@ export const agendas = pgTable("agendas", {
     presentationMaterial: text("presentation_material"),
     supportingDocuments: jsonb("supporting_documents").default([]),
 
-    // Logika Dokumen & Status
+    // Logika Dokumen & Status Alur Kerja
     notRequiredFiles: jsonb("not_required_files").default([]).notNull(),
     status: text("status").default("Draft").notNull(),
 
@@ -44,9 +50,9 @@ export const agendas = pgTable("agendas", {
     meetingMethod: varchar("meeting_method", { length: 50 }), // OFFLINE, ONLINE, HYBRID
     meetingLocation: text("meeting_location"),
     meetingLink: text("meeting_link"),
-    meetingType: text("meeting_type").default("RADIR"), // RADIR atau RAKORDIR
+    meetingType: text("meeting_type").default("RADIR"),
 
-    // NOMOR & TAHUN RAPAT
+    // NOMOR & TAHUN RAPAT (Digunakan untuk Grouping)
     meetingNumber: varchar("meeting_number", { length: 50 }),
     meetingYear: varchar("meeting_year", { length: 4 }),
 
@@ -55,33 +61,34 @@ export const agendas = pgTable("agendas", {
     attendanceData: jsonb("attendance_data").default({}),
     guestParticipants: jsonb("guest_participants").default([]),
 
-    // Field teks narasi
+    // Field Teks Narasi Hasil Rapat
     executiveSummary: text("executive_summary"),
     considerations: text("considerations"),
     risalahBody: text("risalah_body"),
-    catatanRapat: text("catatan_rapat"), // Khusus Rakordir 
+    catatanRapat: text("catatan_rapat"), // Khusus untuk export Notulensi Rakordir
 
-    // ── PERBAIKAN: FIELD KHUSUS RAKORDIR ──
-    // Arahan Direksi disimpan sebagai JSON Array: [{id: "1", text: "...", pic: "..."}]
+    // ── FIELD KHUSUS RAKORDIR ──
+    // Arahan Direksi disimpan sebagai JSON Array
     arahanDireksi: jsonb("arahan_direksi").default([]),
 
-    // Keputusan (Khusus RADIR)
+    // ── FIELD KHUSUS RADIR ──
+    // Keputusan Rapat RADIR
     meetingDecisions: jsonb("meeting_decisions").default([]),
 
     dissentingOpinion: text("dissenting_opinion"),
     meetingStatus: text("meeting_status").default("PENDING"),
 
-    // GROUPING UNTUK RISALAH
+    // GROUPING & TRACKING
     risalahGroupId: uuid("risalah_group_id").defaultRandom(),
-
     risalahTtd: text("risalah_ttd"),
     monevStatus: text("monev_status").default("ON_PROGRESS"),
 
+    // Audit Trail
     createdById: uuid("created_by_id").references(() => users.id),
-
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Type Definitions untuk TypeScript
 export type Agenda = typeof agendas.$inferSelect;
 export type NewAgenda = typeof agendas.$inferInsert;

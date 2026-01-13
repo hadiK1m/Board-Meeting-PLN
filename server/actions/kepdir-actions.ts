@@ -2,10 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
-import { agendas, Agenda } from "@/db/schema/agendas" // Pastikan import Agenda benar
+import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
-import { z } from "zod"
 
 // --- KONFIGURASI KEAMANAN FILE ---
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -43,7 +42,7 @@ function validateFile(file: File, fieldName: string) {
 // --- HELPER: SANITIZE FILENAME ---
 function generateSafePath(userId: string, folder: string, fileName: string) {
     const ext = fileName.split('.').pop()
-    const uniqueId = crypto.randomUUID() // Gunakan UUID agar nama file tidak bisa ditebak
+    const uniqueId = crypto.randomUUID() // UUID agar nama file tidak bisa ditebak
     return `${folder}/${userId}/${uniqueId}.${ext}`
 }
 
@@ -61,7 +60,7 @@ export async function createKepdirAction(formData: FormData) {
         for (const field of fileFields) {
             const file = formData.get(field) as File
             if (file && file.size > 0) {
-                validateFile(file, field) // [SECURE] Validasi Tipe File
+                validateFile(file, field)
 
                 const path = generateSafePath(user.id, "kepdir-sirkuler", file.name)
                 const { data, error } = await supabase.storage.from('agenda-attachments').upload(path, file)
@@ -90,7 +89,6 @@ export async function createKepdirAction(formData: FormData) {
         const notRequiredRaw = formData.get("notRequiredFiles") as string
         const notRequiredFiles = notRequiredRaw ? JSON.parse(notRequiredRaw) : []
 
-        // [SECURE] Gunakan Zod (opsional tapi disarankan) atau validasi manual ketat sebelum insert
         await db.insert(agendas).values({
             title: (formData.get("title") as string) || "Tanpa Judul",
             director: (formData.get("director") as string) || "DIRUT",
@@ -118,9 +116,10 @@ export async function createKepdirAction(formData: FormData) {
 
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch (error: any) {
-        console.error("[CREATE_KEPDIR_ERROR]:", error)
-        return { success: false, error: error.message || "Gagal membuat agenda." }
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Gagal membuat agenda."
+        console.error("[CREATE_KEPDIR_ERROR]:", message)
+        return { success: false, error: message }
     }
 }
 
@@ -131,7 +130,6 @@ export async function updateKepdirAction(id: string, formData: FormData) {
     try {
         const { user, supabase } = await assertAuthenticated()
 
-        // [SECURE] Query dengan where clause ID untuk memastikan data ada
         const oldData = await db.query.agendas.findFirst({
             where: eq(agendas.id, id)
         })
@@ -148,7 +146,6 @@ export async function updateKepdirAction(id: string, formData: FormData) {
 
             if (file && file.size > 0) {
                 validateFile(file, field)
-                // Hapus file lama jika ada
                 if (oldPath) await supabase.storage.from('agenda-attachments').remove([oldPath])
 
                 const path = generateSafePath(user.id, "kepdir-sirkuler", file.name)
@@ -163,10 +160,10 @@ export async function updateKepdirAction(id: string, formData: FormData) {
             }
         }
 
-        // Handling Supporting Docs (Append Only logic for now + cleanup if needed)
+        // Handling Supporting Docs (Append Only logic + cleanup if needed)
         const newSupportingFiles = formData.getAll("supportingDocuments") as File[]
         const supportingPaths: string[] = Array.isArray(oldData.supportingDocuments)
-            ? (oldData.supportingDocuments as string[])
+            ? [...(oldData.supportingDocuments as string[])]
             : []
 
         for (const file of newSupportingFiles) {
@@ -198,10 +195,10 @@ export async function updateKepdirAction(id: string, formData: FormData) {
 
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-
-    } catch (error: any) {
-        console.error("[UPDATE_KEPDIR_ERROR]:", error)
-        return { success: false, error: error.message || "Gagal update agenda." }
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Gagal update agenda."
+        console.error("[UPDATE_KEPDIR_ERROR]:", message)
+        return { success: false, error: message }
     }
 }
 
@@ -210,7 +207,6 @@ export async function updateKepdirAction(id: string, formData: FormData) {
  */
 export async function deleteKepdirAction(id: string) {
     try {
-        // [SECURE] WAJIB AUTH CHECK!
         const { supabase } = await assertAuthenticated()
 
         const existing = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
@@ -228,13 +224,13 @@ export async function deleteKepdirAction(id: string) {
             await supabase.storage.from('agenda-attachments').remove(filesToDelete)
         }
 
-        // Hapus Database
         await db.delete(agendas).where(eq(agendas.id, id))
 
         revalidatePath("/agenda/kepdir-sirkuler")
         return { success: true }
-    } catch (error: any) {
-        console.error("[DELETE_KEPDIR_ERROR]:", error)
-        return { success: false, error: error.message || "Gagal menghapus data." }
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Gagal menghapus data."
+        console.error("[DELETE_KEPDIR_ERROR]:", message)
+        return { success: false, error: message }
     }
 }

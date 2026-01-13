@@ -73,7 +73,7 @@ export function StartMeetingDialog({ readyAgendas }: StartMeetingDialogProps) {
 
     const validateForm = () => {
         if (selectedIds.length === 0) {
-            toast.error("Pilih setidaknya satu agenda sidang.")
+            toast.error("Pilih setidaknya satu agenda rapat.")
             return false
         }
         if (!meetingNumber.trim()) {
@@ -126,7 +126,7 @@ export function StartMeetingDialog({ readyAgendas }: StartMeetingDialogProps) {
                         Konfigurasi Risalah
                     </DialogTitle>
                     <DialogDescription className="text-slate-500 font-medium">
-                        Input detail risalah dan pilih agenda yang siap disidangkan.
+                        Input detail risalah dan pilih agenda yang siap dirapatkan.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -176,7 +176,7 @@ export function StartMeetingDialog({ readyAgendas }: StartMeetingDialogProps) {
                                     <CommandInput placeholder="Cari judul agenda..." />
                                     <CommandList className="max-h-64">
                                         <CommandEmpty className="p-4 text-xs italic text-center text-slate-400">
-                                            Tidak ada agenda yang siap sidang.
+                                            Tidak ada agenda yang siap rapat.
                                         </CommandEmpty>
                                         <CommandGroup className="p-2">
                                             {readyAgendas.map((agenda) => (

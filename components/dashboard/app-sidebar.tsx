@@ -73,16 +73,16 @@ const data = {
             ],
         },
         {
-            title: "Agenda Siap Sidang",
+            title: "Agenda Siap RAPAT",
             url: "#",
             icon: Calendar,
             items: [
                 {
-                    title: "Siap Sidang Radir",
+                    title: "Siap RAPAT Radir",
                     url: "/agenda-siap/radir",
                 },
                 {
-                    title: "Siap Sidang Rakordir",
+                    title: "Siap RAPAT Rakordir",
                     url: "/agenda-siap/rakordir",
                 },
             ],

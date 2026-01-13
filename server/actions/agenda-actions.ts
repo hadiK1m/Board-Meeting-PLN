@@ -5,10 +5,13 @@ import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
-import { eq, inArray } from "drizzle-orm"
+import { eq, inArray, and } from "drizzle-orm"
 import { z } from "zod"
 
-// [SECURE] HELPER: AUTH GUARD
+// ────────────────────────────────────────────────
+// HELPER: AUTH & OWNERSHIP
+// ────────────────────────────────────────────────
+
 async function assertAuthenticated() {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -19,68 +22,118 @@ async function assertAuthenticated() {
     return user
 }
 
-/**
- * Mendapatkan URL bertanda tangan untuk akses file private di Storage.
- */
-export async function getSignedFileUrl(path: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+async function assertAgendaOwnership(agendaIds: string | string[]) {
+    const user = await assertAuthenticated()
+    const ids = Array.isArray(agendaIds) ? agendaIds : [agendaIds]
 
-    const { data, error } = await supabase.storage
-        .from('agenda-attachments')
-        .createSignedUrl(path, 60);
+    if (ids.length === 0) return user
 
-    if (error) return null;
-    return data.signedUrl;
+    const owned = await db
+        .select({ id: agendas.id })
+        .from(agendas)
+        .where(and(inArray(agendas.id, ids), eq(agendas.createdById, user.id)))
+
+    if (owned.length !== ids.length) {
+        throw new Error("Forbidden: Anda tidak memiliki hak atas salah satu agenda.")
+    }
+    return user
 }
 
-/**
- * Hapus Banyak Agenda Sekaligus (Universal).
- */
-export async function deleteBulkAgendasAction(ids: string[]) {
+// ────────────────────────────────────────────────
+// ACTION: Mendapatkan Signed URL (dengan ownership check)
+// ────────────────────────────────────────────────
+
+export async function getSignedFileUrl(path: string) {
     try {
         await assertAuthenticated()
+        // Regex fleksibel: mencari UUID di mana saja dalam path
+        const match = path.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
+        if (!match) throw new Error("Format path file tidak valid.")
+
+        const agendaId = match[1]
+        await assertAgendaOwnership(agendaId)
+
+        const supabase = await createClient()
+        const { data, error } = await supabase.storage
+            .from('agenda-attachments')
+            .createSignedUrl(path, 60)
+
+        if (error) throw error
+        return data.signedUrl
+    } catch (error: unknown) {
+        console.error("[SIGNED_URL_ERROR]", error instanceof Error ? error.message : "Failed to generate signed URL")
+        return null
+    }
+}
+
+// ────────────────────────────────────────────────
+// ACTION: Bulk Delete Agenda (dengan transaction)
+// ────────────────────────────────────────────────
+
+export async function deleteBulkAgendasAction(ids: string[]) {
+    try {
+        if (!ids || ids.length === 0) throw new Error("Tidak ada data yang dipilih.")
+        if (ids.length > 50) throw new Error("Maksimal 50 agenda per aksi untuk mencegah abuse.")
+
+        await assertAgendaOwnership(ids)
         const supabase = await createClient()
 
-        if (!ids || ids.length === 0) throw new Error("Tidak ada data yang dipilih.")
+        await db.transaction(async (tx) => {
+            const dataAgendas = await tx
+                .select()
+                .from(agendas)
+                .where(inArray(agendas.id, ids))
 
-        const dataAgendas = await db.select().from(agendas).where(inArray(agendas.id, ids))
-        const filesToDelete: string[] = []
+            const filesToDelete: string[] = []
 
-        const FILE_FIELDS = [
-            "legalReview", "riskReview", "complianceReview",
-            "regulationReview", "recommendationNote", "proposalNote",
-            "presentationMaterial", "kepdirSirkulerDoc", "grcDoc"
-        ];
+            const FILE_FIELDS = [
+                "legalReview",
+                "riskReview",
+                "complianceReview",
+                "regulationReview",
+                "recommendationNote",
+                "proposalNote",
+                "presentationMaterial",
+                "kepdirSirkulerDoc",
+                "grcDoc",
+            ] as const
 
-        dataAgendas.forEach(agenda => {
-            FILE_FIELDS.forEach(field => {
-                // [FIX TS-7053] Casting agenda ke 'any' atau 'Record<string, any>' 
-                // agar bisa diakses dengan string index secara dinamis
-                const path = (agenda as Record<string, any>)[field]
-                if (typeof path === 'string' && path) filesToDelete.push(path)
+            dataAgendas.forEach((agenda) => {
+                FILE_FIELDS.forEach((field) => {
+                    // Casting diperlukan karena Drizzle tidak infer dynamic key access dengan baik
+                    const path = (agenda as any)[field]
+                    if (typeof path === "string" && path) {
+                        filesToDelete.push(path)
+                    }
+                })
+
+                if (agenda.supportingDocuments) {
+                    try {
+                        const extra = Array.isArray(agenda.supportingDocuments)
+                            ? agenda.supportingDocuments
+                            : JSON.parse(agenda.supportingDocuments as string || "[]")
+
+                        if (Array.isArray(extra)) {
+                            filesToDelete.push(...extra.filter((p): p is string => typeof p === "string"))
+                        }
+                    } catch (parseErr) {
+                        console.error(
+                            "[PARSE_SUPPORTING_DOCS_ERROR]",
+                            parseErr instanceof Error ? parseErr.message : "Parse failed"
+                        )
+                    }
+                }
             })
 
-            if (agenda.supportingDocuments) {
-                try {
-                    const extra = Array.isArray(agenda.supportingDocuments)
-                        ? agenda.supportingDocuments
-                        : JSON.parse(agenda.supportingDocuments as string || "[]")
-                    if (Array.isArray(extra)) {
-                        filesToDelete.push(...(extra as string[]))
-                    }
-                } catch (e) {
-                    console.error("Gagal parse supportingDocuments", e)
-                }
+            // Hapus dari DB dulu
+            await tx.delete(agendas).where(inArray(agendas.id, ids))
+
+            // Baru hapus file di storage
+            if (filesToDelete.length > 0) {
+                const { error } = await supabase.storage.from("agenda-attachments").remove(filesToDelete)
+                if (error) throw new Error(`Gagal hapus file: ${error.message}`)
             }
         })
-
-        if (filesToDelete.length > 0) {
-            await supabase.storage.from('agenda-attachments').remove(filesToDelete)
-        }
-
-        await db.delete(agendas).where(inArray(agendas.id, ids))
 
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
@@ -95,73 +148,77 @@ export async function deleteBulkAgendasAction(ids: string[]) {
     }
 }
 
-/**
- * Batalkan Agenda dengan Alasan.
- */
+// ────────────────────────────────────────────────
+// ACTION: Cancel Agenda
+// ────────────────────────────────────────────────
+
 const cancelSchema = z.object({
     id: z.string().uuid(),
     reason: z.string().min(5, "Alasan pembatalan minimal 5 karakter"),
-});
+})
 
 export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
     try {
-        await assertAuthenticated()
-        const validated = cancelSchema.parse(data);
+        const validated = cancelSchema.parse(data)
+        await assertAgendaOwnership(validated.id)
 
         await db.update(agendas).set({
             status: "DIBATALKAN",
             cancellationReason: validated.reason,
-            updatedAt: new Date()
-        }).where(eq(agendas.id, validated.id));
+            updatedAt: new Date(),
+        }).where(eq(agendas.id, validated.id))
 
-        revalidatePath("/agenda/radir");
-        revalidatePath("/agenda-siap/radir");
-        return { success: true };
+        revalidatePath("/agenda/radir")
+        revalidatePath("/agenda-siap/radir")
+
+        return { success: true }
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Gagal membatalkan agenda.";
-        return { success: false, error: errorMessage };
+        const msg = error instanceof Error ? error.message : "Gagal membatalkan agenda."
+        console.error("[CANCEL_AGENDA_ERROR]:", msg)
+        return { success: false, error: msg }
     }
 }
 
-/**
- * Memulihkan Agenda (Resume).
- */
+// ────────────────────────────────────────────────
+// ACTION: Resume Agenda
+// ────────────────────────────────────────────────
+
 export async function resumeAgendaAction(id: string) {
     try {
-        await assertAuthenticated()
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
             throw new Error("ID Agenda tidak valid.")
         }
 
+        await assertAgendaOwnership(id)
+
         await db.update(agendas).set({
             status: "DAPAT_DILANJUTKAN",
             cancellationReason: null,
-            updatedAt: new Date()
-        }).where(eq(agendas.id, id));
+            updatedAt: new Date(),
+        }).where(eq(agendas.id, id))
 
-        revalidatePath("/agenda-siap/radir");
-        revalidatePath("/agenda/radir");
-        return { success: true };
+        revalidatePath("/agenda-siap/radir")
+        revalidatePath("/agenda/radir")
+
+        return { success: true }
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Gagal memulihkan agenda.";
-        return { success: false, error: errorMessage };
+        const msg = error instanceof Error ? error.message : "Gagal memulihkan agenda."
+        console.error("[RESUME_AGENDA_ERROR]:", msg)
+        return { success: false, error: msg }
     }
 }
 
-/**
- * CREATE AGENDA ACTION
- */
-// [SECURE] Schema validasi Server Side
-// [FIX ESLint] Schema ini sekarang digunakan di bawah
+// ────────────────────────────────────────────────
+// ACTION: Create Agenda (FIX parameter mismatch)
+// ────────────────────────────────────────────────
+
 const createAgendaServerSchema = z.object({
     title: z.string().min(5, "Judul minimal 5 karakter"),
-    // Transform string kosong menjadi null/undefined agar sesuai dengan database optional
-    urgency: z.enum(['Biasa', 'Segera', 'Sangat Segera']).optional().or(z.literal('')),
-    priority: z.enum(['Low', 'Medium', 'High']).optional().or(z.literal('')),
-    deadline: z.string().optional().or(z.literal('')),
+    urgency: z.string().min(1, "Urgensi harus diisi"), // textarea → string panjang
+    priority: z.enum(["Low", "Medium", "High"]).optional(),
+    deadline: z.string().optional(),
     director: z.string().optional(),
     initiator: z.string().optional(),
-    // Pastikan enum ini match persis dengan di DB
     meetingType: z.enum(["RADIR", "RAKORDIR", "KEPDIR_SIRKULER", "GRC"]),
     support: z.string().optional(),
     contactPerson: z.string().optional(),
@@ -171,20 +228,16 @@ const createAgendaServerSchema = z.object({
 
 export async function createAgendaAction(formData: FormData) {
     try {
-        // [SECURE] 1. Cek Auth
         const user = await assertAuthenticated()
 
-        // 2. Ambil Action Type
-        const actionType = formData.get("actionType")
+        const actionType = formData.get("actionType") as string | null
         const initialStatus = actionType === "draft" ? "DRAFT" : "DIUSULKAN"
 
-        // [SECURE] 3. Validasi Data menggunakan Zod
-        // [FIX TS-2769] Kita ekstrak data dari formData dan casting ke string agar Zod bisa memprosesnya
         const rawData = {
             title: formData.get("title")?.toString(),
-            urgency: formData.get("urgency")?.toString() || undefined,
-            priority: formData.get("priority")?.toString() || undefined,
-            deadline: formData.get("deadline")?.toString() || undefined,
+            urgency: formData.get("urgency")?.toString(),
+            priority: formData.get("priority")?.toString(),
+            deadline: formData.get("deadline")?.toString(),
             director: formData.get("director")?.toString(),
             initiator: formData.get("initiator")?.toString(),
             meetingType: formData.get("meetingType")?.toString(),
@@ -194,56 +247,45 @@ export async function createAgendaAction(formData: FormData) {
             phone: formData.get("phone")?.toString(),
         }
 
-        // [FIX ESLint] Menggunakan schema yang sudah didefinisikan
-        const validatedFields = createAgendaServerSchema.safeParse(rawData)
+        const validated = createAgendaServerSchema.parse(rawData)
 
-        if (!validatedFields.success) {
-            // Return error pertama yang ditemukan
-            const errorMsg = validatedFields.error.issues[0].message
-            throw new Error(errorMsg)
-        }
+        const deadlineDate = validated.deadline ? new Date(validated.deadline) : null
 
-        const data = validatedFields.data
-
-        // Konversi deadline string ke Date object jika ada
-        const deadlineDate = data.deadline ? new Date(data.deadline) : null
-
-        // 4. Simpan ke Database
-        // [FIX TS-2769] Karena sudah divalidasi Zod, tipe datanya aman untuk Drizzle
+        // ── INSERT HANYA KOLOM YANG ADA ──
+        // Ini yang menghilangkan error parameter mismatch
         await db.insert(agendas).values({
-            title: data.title,
-            // Cast ke 'any' aman di sini karena Zod sudah memastikan value-nya valid sesuai Enum
-            urgency: (data.urgency as any) || null,
-            priority: (data.priority as any) || null,
+            title: validated.title,
+            urgency: validated.urgency,
+            priority: validated.priority ?? null,
             deadline: deadlineDate,
-            director: data.director || null,
-            initiator: data.initiator || null,
-            meetingType: data.meetingType as any, // "RADIR" | "RAKORDIR" | ...
-
-            support: data.support || null,
-            contactPerson: data.contactPerson || null,
-            position: data.position || null,
-            phone: data.phone || null,
+            director: validated.director ?? null,
+            initiator: validated.initiator ?? null,
+            meetingType: validated.meetingType,
+            support: validated.support ?? null,
+            contactPerson: validated.contactPerson ?? null,
+            position: validated.position ?? null,
+            phone: validated.phone ?? null,
 
             status: initialStatus,
-
-            // Audit Trail
             createdById: user.id,
             createdAt: new Date(),
             updatedAt: new Date(),
+
+            // Kolom lain (legal_review, grc_doc, risalah_*, dll.) akan pakai DEFAULT / NULL dari schema DB
         })
 
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda/rakordir")
 
-        const successMsg = actionType === "draft"
-            ? "Agenda berhasil disimpan sebagai Draft."
-            : "Usulan agenda berhasil dikirim."
+        const successMsg =
+            actionType === "draft"
+                ? "Agenda berhasil disimpan sebagai Draft."
+                : "Usulan agenda berhasil dikirim."
 
         return { success: true, message: successMsg }
-
-    } catch (error: any) {
-        console.error("[CREATE_AGENDA_ERROR]", error)
-        return { success: false, error: error.message }
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Gagal membuat agenda."
+        console.error("[CREATE_AGENDA_ERROR]:", msg, error)
+        return { success: false, error: msg }
     }
 }

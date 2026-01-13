@@ -9,7 +9,7 @@ export default async function RakordirSiapPage() {
     // 1. Ambil data dari database: Tipe RAKORDIR dan bukan DRAFT
     const allAgendas = await db.query.agendas.findMany({
         where: and(
-            ne(agendas.status, "DRAFT"),        // Menampilkan yang siap sidang, terjadwal, atau batal
+            ne(agendas.status, "DRAFT"),        // Menampilkan yang siap rapat, terjadwal, atau batal
             eq(agendas.meetingType, "RAKORDIR")  // Khusus Rakordir
         ),
         orderBy: [desc(agendas.createdAt)],

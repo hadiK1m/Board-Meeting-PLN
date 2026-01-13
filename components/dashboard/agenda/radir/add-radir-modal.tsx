@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea" // Import Textarea
 
 import { createRadirAction } from "@/server/actions/radir-actions"
 import {
@@ -118,8 +119,6 @@ export function AddRadirModal() {
         setFileStatus(prev => ({ ...prev, [fieldId]: hasFile }));
     }
 
-    // ✅ Perbaikan logika isComplete: Hanya dokumen utama (FILE_LIST) yang wajib
-    // Dokumen pendukung bersifat opsional dan tidak mengunci status "Dapat Dilanjutkan"
     const isComplete = FILE_LIST.every(doc => fileStatus[doc.id] || notRequiredFiles.includes(doc.id));
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -212,12 +211,32 @@ export function AddRadirModal() {
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Urgensi</Label><Input name="urgency" placeholder="Sangat Segera / Normal" required /></div>
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Deadline Rapat</Label><Input name="deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} required /></div>
+                                {/* Penyesuaian Urgensi Menjadi Textarea Full Width */}
+                                <div className="grid gap-2">
+                                    <Label className="font-bold text-[#125d72]">Urgensi</Label>
+                                    <Textarea
+                                        name="urgency"
+                                        placeholder="Jelaskan alasan urgensi usulan agenda ini secara detail..."
+                                        required
+                                        className="min-h-25 border-slate-200 focus:border-[#14a2ba] w-full"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="grid gap-2">
+                                        <Label className="font-bold text-[#125d72]">Deadline Rapat</Label>
+                                        <Input
+                                            name="deadline"
+                                            type="date"
+                                            value={deadline}
+                                            onChange={(e) => setDeadline(e.target.value)}
+                                            required
+                                            className="h-11 border-slate-200 focus:border-[#14a2ba]"
+                                        />
+                                    </div>
                                     <div className="grid gap-2">
                                         <Label className="font-bold text-[#125d72]">Prioritas (System)</Label>
-                                        <div className="h-10 flex items-center px-4 border-2 rounded-md bg-[#f8fafc] font-black italic text-xs shadow-inner">
+                                        <div className="h-11 flex items-center px-4 border-2 rounded-md bg-[#f8fafc] font-black italic text-xs shadow-inner">
                                             <span className={prioritas === 'High' ? 'text-red-600' : prioritas === 'Medium' ? 'text-orange-500' : 'text-green-600'}>{prioritas}</span>
                                         </div>
                                     </div>
@@ -244,9 +263,9 @@ export function AddRadirModal() {
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Narahubung</Label><Input name="contactPerson" placeholder="Nama Narahubung" required /></div>
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Jabatan</Label><Input name="position" placeholder="Jabatan" required /></div>
-                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">No WhatsApp</Label><Input name="phone" type="number" placeholder="628123..." required /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Narahubung</Label><Input name="contactPerson" placeholder="Nama Narahubung" required className="h-11" /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">Jabatan</Label><Input name="position" placeholder="Jabatan" required className="h-11" /></div>
+                                    <div className="grid gap-2"><Label className="font-bold text-[#125d72]">No WhatsApp</Label><Input name="phone" type="number" placeholder="628123..." required className="h-11" /></div>
                                 </div>
                             </div>
 
@@ -316,7 +335,6 @@ export function AddRadirModal() {
                         </div>
                     </ScrollArea>
                     <DialogFooter className="p-6 bg-[#f8fafc] border-t shrink-0 flex items-center justify-end gap-3">
-                        {/* 1. Tombol Batal (Selalu Muncul) */}
                         <Button
                             type="button"
                             variant="ghost"
@@ -326,9 +344,7 @@ export function AddRadirModal() {
                             Batal
                         </Button>
 
-                        {/* LOGIKA KONDISIONAL */}
                         {!isComplete ? (
-                            // KONDISI A: Data Belum Lengkap -> Muncul Tombol Draft
                             <Button
                                 type="submit"
                                 name="actionType"
@@ -350,7 +366,6 @@ export function AddRadirModal() {
                                 )}
                             </Button>
                         ) : (
-                            // KONDISI B: Data Sudah Lengkap -> Muncul Tombol Lanjutkan (Submit)
                             <Button
                                 type="submit"
                                 name="actionType"

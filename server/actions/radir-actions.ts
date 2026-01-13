@@ -172,7 +172,7 @@ export async function updateRadirAction(id: string, formData: FormData) {
         const oldData = await db.query.agendas.findFirst({ where: eq(agendas.id, id) })
         if (!oldData) return { success: false, error: "Data tidak ditemukan." }
 
-        if (oldData.status === "DIJADWALKAN" || oldData.status === "SELESAI_SIDANG") {
+        if (oldData.status === "DIJADWALKAN" || oldData.status === "SELESAI_RAPAT") {
             return { success: false, error: "Agenda sudah dikunci." }
         }
 

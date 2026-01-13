@@ -146,7 +146,7 @@ export function MeetingDecisionsSection({ decisions, setDecisions }: MeetingDeci
                             Butir-Butir Keputusan b
                         </CardTitle>
                         <p className="text-xs text-slate-500 mt-1">
-                            Ketetapan hasil sidang yang bersifat final
+                            Ketetapan hasil rapat yang bersifat final
                         </p>
                     </div>
                 </div>

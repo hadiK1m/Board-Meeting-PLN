@@ -423,7 +423,7 @@ function ActionDropdown({
 
 function StatusBadge({ status }: { status: string }) {
     // Menangani status Rapat Selesai
-    if (status === "RAPAT_SELESAI" || status === "SELESAI_SIDANG" || status === "COMPLETED") {
+    if (status === "RAPAT_SELESAI" || status === "SELESAI_RAPAT" || status === "COMPLETED") {
         return (
             <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
                 <CheckCircle2 className="h-2.5 w-2.5" /> RAPAT SELESAI

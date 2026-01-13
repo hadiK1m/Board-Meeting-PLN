@@ -3,13 +3,14 @@
 
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
-import { eq, and } from "drizzle-orm"
+import { eq, and, asc } from "drizzle-orm"
 import fs from "fs"
 import path from "path"
 import PizZip from "pizzip"
 import Docxtemplater from "docxtemplater"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
+import { createClient } from "@/lib/supabase/server"
 
 // --- TIPE DATA ---
 interface AttendanceInfo {
@@ -29,13 +30,26 @@ const DIRECTOR_NAMES: Record<string, string> = {
     "DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)": "YUSUF DIDI SETIARTO",
     "DIREKTUR MANAJEMEN RISIKO (DIR MRO)": "ADI LUMAKSO",
     "DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)": "HARTANTO WIBOWO",
-    "DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)": "SUROSO ISNANDAR",
-    "DIREKTUR TEKNOLOGI, ENGINEERING, DAN KEBERLANJUTAN (DIR TNK)": "E. HARYADI",
-    "DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)": "RIZAL CALVARY MARIMBO",
-    "DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)": "EDWIN NUGRAHA PUTRA",
-    "DIREKTUR DISTRIBUSI (DIR DIST)": "ARSYADANY GHANA AKMALAPUTRI",
-    "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)": "ADI PRIYANTO"
+    "DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)": "WILUYO KUSDWIHARTO",
+    "DIREKTUR TEKNOLOGI, ENGINEERING, DAN KEBERLANJUTAN (DIR TNK)": "MOHAMAD IKHAN ASSEGAF",
+    "DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)": "ADI PRIYANTO",
+    "DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)": "EVY HARYADI",
+    "DIREKTUR DISTRIBUSI (DIR DIST)": "ADI PRIYANTO",
+    "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)": "EDWIN NUGRAHA PUTRA"
 }
+
+const DIRECTOR_ORDER = [
+    "DIREKTUR UTAMA (DIRUT)",
+    "DIREKTUR KEUANGAN (DIR KEU)",
+    "DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)",
+    "DIREKTUR MANAJEMEN RISIKO (DIR MRO)",
+    "DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)",
+    "DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)",
+    "DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)",
+    "DIREKTUR DISTRIBUSI (DIR DIST)",
+    "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)",
+    "DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)",
+]
 
 // --- HELPER FUNCTIONS ---
 
@@ -74,7 +88,7 @@ function cleanHtml(html: string | null | undefined): string {
 }
 
 /**
- * PARSER KHUSUS: Agar Docxtemplater bisa membaca object nested (titik)
+ * PARSER KHUSUS: Agar Docxtemplater bisa membaca object nested
  */
 const expressionParser = (tag: string) => {
     return {
@@ -87,21 +101,37 @@ const expressionParser = (tag: string) => {
     };
 };
 
-// --- EXPORT FUNCTION ---
+// --- HELPER: AUTH GUARD ---
+async function assertAuthenticated() {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
 
+    if (error || !user) {
+        throw new Error("Unauthorized: Anda harus login untuk mengunduh dokumen.")
+    }
+    return user
+}
+
+// --- MAIN EXPORT FUNCTIONS ---
+
+/**
+ * 1. EXPORT RISALAH RADIR
+ */
 export async function exportRisalahToDocx(
     meetingNumber: string,
     meetingYear: string,
     templateType: "ISI" | "TTD" = "ISI"
 ) {
     try {
+        await assertAuthenticated()
+
         const dataAgendas = await db.query.agendas.findMany({
             where: and(
                 eq(agendas.meetingNumber, meetingNumber),
                 eq(agendas.meetingYear, meetingYear),
                 eq(agendas.meetingType, "RADIR")
             ),
-            orderBy: (agendas, { asc }) => [asc(agendas.createdAt)],
+            orderBy: [asc(agendas.createdAt)],
         })
 
         if (!dataAgendas || dataAgendas.length === 0) {
@@ -111,20 +141,13 @@ export async function exportRisalahToDocx(
         const first = dataAgendas[0]
         const executionDate = first.executionDate ? new Date(first.executionDate) : new Date()
 
-        // 1. Parsing Attendance Data
         let attendanceMap: Record<string, any> = {}
         try {
             attendanceMap = typeof first.attendanceData === "string" ? JSON.parse(first.attendanceData) : (first.attendanceData || {})
-        } catch (e) {
-            console.error("Gagal parse attendance:", e)
-            attendanceMap = {}
-        }
+        } catch { attendanceMap = {} }
 
-        // 2. Hitung Statistik Kehadiran
         const direkturList = Object.keys(attendanceMap)
-        const hadirCount = direkturList.filter(
-            (d) => attendanceMap[d]?.status !== "Tidak Hadir"
-        ).length
+        const hadirCount = direkturList.filter((d) => attendanceMap[d]?.status !== "Tidak Hadir").length
 
         const teksCatatan = direkturList
             .filter((name) => attendanceMap[name]?.status === "Tidak Hadir" || attendanceMap[name]?.status === "Kuasa")
@@ -138,35 +161,23 @@ export async function exportRisalahToDocx(
             })
             .join("\n")
 
-        // 3. Format Daftar Ringkasan Agenda (Agenda Summary List)
         const agendaSummaryList = dataAgendas.map((a, idx) => {
             const roman = toRoman(idx + 1).toLowerCase()
-            const pemrakarsaList = [a.director, a.initiator]
-                .filter((val) => val && val.trim() !== "")
-                .join(", ")
+            const pemrakarsaList = [a.director, a.initiator].filter((val) => val && val.trim() !== "").join(", ")
             return `${roman}. ${a.title} Pemrakarsa (${pemrakarsaList})`
         }).join("\n")
 
-        // 4. Helper Logic Alih Kuasa
         const getSigner = (dbKey: string, defaultTitle: string) => {
             const record = attendanceMap[dbKey]
             const realName = DIRECTOR_NAMES[dbKey] || "NAMA TIDAK DITEMUKAN"
-
             if (record?.status === "Kuasa" && Array.isArray(record.proxy) && record.proxy.length > 0) {
                 const proxyKey = record.proxy[0].value
                 const proxyName = DIRECTOR_NAMES[proxyKey]
-                return {
-                    name: proxyName || proxyKey,
-                    title: "(ALIH KUASA)",
-                }
+                return { name: proxyName || proxyKey, title: "(ALIH KUASA)" }
             }
-            return {
-                name: realName,
-                title: defaultTitle
-            }
+            return { name: realName, title: defaultTitle }
         }
 
-        // 5. Susun Data Template Lengkap
         const templateData = {
             meetingNumber,
             meetingYear,
@@ -175,20 +186,12 @@ export async function exportRisalahToDocx(
             startTime: first.startTime || "",
             endTime: first.endTime || "",
             location: first.meetingLocation || "",
-
-            // --- DATA PEMBUKAAN ---
             agenda_summary_list: agendaSummaryList,
             hadir_count_num: hadirCount,
             hadir_count_terbilang: terbilang(hadirCount),
-            pimpinanRapat: Array.isArray(first.pimpinanRapat)
-                ? first.pimpinanRapat.map((p: any) => p.label).join(", ")
-                : "Sekretaris Perusahaan",
+            pimpinanRapat: Array.isArray(first.pimpinanRapat) ? first.pimpinanRapat.map((p: any) => p.label).join(", ") : "Sekretaris Perusahaan",
             catatan_ketidakhadiran: teksCatatan || "Seluruh Direksi hadir lengkap",
-            guestParticipants: Array.isArray(first.guestParticipants)
-                ? first.guestParticipants.map((g: any) => `${g.name} (${g.position})`).join(", ")
-                : "-",
-
-            // --- DATA PENANDATANGAN ---
+            guestParticipants: Array.isArray(first.guestParticipants) ? first.guestParticipants.map((g: any) => `${g.name} (${g.position})`).join(", ") : "-",
             dir_ut: getSigner("DIREKTUR UTAMA (DIRUT)", "DIRUT"),
             dir_keu: getSigner("DIREKTUR KEUANGAN (DIR KEU)", "DIR KEU"),
             dir_lhc: getSigner("DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)", "DIR LHC"),
@@ -200,173 +203,98 @@ export async function exportRisalahToDocx(
             dir_trans: getSigner("DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)", "DIR TRANS"),
             dir_dist: getSigner("DIREKTUR DISTRIBUSI (DIR DIST)", "DIR DIST"),
             dir_retail: getSigner("DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)", "DIR RETAIL"),
-
-            // --- DATA AGENDA (LOOP) ---
             agendas: dataAgendas.map((a, i) => ({
                 index: i + 1,
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
-
-                // ✅ PERBAIKAN DI SINI: Dasar Pertimbangan (Cek Array vs String)
-                considerations: Array.isArray(a.considerations)
-                    ? a.considerations.map((c: any, idx: number) => `${idx + 1}. ${c.text}`).join("\n")
-                    : cleanHtml(String(a.considerations || "")),
-
-                // ✅ PERBAIKAN DI SINI: Keputusan Rapat (Cek Array vs String)
-                meetingDecisions: Array.isArray(a.meetingDecisions)
-                    ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n")
-                    : cleanHtml(String(a.meetingDecisions || "")),
-
+                considerations: Array.isArray(a.considerations) ? a.considerations.map((c: any, idx: number) => `${idx + 1}. ${c.text}`).join("\n") : cleanHtml(String(a.considerations || "")),
+                meetingDecisions: Array.isArray(a.meetingDecisions) ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n") : cleanHtml(String(a.meetingDecisions || "")),
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
             })),
         }
 
         const fileName = templateType === "ISI" ? "1.2 Radir_Lembar Isi.docx" : "1.3. Radir_Lembar ttd.docx"
         const templatePath = path.resolve(process.cwd(), "public", fileName)
-
-        if (!fs.existsSync(templatePath)) {
-            throw new Error(`Template ${fileName} tidak ditemukan di folder public.`)
-        }
+        if (!fs.existsSync(templatePath)) throw new Error(`Template ${fileName} tidak ditemukan.`)
 
         const content = fs.readFileSync(templatePath, "binary")
         const zip = new PizZip(content)
-
-        const doc = new Docxtemplater(zip, {
-            paragraphLoop: true,
-            linebreaks: true,
-            parser: expressionParser,
-            nullGetter: () => { return "" }
-        })
-
+        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, parser: expressionParser, nullGetter: () => "" })
         doc.render(templateData)
+        const buf = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" })
 
-        const buf = doc.getZip().generate({
-            type: "nodebuffer",
-            compression: "DEFLATE",
-        })
-
-        return {
-            success: true,
-            data: buf.toString("base64"),
-            filename: `${templateType}_RADIR_${meetingNumber}_${meetingYear}.docx`,
-        }
-    } catch (error: any) {
-        console.error("Export Error:", error)
-        return { success: false, error: error.message }
-    }
+        return { success: true, data: buf.toString("base64"), filename: `${templateType}_RADIR_${meetingNumber}_${meetingYear}.docx` }
+    } catch (error: any) { return { success: false, error: error.message } }
 }
 
 /**
- * EXPORT NOTULENSI RAKORDIR
+ * 2. EXPORT NOTULENSI RAKORDIR (NAMA DISESUAIKAN DENGAN UI)
  */
 export async function exportRakordirToDocx(meetingNumber: string, meetingYear: string) {
-    const safeNumber = meetingNumber || "000"
-    const safeYear = meetingYear || new Date().getFullYear().toString()
-
     try {
+        await assertAuthenticated()
+
         const dataAgendas = await db.query.agendas.findMany({
             where: and(
-                eq(agendas.meetingNumber, safeNumber),
-                eq(agendas.meetingYear, safeYear),
+                eq(agendas.meetingNumber, meetingNumber),
+                eq(agendas.meetingYear, meetingYear),
                 eq(agendas.meetingType, "RAKORDIR")
             ),
-            orderBy: (agendas, { asc }) => [asc(agendas.createdAt)],
         })
 
-        if (dataAgendas.length === 0) {
-            return { success: false, error: "Data Rakordir tidak ditemukan." }
-        }
+        if (dataAgendas.length === 0) throw new Error("Data agenda Rakordir tidak ditemukan.")
 
-        const firstAgenda = dataAgendas[0]
-        const executionDate = firstAgenda.executionDate ? new Date(firstAgenda.executionDate) : new Date()
-        const attendance = (firstAgenda.attendanceData as AttendanceData | null) ?? {}
-        const direkturList = Object.keys(attendance)
+        const headerData = dataAgendas[0]
+        const executionDate = headerData.executionDate ? new Date(headerData.executionDate) : new Date()
+        const dayName = format(executionDate, "EEEE", { locale: id })
+        const dateFormatted = format(executionDate, "dd MMMM yyyy", { locale: id })
 
-        const hadirCount = direkturList.filter(
-            (d) => attendance[d]?.status !== "Tidak Hadir"
-        ).length
+        const attendanceData: AttendanceData = typeof headerData.attendanceData === "string" ? JSON.parse(headerData.attendanceData) : (headerData.attendanceData || {})
+        const hadirCount = Object.keys(attendanceData).filter((k) => attendanceData[k]?.status !== "Tidak Hadir").length
 
-        const teksCatatan = direkturList
-            .filter((name) => attendance[name]?.status === "Tidak Hadir" || attendance[name]?.status === "Kuasa")
-            .map((name) => {
-                const info = attendance[name]
-                if (info?.status === "Kuasa") {
-                    const penerima = info.proxy?.[0]?.label ?? "Direktur terkait"
-                    return `${name} tidak hadir dan memberikan kuasa kepada ${penerima};`
-                }
-                return `${name} tidak hadir karena ${info?.reason ?? "tugas kedinasan lainnya"};`
-            })
-            .join("\n")
+        const directorsList = DIRECTOR_ORDER.map(role => {
+            const info = attendanceData[role]
+            const name = DIRECTOR_NAMES[role] || role
+            let statusText = "Hadir"
+            if (info?.status === "Tidak Hadir") statusText = info.reason ? `Ijin (${info.reason})` : "Ijin"
+            else if (info?.status === "Kuasa") statusText = `Diwakilkan kepada ${info.proxy?.[0]?.label || "N/A"}`
+            return { role: role.replace("DIREKTUR", "").replace(/\(.*\)/, "").trim(), name, status: statusText }
+        })
+
+        const guestList = Array.isArray(headerData.guestParticipants) ? headerData.guestParticipants.map((g: any, i: number) => ({ index: i + 1, name: g.name, position: g.position })) : []
 
         const templateData = {
-            xx: format(executionDate, "eeee, dd MMMM yyyy", { locale: id }),
-            startTime: firstAgenda.startTime || "",
-            endTime: firstAgenda.endTime || "",
-            meetingLocation: firstAgenda.meetingLocation || "",
-            meetingYear: safeYear,
-
-            agenda_summary_list: dataAgendas
-                .map((a, idx) => {
-                    const roman = toRoman(idx + 1).toLowerCase()
-                    const fullPemrakarsa = [a.director, a.initiator]
-                        .filter((v): v is string => !!v && v.trim() !== "")
-                        .join(", ")
-                    return `${roman}. ${a.title} (Pemrakarsa: ${fullPemrakarsa || "Direktur Terkait"})`
-                })
-                .join("\n"),
-
-            hadir_count_num: hadirCount,
-            hadir_count_terbilang: terbilang(hadirCount),
-            pimpinanRapat:
-                Array.isArray(firstAgenda.pimpinanRapat)
-                    ? firstAgenda.pimpinanRapat.map((p: { label: string }) => p.label).join(", ")
-                    : "Sekretaris Perusahaan",
-
-            catatan_ketidakhadiran: teksCatatan || "Seluruh Direksi hadir lengkap",
-
-            guestParticipants:
-                ((firstAgenda.guestParticipants as Array<{ name: string; position: string }> | null) ?? [])
-                    .map((g) => `${g.name} (${g.position})`)
-                    .join(", ") || "-",
-
+            meetingNumber, meetingYear, dayName, date: dateFormatted,
+            startTime: headerData.startTime || "-", endTime: headerData.endTime || "Selesai",
+            location: headerData.meetingLocation || "Kantor Pusat PLN",
+            hadir_count_num: hadirCount, hadir_count_terbilang: terbilang(hadirCount),
+            pimpinanRapat: Array.isArray(headerData.pimpinanRapat) ? headerData.pimpinanRapat.map((p: any) => p.label).join(", ") : "-",
+            directors: directorsList, guests: guestList,
             agendas: dataAgendas.map((a, index) => {
-                const fullPemrakarsa = [a.director, a.initiator]
-                    .filter((v): v is string => !!v && v.trim() !== "")
-                    .join(", ")
+                let fullPemrakarsa = ""
+                try {
+                    const parsedInit = JSON.parse(a.initiator || "[]")
+                    fullPemrakarsa = Array.isArray(parsedInit) ? parsedInit.map((p: any) => p.label || p).join(", ") : (a.initiator || "")
+                } catch { fullPemrakarsa = a.initiator || "" }
 
-                return {
-                    index: index + 1,
-                    title: a.title,
-                    pemrakarsa: fullPemrakarsa || "Direktur Terkait",
-                    executiveSummary: cleanHtml(a.executiveSummary),
-                    arahanDireksi: Array.isArray(a.arahanDireksi)
-                        ? a.arahanDireksi
-                            .map((d: { text: string }, i: number) => `${String.fromCharCode(97 + i)}. ${d.text}`)
-                            .join("\n")
-                        : "-",
+                let arahanText = "-"
+                if (Array.isArray(a.arahanDireksi) && a.arahanDireksi.length > 0) {
+                    arahanText = a.arahanDireksi.map((d: any, i: number) => `${String.fromCharCode(97 + i)}. ${d.text || d.value}`).join("\n")
                 }
+                return { index: index + 1, title: a.title, pemrakarsa: fullPemrakarsa || "Direktur Terkait", executiveSummary: cleanHtml(a.executiveSummary), arahanDireksi: arahanText }
             }),
         }
 
         const templatePath = path.resolve(process.cwd(), "public", "2. Template Notulensi Rakordir.docx")
-        if (!fs.existsSync(templatePath)) throw new Error("Template RAKORDIR tidak ditemukan")
+        if (!fs.existsSync(templatePath)) throw new Error("File template notulensi Rakordir tidak ditemukan.")
 
         const content = fs.readFileSync(templatePath, "binary")
         const zip = new PizZip(content)
-        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })
-
+        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, parser: expressionParser })
         doc.render(templateData)
         const buf = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" })
 
-        return {
-            success: true,
-            data: buf.toString("base64"),
-            filename: `Notulensi_Rakordir_${safeNumber}_${safeYear}.docx`,
-        }
-    } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : "Terjadi kesalahan tidak diketahui"
-        console.error("[EXPORT-RAKORDIR-ERROR]:", msg)
-        return { success: false, error: msg }
-    }
+        return { success: true, data: buf.toString("base64"), filename: `Notulensi_Rakordir_${meetingNumber.replace(/[^a-zA-Z0-9-]/g, "")}_${meetingYear}.docx` }
+    } catch (error: any) { return { success: false, error: error.message || "Gagal membuat dokumen notulensi." } }
 }

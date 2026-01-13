@@ -73,7 +73,7 @@ export default async function PelaksanaanRakordirPage() {
                     </div>
                 </div>
 
-                {/* Tombol Aksi: Membuka Dialog dengan data agenda yang siap disidangkan */}
+                {/* Tombol Aksi: Membuka Dialog dengan data agenda yang siap dirapatkan */}
                 <StartRakordirDialog readyAgendas={readyAgendas} />
             </div>
 
@@ -101,7 +101,7 @@ export default async function PelaksanaanRakordirPage() {
 
                     <div className="hidden md:flex items-center gap-2">
                         <Badge variant="outline" className="text-[10px] font-black bg-white border-slate-200 text-[#14a2ba] py-2 px-4 rounded-xl shadow-sm uppercase">
-                            {readyAgendas.length} Agenda Siap Sidang
+                            {readyAgendas.length} Agenda Siap RAPAT
                         </Badge>
                         <Badge variant="outline" className="text-[10px] font-black bg-[#125d72] border-none text-white py-2 px-4 rounded-xl shadow-sm uppercase">
                             Total {groupedMeetings.length} Sesi Rapat

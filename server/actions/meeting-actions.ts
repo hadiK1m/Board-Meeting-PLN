@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
@@ -6,66 +5,40 @@ import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm"
-import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData" // Import master data untuk default attendance
+import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData"
+import { createClient } from "@/lib/supabase/server" // [SECURE] Tambahan untuk Auth
 
-// --- INTERFACES ---
-
-interface Option {
-    label: string
-    value: string
-}
-
-interface DecisionItem {
-    id: string
-    text: string
-}
-
-interface ConsiderationItem {
-    id: string
-    text: string
-}
-
-interface Guest {
-    id: number
-    name: string
-    position: string
-}
-
+// --- INTERFACES (TETAP SESUAI ASLI) ---
+interface Option { label: string; value: string }
+interface DecisionItem { id: string; text: string }
+interface ConsiderationItem { id: string; text: string }
+interface Guest { id: number; name: string; position: string }
 interface MeetingScheduleData {
-    id: string
-    executionDate: string
-    startTime: string
-    endTime: string
-    meetingMethod: string
-    location?: string
-    link?: string
+    id: string; executionDate: string; startTime: string; endTime: string;
+    meetingMethod: string; location?: string; link?: string;
 }
-
 interface RisalahData {
-    agendaId: string
-    startTime: string
-    endTime: string
-    meetingLocation: string
-    meetingNumber?: string
-    meetingYear?: string
-    risalahGroupId?: string // Tambahkan ini agar bisa menerima ID dari client
-    pimpinanRapat: Option[]
-    attendanceData: Record<string, {
-        status: string
-        reason?: string
-        proxy?: readonly Option[]
-    }>
-    guestParticipants: Guest[]
-    executiveSummary: string
-    considerations: string | ConsiderationItem[]
-    risalahBody: string
-    meetingDecisions: DecisionItem[]
-    dissentingOpinion: string
+    agendaId: string; startTime: string; endTime: string; meetingLocation: string;
+    meetingNumber?: string; meetingYear?: string; risalahGroupId?: string;
+    pimpinanRapat: Option[]; attendanceData: Record<string, {
+        status: string; reason?: string; proxy?: readonly Option[];
+    }>;
+    guestParticipants: Guest[]; executiveSummary: string;
+    considerations: string | ConsiderationItem[]; risalahBody: string;
+    meetingDecisions: DecisionItem[]; dissentingOpinion: string;
 }
 
-/**
- * HELPER: Memastikan data kehadiran tidak kosong
- */
+// --- HELPER: AUTH GUARD (PENYEMPURNAAN KEAMANAN) ---
+async function assertAuthenticated() {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) {
+        throw new Error("Unauthorized: Anda harus login untuk melakukan aksi ini.")
+    }
+    return { user, supabase }
+}
+
+// --- HELPER: MEMASTIKAN DATA KEHADIRAN (LOGIKA ASLI DIPERTAHANKAN) ---
 function ensureDefaultAttendance(data: any) {
     if (!data || Object.keys(data).length === 0) {
         return DIREKTURE_PEMRAKARSA.reduce((acc, name) => ({
@@ -81,6 +54,7 @@ function ensureDefaultAttendance(data: any) {
  */
 export async function upsertMeetingScheduleAction(data: MeetingScheduleData) {
     try {
+        await assertAuthenticated() // [SECURE]
         if (!data.id) return { success: false, error: "ID Agenda diperlukan" }
 
         await db.update(agendas).set({
@@ -99,9 +73,8 @@ export async function upsertMeetingScheduleAction(data: MeetingScheduleData) {
         revalidatePath("/pelaksanaan-rapat/radir")
 
         return { success: true, message: "Jadwal rapat berhasil diproses" }
-    } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : "Gagal memproses jadwal rapat"
-        return { success: false, error: msg }
+    } catch (error: any) {
+        return { success: false, error: error.message || "Gagal memproses jadwal" }
     }
 }
 
@@ -110,6 +83,7 @@ export async function upsertMeetingScheduleAction(data: MeetingScheduleData) {
  */
 export async function rollbackMeetingScheduleAction(id: string) {
     try {
+        await assertAuthenticated() // [SECURE]
         await db.update(agendas).set({
             status: "DAPAT_DILANJUTKAN",
             executionDate: null,
@@ -123,8 +97,8 @@ export async function rollbackMeetingScheduleAction(id: string) {
 
         revalidatePath("/jadwal-rapat")
         return { success: true }
-    } catch (error: unknown) {
-        return { success: false, error: "Gagal rollback" }
+    } catch (error: any) {
+        return { success: false, error: error.message || "Gagal rollback" }
     }
 }
 
@@ -133,16 +107,13 @@ export async function rollbackMeetingScheduleAction(id: string) {
  */
 export async function saveMeetingRisalahAction(data: RisalahData) {
     try {
+        await assertAuthenticated() // [SECURE]
         if (!data.agendaId) return { success: false, error: "ID Agenda tidak ditemukan" }
 
-        // Pastikan attendanceData berisi default jika kosong
         const finalAttendance = ensureDefaultAttendance(data.attendanceData);
 
         const considerationsString = Array.isArray(data.considerations)
-            ? data.considerations
-                .map(item => item.text.trim())
-                .filter(Boolean)
-                .join("\n")
+            ? data.considerations.map(item => item.text.trim()).filter(Boolean).join("\n")
             : data.considerations
 
         await db.update(agendas).set({
@@ -152,14 +123,14 @@ export async function saveMeetingRisalahAction(data: RisalahData) {
             meetingNumber: data.meetingNumber || null,
             meetingYear: data.meetingYear || null,
             pimpinanRapat: data.pimpinanRapat,
-            attendanceData: finalAttendance, // Gunakan hasil helper
+            attendanceData: finalAttendance,
             guestParticipants: data.guestParticipants,
             executiveSummary: data.executiveSummary,
             considerations: considerationsString,
             risalahBody: data.risalahBody,
             meetingDecisions: data.meetingDecisions,
             dissentingOpinion: data.dissentingOpinion,
-            risalahGroupId: data.risalahGroupId, // Gunakan ID yang dikirim client
+            risalahGroupId: data.risalahGroupId,
             status: "SEDANG_BERLANGSUNG",
             meetingStatus: "COMPLETED",
             updatedAt: new Date(),
@@ -169,10 +140,8 @@ export async function saveMeetingRisalahAction(data: RisalahData) {
         revalidatePath("/dashboard")
 
         return { success: true, message: "Risalah rapat berhasil disimpan" }
-    } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : "Gagal menyimpan risalah"
-        console.error("❌ Error in saveMeetingRisalahAction:", msg)
-        return { success: false, error: msg }
+    } catch (error: any) {
+        return { success: false, error: error.message || "Gagal menyimpan risalah" }
     }
 }
 
@@ -181,6 +150,7 @@ export async function saveMeetingRisalahAction(data: RisalahData) {
  */
 export async function saveBulkMeetingRisalahAction(data: any) {
     try {
+        await assertAuthenticated() // [SECURE]
         if (!data.agendaIds || data.agendaIds.length === 0) return { success: false, error: "Agenda tidak dipilih" }
 
         const finalAttendance = ensureDefaultAttendance(data.attendanceData);
@@ -211,128 +181,99 @@ export async function saveBulkMeetingRisalahAction(data: any) {
 
         revalidatePath("/pelaksanaan-rapat/radir")
         return { success: true, message: "Risalah bulk berhasil disimpan" }
-    } catch (error: unknown) {
-        return { success: false, error: "Gagal menyimpan bulk" }
+    } catch (error: any) {
+        return { success: false, error: error.message || "Gagal menyimpan bulk" }
     }
 }
 
+/**
+ * 5. GET MONITORING DATA (LOGIKA ASLI DIPERTAHANKAN)
+ */
 export async function getRadirMonitoringData() {
     try {
-        // Hanya ambil agenda RADIR yang SUDAH memiliki Nomor Meeting
+        await assertAuthenticated() // [SECURE]
         const allAgendas = await db.query.agendas.findMany({
-            where: and(
-                eq(agendas.meetingType, "RADIR"),
-                isNotNull(agendas.meetingNumber) // Saring di level Database
-            ),
+            where: and(eq(agendas.meetingType, "RADIR"), isNotNull(agendas.meetingNumber)),
             orderBy: [desc(agendas.meetingYear), desc(agendas.meetingNumber)]
         });
 
-        // Grouping logic tetap sama, tapi sekarang pasti punya nomor
         const groupedMeetings = allAgendas.reduce((acc: any[], current) => {
             const key = `${current.meetingNumber}-${current.meetingYear}`;
             const existingGroup = acc.find(item => item.groupKey === key);
-
             if (existingGroup) {
                 existingGroup.agendas.push(current);
                 if (current.meetingStatus === "COMPLETED") existingGroup.status = "COMPLETED";
             } else {
                 acc.push({
-                    groupKey: key,
-                    meetingNumber: current.meetingNumber,
-                    meetingYear: current.meetingYear,
-                    executionDate: current.executionDate,
-                    startTime: current.startTime,
-                    endTime: current.endTime,
-                    location: current.meetingLocation,
-                    status: current.meetingStatus || "SCHEDULED",
-                    agendas: [current]
+                    groupKey: key, meetingNumber: current.meetingNumber, meetingYear: current.meetingYear,
+                    executionDate: current.executionDate, startTime: current.startTime, endTime: current.endTime,
+                    location: current.meetingLocation, status: current.meetingStatus || "SCHEDULED", agendas: [current]
                 });
             }
             return acc;
         }, []);
 
         const readyAgendas = await db.query.agendas.findMany({
-            where: and(
-                eq(agendas.meetingType, "RADIR"),
-                eq(agendas.status, "DIJADWALKAN")
-            ),
+            where: and(eq(agendas.meetingType, "RADIR"), eq(agendas.status, "DIJADWALKAN")),
             orderBy: [desc(agendas.priority), desc(agendas.createdAt)]
         });
 
         return { success: true, groupedMeetings, readyAgendas };
-    } catch (error) {
-        console.error("Error fetching monitoring data:", error);
-        return { success: false, error: "Gagal mengambil data", groupedMeetings: [], readyAgendas: [] };
+    } catch (error: any) {
+        return { success: false, error: error.message, groupedMeetings: [], readyAgendas: [] };
     }
 }
 
+/**
+ * 6. UPDATE RAKORDIR LIVE (LOGIKA TRANSACTION ASLI DIPERTAHANKAN)
+ */
 export async function updateRakordirLiveAction(
     agendasData: any[],
     meetingInfo: {
-        number: string;
-        year: string;
-        date: string;
-        day?: string;
-        location: string;
-        startTime: string;
-        endTime: string;
-        pimpinanRapat: string;
-        catatanKetidakhadiran: string;
+        number: string; year: string; date: string; day?: string; location: string;
+        startTime: string; endTime: string; pimpinanRapat: string; catatanKetidakhadiran: string;
     }
 ) {
     try {
-        // Menjalankan Transaksi Database
+        await assertAuthenticated() // [SECURE]
         await db.transaction(async (tx) => {
             for (const item of agendasData) {
                 await tx.update(agendas)
                     .set({
-                        // 1. Sinkronisasi Data Logistik (Sama untuk semua agenda dalam satu sesi)
                         meetingNumber: meetingInfo.number,
                         meetingYear: meetingInfo.year,
                         executionDate: meetingInfo.date || null,
                         startTime: meetingInfo.startTime || null,
                         endTime: meetingInfo.endTime || "Selesai",
                         meetingLocation: meetingInfo.location || null,
-                        pimpinanRapat: meetingInfo.pimpinanRapat, // Disimpan sebagai string/JSON
-                        catatanRapat: meetingInfo.catatanKetidakhadiran, // Digunakan untuk Notulensi Word
-
-                        // 2. Data Naratif Spesifik (Berbeda tiap agenda)
+                        pimpinanRapat: meetingInfo.pimpinanRapat,
+                        catatanRapat: meetingInfo.catatanKetidakhadiran,
                         executiveSummary: item.executiveSummary,
-                        arahanDireksi: item.arahanDireksi, // JSONB
-                        attendanceData: item.attendanceData, // JSONB Kehadiran Direksi
-
-                        // 3. Update Status & Metadata
+                        arahanDireksi: item.arahanDireksi,
+                        attendanceData: item.attendanceData,
                         meetingStatus: "COMPLETED",
-                        status: "SELESAI", // Update status alur kerja utama
+                        status: "SELESAI",
                         updatedAt: new Date(),
                     })
                     .where(eq(agendas.id, item.id));
             }
         });
 
-        // Membersihkan cache agar data terbaru muncul di Monitoring
         revalidatePath("/pelaksanaan-rapat/rakordir");
         revalidatePath(`/pelaksanaan-rapat/rakordir/live`);
 
-        return {
-            success: true,
-            message: "Notulensi Rakordir berhasil disimpan dan disinkronkan."
-        };
-    } catch (error) {
-        console.error("[RAKORDIR-ACTION-ERROR]:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Terjadi kesalahan saat menyimpan data."
-        };
+        return { success: true, message: "Notulensi Rakordir berhasil disimpan dan disinkronkan." };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
 }
 
 /**
- * ACTION: DELETE RAKORDIR SESSION
- * Menghapus nomor meeting dari sekelompok agenda (Reset ke status Terjadwal)
+ * 7. RESET RAKORDIR SESSION (LOGIKA ASLI DIPERTAHANKAN)
  */
 export async function resetRakordirSessionAction(meetingNumber: string, meetingYear: string) {
     try {
+        await assertAuthenticated() // [SECURE]
         await db.update(agendas)
             .set({
                 meetingNumber: null,
@@ -340,39 +281,29 @@ export async function resetRakordirSessionAction(meetingNumber: string, meetingY
                 status: "DIJADWALKAN",
                 updatedAt: new Date()
             })
-            .where(
-                and(
-                    eq(agendas.meetingNumber, meetingNumber),
-                    eq(agendas.meetingYear, meetingYear),
-                    eq(agendas.meetingType, "RAKORDIR")
-                )
-            );
+            .where(and(eq(agendas.meetingNumber, meetingNumber), eq(agendas.meetingYear, meetingYear), eq(agendas.meetingType, "RAKORDIR")));
 
         revalidatePath("/pelaksanaan-rapat/rakordir");
         return { success: true };
-    } catch (error) {
-        return { success: false, error: "Gagal mereset sesi rapat." };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
 }
 
+/**
+ * 8. FINISH MEETING (LOGIKA ASLI DIPERTAHANKAN)
+ */
 export async function finishMeetingAction(meetingNumber: string, meetingYear: string) {
     try {
+        await assertAuthenticated() // [SECURE]
         await db.update(agendas)
             .set({
                 meetingStatus: "COMPLETED",
-
-                // ✅ UBAH BAGIAN INI:
-                status: "RAPAT_SELESAI", // Sebelumnya "SELESAI_SIDANG"
-
+                status: "RAPAT_SELESAI",
                 endTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
                 updatedAt: new Date(),
             })
-            .where(
-                and(
-                    eq(agendas.meetingNumber, meetingNumber),
-                    eq(agendas.meetingYear, meetingYear)
-                )
-            )
+            .where(and(eq(agendas.meetingNumber, meetingNumber), eq(agendas.meetingYear, meetingYear)))
 
         revalidatePath("/agenda/radir")
         revalidatePath("/agenda-siap/radir")
