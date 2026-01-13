@@ -181,6 +181,10 @@ export function AddRadirModal() {
         // Upload dokumen utama
         for (const doc of FILE_LIST) {
             const fieldId = doc.id
+
+            // PENTING: hapus file biner dari formData agar tidak terkirim ke Server Action (Vercel)
+            formData.delete(fieldId)
+
             if (notRequiredFiles.includes(fieldId)) continue
 
             const input = document.getElementById(fieldId) as HTMLInputElement | null
@@ -224,6 +228,10 @@ export function AddRadirModal() {
             'input[name="supportingDocuments"]'
         ) as HTMLInputElement | null
         const supportingFiles = supportingInput?.files
+
+        // PENTING: hapus file biner supportingDocuments dari formData agar payload tidak berisi file
+        formData.delete("supportingDocuments");
+
         if (supportingFiles && supportingFiles.length > 0 && !notRequiredFiles.includes("supportingDocuments")) {
             setUploadingFiles((prev) => new Set([...prev, "supportingDocuments"]))
 
