@@ -56,6 +56,10 @@ import {
     SUPPORT,
     extractCode
 } from "@/lib/MasterData"
+import { createClient } from "@/lib/supabase/client"
+
+// ✅ FIX: Inisialisasi supabase di sini
+const supabase = createClient()
 
 // --- KONFIGURASI STATIS ---
 
@@ -64,12 +68,19 @@ interface Option {
     value: string;
 }
 
-const RAKORDIR_FILE_FIELDS = [
+// ✅ FIX: Gunakan nama FILE_FIELDS yang konsisten
+interface RakordirFileField {
+    id: "proposalNote" | "presentationMaterial";
+    label: string;
+}
+
+const FILE_FIELDS: RakordirFileField[] = [
     { id: "proposalNote", label: "ND Usulan Agenda" },
     { id: "presentationMaterial", label: "Materi Presentasi" }
-] as const;
+];
 
-type RakordirFileFieldId = typeof RAKORDIR_FILE_FIELDS[number]["id"];
+// ✅ FIX: Type mapping untuk FILE_FIELDS
+type RakordirFileFieldId = RakordirFileField["id"];
 
 const dirOptions: Option[] = DIREKTURE_PEMRAKARSA.map(d => ({ label: d, value: d }));
 const pemOptions: Option[] = PEMRAKARSA.map(p => ({ label: p, value: p }));
@@ -129,9 +140,18 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
 
     // File Logic States
     const [notRequired, setNotRequired] = useState<string[]>([]) // ID file yang ditandai "Tidak Perlu"
-    const [existingFiles, setExistingFiles] = useState<Record<string, string | null>>({}) // File path dari DB
+    const [existingFiles, setExistingFiles] = useState<
+        Record<RakordirFileFieldId | "supportingDocuments", string | null>
+    >({
+        proposalNote: null,
+        presentationMaterial: null,
+        supportingDocuments: null
+    })
+    // File path dari DB
     const [fileStatus, setFileStatus] = useState<Record<string, boolean>>({}) // Apakah user upload file baru?
-    const [confirmDeleteField, setConfirmDeleteField] = useState<string | null>(null) // Dialog hapus
+    const [confirmDeleteField, setConfirmDeleteField] = useState<
+        RakordirFileFieldId | "supportingDocuments" | null
+    >(null) // Dialog hapus
 
     useEffect(() => {
         setMounted(true)
@@ -161,16 +181,41 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
             setSelectedPemrakarsa(syncMultiSelect(agenda.initiator, pemOptions));
             setSelectedSupport(syncMultiSelect(agenda.support, supOptions));
 
-            // Sync File Eksisting
+            // ✅ FIX: Sync File Eksisting dengan cara yang type-safe
             const filesObj: Record<string, string | null> = {};
-            RAKORDIR_FILE_FIELDS.forEach((f) => {
-                const fieldId = f.id as RakordirFileFieldId;
-                const agendaKey = fieldId as keyof typeof agenda;
-                filesObj[fieldId] = (agenda[agendaKey] as string) ?? null;
+
+            // Handle FILE_FIELDS utama
+            FILE_FIELDS.forEach((field) => {
+                // ✅ Field sudah punya tipe RakordirFileField
+                const agendaValue = agenda[field.id as keyof Agenda];
+                filesObj[field.id] = typeof agendaValue === 'string' ? agendaValue : null;
             });
+
+            // ✅ FIX: Handle supportingDocuments secara terpisah
+            if (agenda.supportingDocuments) {
+                // Periksa apakah sudah dalam format string atau array
+                if (typeof agenda.supportingDocuments === 'string') {
+                    try {
+                        // Jika sudah string, parse untuk memastikan format JSON valid
+                        const parsed = JSON.parse(agenda.supportingDocuments);
+                        filesObj["supportingDocuments"] = JSON.stringify(parsed);
+                    } catch {
+                        // Jika parsing gagal, simpan sebagai array kosong
+                        filesObj["supportingDocuments"] = JSON.stringify([]);
+                    }
+                } else if (Array.isArray(agenda.supportingDocuments)) {
+                    // Jika sudah array, stringify
+                    filesObj["supportingDocuments"] = JSON.stringify(agenda.supportingDocuments);
+                } else {
+                    filesObj["supportingDocuments"] = null;
+                }
+            } else {
+                filesObj["supportingDocuments"] = null;
+            }
+
             setExistingFiles(filesObj);
 
-            // Sync Not Required Files
+            // ✅ FIX: Sync Not Required Files
             if (agenda.notRequiredFiles) {
                 try {
                     const parsed = typeof agenda.notRequiredFiles === 'string'
@@ -186,6 +231,7 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
 
             // Reset status upload baru
             setFileStatus({});
+            setConfirmDeleteField(null);
         }
     }, [agenda, open]);
 
@@ -200,7 +246,7 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
             position.trim() !== "" &&
             phone.trim() !== "";
 
-        const filesOk = RAKORDIR_FILE_FIELDS.every(doc => {
+        const filesOk = FILE_FIELDS.every(doc => {
             const isNotReq = notRequired.includes(doc.id);
             const hasExisting = existingFiles[doc.id] !== null;
             const hasNewUpload = fileStatus[doc.id];
@@ -241,33 +287,118 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
         setFileStatus(prev => ({ ...prev, [fieldId]: hasFile }));
     }
 
-    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-        event.preventDefault()
-        setIsPending(true)
-        const formData = new FormData(event.currentTarget)
+    const handleRemoveSupportingDoc = (index: number) => {
+        setExistingFiles(prev => {
+            try {
+                // Ambil data string JSON dari state, parse jadi array
+                const currentDocs = JSON.parse(prev["supportingDocuments"] || '[]');
+                const updatedDocs = [...currentDocs];
 
-        // ✅ FIX: Tangkap tombol mana yang diklik (Draft vs Submit)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const submitter = (event.nativeEvent as any).submitter as HTMLButtonElement;
-        if (submitter && submitter.name === "actionType") {
-            formData.append("actionType", submitter.value);
-        }
+                // Hapus 1 file berdasarkan index
+                updatedDocs.splice(index, 1);
 
-        formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "))
-        formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "))
-        formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "))
-        formData.set("priority", prioritas)
-        formData.set("notRequiredFiles", JSON.stringify(notRequired))
-
-        // Tandai file lama yang dihapus user agar Server Action menghapusnya dari storage
-        RAKORDIR_FILE_FIELDS.forEach(f => {
-            if (existingFiles[f.id] === null) {
-                formData.append(`delete_${f.id}`, 'true')
+                return {
+                    ...prev,
+                    // Jika masih ada sisa file, simpan sebagai JSON. Jika habis, set null.
+                    "supportingDocuments": updatedDocs.length > 0 ? JSON.stringify(updatedDocs) : null
+                };
+            } catch {
+                return prev;
             }
-        })
+        });
+    };
+
+    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setIsPending(true);
+        const formData = new FormData(event.currentTarget);
 
         try {
-            const result = await updateRakordirAction(agenda.id, formData)
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id || "anonymous";
+
+            // ✅ FIX: Tangkap tombol mana yang diklik (Draft vs Submit)
+            const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement;
+            if (submitter && submitter.name === "actionType") {
+                formData.append("actionType", submitter.value);
+            }
+
+            // Set metadata lainnya
+            formData.set("director", selectedDir.map(item => extractCode(item.value)).join(", "));
+            formData.set("initiator", selectedPemrakarsa.map(item => extractCode(item.value)).join(", "));
+            formData.set("support", selectedSupport.map(item => extractCode(item.value)).join(", "));
+            formData.set("priority", prioritas);
+            formData.set("notRequiredFiles", JSON.stringify(notRequired));
+
+            // 1. Loop untuk Dokumen Utama (Single File)
+            for (const field of FILE_FIELDS) {
+                const fileInput = document.querySelector(`input[name="${field.id}"]`) as HTMLInputElement;
+
+                // PENTING: Hapus biner aslinya agar tidak dikirim ke Vercel
+                formData.delete(field.id);
+
+                // Jika user memilih file baru di input ini
+                if (fileInput?.files?.[0]) {
+                    const file = fileInput.files[0];
+                    const fileExt = file.name.split(".").pop()?.toLowerCase() || "pdf";
+                    const uniqueId = crypto.randomUUID();
+                    const path = `rakordir/${userId}/${uniqueId}-${field.id}.${fileExt}`;
+
+                    // Upload langsung ke Supabase dari browser
+                    const { error: uploadError } = await supabase.storage
+                        .from("agenda-attachments")
+                        .upload(path, file);
+
+                    if (uploadError) {
+                        toast.error(`Gagal unggah ${field.label}`);
+                        throw uploadError;
+                    }
+
+                    // Simpan PATH-nya saja ke formData
+                    formData.set(field.id, path);
+                }
+            }
+
+            // 2. Khusus Dokumen Pendukung (Multiple Files)
+            const supportingInput = document.querySelector('input[name="supportingDocuments"]') as HTMLInputElement;
+            formData.delete("supportingDocuments"); // Hapus binernya
+
+            if (supportingInput?.files && supportingInput.files.length > 0) {
+                const files = Array.from(supportingInput.files);
+                const uploadedPaths: string[] = [];
+
+                for (const file of files) {
+                    const uniqueId = crypto.randomUUID();
+                    const path = `rakordir/${userId}/supporting/${uniqueId}-${file.name}`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from("agenda-attachments")
+                        .upload(path, file);
+
+                    if (uploadError) {
+                        toast.error("Gagal unggah dokumen pendukung");
+                        throw uploadError;
+                    }
+                    uploadedPaths.push(path);
+                }
+                // Kirim list path sebagai string JSON
+                formData.set("supportingDocuments", JSON.stringify(uploadedPaths));
+            }
+
+            // 3. Tambahkan instruksi hapus file lama jika ada
+            FILE_FIELDS.forEach((field) => {
+                // ✅ Field sudah punya tipe RakordirFileField
+                if (existingFiles[field.id] === null) {
+                    formData.append(`delete_${field.id}`, 'true');
+                }
+            });
+            if (existingFiles["supportingDocuments"] === null) {
+                formData.append("delete_supportingDocuments", 'true');
+            }
+
+            // Kirim ke Server Action
+            const result = await updateRakordirAction(agenda.id, formData);
+
             if (result.success) {
                 toast.custom((t) => (
                     <div className="flex items-center gap-4 bg-white border-l-4 border-[#14a2ba] p-4 shadow-2xl rounded-lg animate-in slide-in-from-bottom-5">
@@ -275,20 +406,21 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                         <div className="flex-1">
                             <h4 className="text-sm font-bold text-[#125d72]">Perubahan Berhasil</h4>
                             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
-                                Status: {submitter.value === "submit" ? "Siap Dilanjutkan" : "Draft"}
+                                Status: {submitter?.value === "submit" ? "Siap Dilanjutkan" : "Draft"}
                             </p>
                         </div>
                         <button onClick={() => toast.dismiss(t)}><X className="h-4 w-4 text-slate-300" /></button>
                     </div>
-                ))
-                onOpenChange(false)
+                ));
+                onOpenChange(false);
             } else {
-                toast.error(result.error || "Gagal memperbarui data")
+                toast.error(result.error || "Gagal memperbarui data");
             }
-        } catch {
-            toast.error("Gagal terhubung ke server")
+        } catch (err) {
+            console.error("Error submit:", err);
+            toast.error("Terjadi kesalahan sistem");
         } finally {
-            setIsPending(false)
+            setIsPending(false);
         }
     }
 
@@ -403,11 +535,10 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                     <Paperclip className="h-5 w-5 text-[#14a2ba]" />
                                     <h3 className="font-extrabold text-[#125d72] uppercase text-xs tracking-[0.2em]">Dokumen Lampiran (PDF)</h3>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {RAKORDIR_FILE_FIELDS.map((doc) => {
-                                        // Cek apakah kolom ini ditandai sebagai "Tidak Perlu"
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* BAGIAN A: DOKUMEN UTAMA (Single File) - HANYA FILE_FIELDS */}
+                                    {FILE_FIELDS.map((doc) => {
                                         const isNotRequired = notRequired.includes(doc.id);
-                                        // Cek apakah ada file eksisting
                                         const hasExistingFile = existingFiles[doc.id];
 
                                         return (
@@ -429,15 +560,13 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                                     </Button>
                                                 </div>
 
-                                                {/* Tampilkan Input File JIKA field ini Required (tidak ada di notRequired) */}
                                                 {!isNotRequired && (
                                                     hasExistingFile ? (
-                                                        // Jika ada file lama, tampilkan Card File
                                                         <div className="flex items-center justify-between p-2.5 border rounded-lg bg-white border-[#14a2ba]/30 shadow-sm">
                                                             <div className="flex items-center gap-2 truncate">
                                                                 <FileText className="w-4 h-4 text-[#14a2ba]" />
                                                                 <span className="text-[10px] font-bold text-[#125d72] truncate max-w-37.5">
-                                                                    {hasExistingFile.split('/').pop()}
+                                                                    {existingFiles[doc.id]?.split('/').pop()}
                                                                 </span>
                                                             </div>
                                                             <button
@@ -448,35 +577,8 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>
-
-                                                            {/* Dialog Konfirmasi Hapus per File */}
-                                                            <AlertDialog open={confirmDeleteField === doc.id} onOpenChange={(o) => !o && setConfirmDeleteField(null)}>
-                                                                <AlertDialogContent className="border-none shadow-2xl">
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle className="text-[#125d72] font-black uppercase text-sm flex items-center gap-2">
-                                                                            <AlertCircle className="h-5 w-5 text-red-500" /> Hapus File?
-                                                                        </AlertDialogTitle>
-                                                                        <AlertDialogDescription className="text-xs italic">
-                                                                            File akan dihapus permanen saat Anda menyimpan perubahan.
-                                                                        </AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel className="text-[10px] font-bold uppercase">Batal</AlertDialogCancel>
-                                                                        <AlertDialogAction
-                                                                            className="bg-red-500 text-white text-[10px] font-bold uppercase hover:bg-red-600"
-                                                                            onClick={() => {
-                                                                                setExistingFiles(prev => ({ ...prev, [doc.id]: null }));
-                                                                                setConfirmDeleteField(null);
-                                                                            }}
-                                                                        >
-                                                                            Ya, Hapus
-                                                                        </AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
                                                         </div>
                                                     ) : (
-                                                        // Jika tidak ada file lama, tampilkan Input Upload
                                                         <Input
                                                             name={doc.id}
                                                             type="file"
@@ -487,11 +589,11 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                                     )
                                                 )}
                                             </div>
-                                        )
+                                        );
                                     })}
 
-                                    {/* DOKUMEN PENDUKUNG (OPSIONAL) */}
-                                    <div className={`p-4 rounded-xl border-2 transition-all col-span-1 md:col-span-2 ${notRequired.includes('supportingDocuments') ? 'bg-slate-50 border-slate-200 opacity-60' : 'border-dashed border-slate-300 bg-slate-50'}`}>
+                                    {/* BAGIAN B: DOKUMEN PENDUKUNG (Multiple File) - DIPISAHKAN */}
+                                    <div className="col-span-1 md:col-span-2 p-4 border-2 border-dashed border-[#14a2ba] bg-[#e7f6f9]/10 rounded-xl">
                                         <div className="flex justify-between items-center mb-3">
                                             <Label className="text-[10px] font-black text-[#125d72] uppercase">Dokumen Pendukung Lainnya</Label>
                                             <Button
@@ -508,15 +610,45 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                                                 )}
                                             </Button>
                                         </div>
+
                                         {!notRequired.includes('supportingDocuments') && (
-                                            <Input
-                                                name="supportingDocuments"
-                                                type="file"
-                                                multiple
-                                                accept=".pdf"
-                                                onChange={(e) => handleFileChange('supportingDocuments', !!e.target.files?.length)}
-                                                className="h-10 text-[10px] file:bg-[#125d72] file:text-white file:border-none file:rounded cursor-pointer"
-                                            />
+                                            <>
+                                                {/* Tampilkan existing supporting documents */}
+                                                {existingFiles["supportingDocuments"] && (
+                                                    <div className="space-y-2 mb-3">
+                                                        {(() => {
+                                                            try {
+                                                                const files = JSON.parse(existingFiles["supportingDocuments"] || '[]');
+                                                                return files.map((path: string, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between p-2 border rounded bg-white shadow-sm">
+                                                                        <div className="flex items-center gap-2 truncate">
+                                                                            <Paperclip className="w-3 h-3 text-[#14a2ba]" />
+                                                                            <span className="text-[10px] text-[#125d72] truncate">{path.split('/').pop()}</span>
+                                                                        </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleRemoveSupportingDoc(idx)}
+                                                                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                                                        >
+                                                                            <X className="w-3 h-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ));
+                                                            } catch { return null; }
+                                                        })()}
+                                                    </div>
+                                                )}
+
+                                                {/* Input untuk upload baru */}
+                                                <Input
+                                                    name="supportingDocuments"
+                                                    type="file"
+                                                    multiple
+                                                    accept=".pdf"
+                                                    onChange={(e) => handleFileChange('supportingDocuments', !!e.target.files?.length)}
+                                                    className="h-10 text-[10px] file:bg-[#125d72] file:text-white file:border-none file:rounded cursor-pointer"
+                                                />
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -580,6 +712,37 @@ export function EditRakordirModal({ agenda, open, onOpenChange }: EditRakordirMo
                     </DialogFooter>
                 </form>
             </DialogContent>
+
+            {/* ✅ FIX: Alert Dialog untuk konfirmasi hapus */}
+            <AlertDialog open={!!confirmDeleteField} onOpenChange={(open) => !open && setConfirmDeleteField(null)}>
+                <AlertDialogContent className="border-none shadow-2xl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-[#125d72] font-black uppercase text-sm flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4 text-red-500" />
+                            Hapus Berkas?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs italic">
+                            Penghapusan akan permanen setelah Anda menyimpan perubahan.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="text-[10px] font-bold uppercase">
+                            Batal
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-red-500 text-white text-[10px] font-bold uppercase"
+                            onClick={() => {
+                                if (confirmDeleteField) {
+                                    setExistingFiles(prev => ({ ...prev, [confirmDeleteField]: null }));
+                                    setConfirmDeleteField(null);
+                                }
+                            }}
+                        >
+                            Hapus
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Dialog>
     )
 }
