@@ -430,7 +430,21 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                         </TableCell>
 
                                         <TableCell className="text-center">
-                                            <Badge className={cn("text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter", agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
+                                            <Badge className={cn(
+                                                "text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter",
+                                                // Logika Kondisional Warna
+                                                agenda.status === "DIBATALKAN"
+                                                    ? "bg-red-100 text-red-600"
+                                                    : agenda.status === "DITUNDA"
+                                                        ? "bg-amber-100 text-amber-600"
+                                                        : agenda.status === "DIJADWALKAN"
+                                                            ? "bg-blue-100 text-blue-600"
+                                                            : agenda.status === "SELESAI"
+                                                                ? "bg-emerald-100 text-emerald-600"
+                                                                : agenda.status === "DRAFT"
+                                                                    ? "bg-slate-100 text-slate-500"
+                                                                    : "bg-[#125d72] text-white" // Default: Dapat Dilanjutkan
+                                            )}>
                                                 {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                             </Badge>
                                         </TableCell>
@@ -460,13 +474,14 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                     {isLocked && <Lock className="h-3 w-3 text-amber-500 mt-2" />}
                                 </div>
                                 <div className="flex items-center justify-between mb-4 ml-6">
-                                    <Badge className="bg-[#125d72] text-[10px] font-bold px-3 uppercase tracking-widest">{agenda.status || "DRAFT"}</Badge>
-                                    <ActionButtons
-                                        onSelectDetail={() => handleOpenDetail(agenda)}
-                                        onSelectEdit={() => handleOpenEdit(agenda)}
-                                        onSelectDelete={() => { setSelectedDeleteId(agenda.id); setDeleteOpen(true); }}
-                                        status={agenda.status}
-                                    />
+                                    <Badge className={cn(
+                                        "text-[10px] font-bold px-3 uppercase tracking-widest border-none",
+                                        agenda.status === "DIBATALKAN" ? "bg-red-600 text-white" :
+                                            agenda.status === "DITUNDA" ? "bg-amber-500 text-white" :
+                                                "bg-[#125d72] text-white"
+                                    )}>
+                                        {agenda.status || "DRAFT"}
+                                    </Badge>
                                 </div>
                                 <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight italic">{agenda.title}</h3>
                                 <div className="grid grid-cols-2 gap-4 border-t pt-5">

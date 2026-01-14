@@ -34,6 +34,8 @@ export default async function RadirSiapPage() {
         support: agenda.support || null,
         position: agenda.position || null,
         phone: agenda.phone || null,
+
+        proposalNote: agenda.proposalNote || null,
         legalReview: agenda.legalReview || null,
         riskReview: agenda.riskReview || null,
         complianceReview: agenda.complianceReview || null,

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
 import { useState, useEffect } from "react"
@@ -19,7 +20,6 @@ import {
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 
-// Definisi tipe data untuk props
 interface NavItem {
     title: string
     url: string
@@ -32,32 +32,82 @@ interface NavItem {
 }
 
 export function NavMain({ items }: { items: NavItem[] }) {
-    // ✅ PERBAIKAN: Inisialisasi state dari localStorage secara langsung di useState
+    const [isClient, setIsClient] = useState(false)
     const [openStates, setOpenStates] = useState<Record<string, boolean>>(() => {
-        if (typeof window !== "undefined") {
-            const savedState = localStorage.getItem("sidebar-menu-state")
-            if (savedState) {
-                return JSON.parse(savedState)
+        // ✅ PERBAIKAN: Initialize dengan default, bukan membaca localStorage
+        const defaultStates: Record<string, boolean> = {}
+        items.forEach(item => {
+            if (item.items?.length) {
+                defaultStates[item.title] = false
             }
-        }
-        return {}
+        })
+        return defaultStates
     })
 
-    // Effect untuk MENYIMPAN perubahan ke localStorage
+    // ✅ PERBAIKAN: Load dari localStorage hanya sekali setelah mount
     useEffect(() => {
-        // Kita cek apakah state tidak kosong agar tidak menimpa storage saat initial render
-        if (Object.keys(openStates).length > 0) {
+        setIsClient(true)
+
+        // Gunakan setTimeout untuk menghindari synchronous state update
+        const timer = setTimeout(() => {
+            const saved = localStorage.getItem("sidebar-menu-state")
+            if (saved) {
+                try {
+                    const parsedState = JSON.parse(saved)
+                    setOpenStates(prev => ({
+                        ...prev,
+                        ...parsedState // Merge dengan default, jangan replace seluruhnya
+                    }))
+                } catch (error) {
+                    console.error("Error parsing sidebar state:", error)
+                }
+            }
+        }, 0) // setTimeout dengan 0 delay untuk membuatnya async
+
+        return () => clearTimeout(timer)
+    }, []) // ✅ Empty dependency array - hanya sekali setelah mount
+
+    // ✅ PERBAIKAN: Simpan ke localStorage dengan useEffect terpisah
+    useEffect(() => {
+        if (!isClient || Object.keys(openStates).length === 0) return
+
+        const timer = setTimeout(() => {
             localStorage.setItem("sidebar-menu-state", JSON.stringify(openStates))
-        }
-    }, [openStates])
+        }, 300) // Debounce 300ms untuk menghindari write berulang
+
+        return () => clearTimeout(timer)
+    }, [openStates, isClient])
 
     const toggleOpen = (title: string) => {
-        setOpenStates((prev) => ({
+        setOpenStates(prev => ({
             ...prev,
-            [title]: !prev[title],
+            [title]: !prev[title]
         }))
     }
 
+    // Render untuk SSR
+    if (!isClient) {
+        return (
+            <SidebarGroup>
+                <SidebarGroupLabel>Platform</SidebarGroupLabel>
+                <SidebarMenu>
+                    {items.map((item) => (
+                        <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton>
+                                {item.icon && <item.icon />}
+                                <span>{item.title}</span>
+                                {item.items && item.items.length > 0 && (
+                                    <ChevronRight className="ml-auto" />
+                                )}
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    ))}
+                </SidebarMenu>
+            </SidebarGroup>
+        )
+    }
+
+    // Render untuk client
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -65,7 +115,6 @@ export function NavMain({ items }: { items: NavItem[] }) {
                 {items.map((item) => {
                     const hasSubmenu = item.items && item.items.length > 0
 
-                    // 1. JIKA TIDAK ADA SUBMENU
                     if (!hasSubmenu) {
                         return (
                             <SidebarMenuItem key={item.title}>
@@ -79,13 +128,11 @@ export function NavMain({ items }: { items: NavItem[] }) {
                         )
                     }
 
-                    // 2. JIKA ADA SUBMENU (Render Collapsible)
                     return (
                         <Collapsible
                             key={item.title}
                             asChild
-                            // Gunakan double negation (!!) untuk memastikan nilai boolean, default false
-                            open={!!openStates[item.title]}
+                            open={openStates[item.title] || false}
                             onOpenChange={() => toggleOpen(item.title)}
                             className="group/collapsible"
                         >

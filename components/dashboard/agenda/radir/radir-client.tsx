@@ -321,7 +321,10 @@ export function RadirClient({ data = [] }: RadirClientProps) {
                         <SelectContent>
                             <SelectItem value="all">Semua Status</SelectItem>
                             <SelectItem value="DRAFT">Draft</SelectItem>
+                            <SelectItem value="DAPAT_DILANJUTKAN">Dapat Dilanjutkan</SelectItem>
                             <SelectItem value="DIJADWALKAN">Dijadwalkan</SelectItem>
+                            <SelectItem value="DITUNDA">Ditunda</SelectItem>
+                            <SelectItem value="DIBATALKAN">Dibatalkan</SelectItem>
                             <SelectItem value="SELESAI">Selesai</SelectItem>
                         </SelectContent>
                     </Select>
@@ -405,7 +408,13 @@ export function RadirClient({ data = [] }: RadirClientProps) {
                                         </TableCell>
 
                                         <TableCell className="text-center">
-                                            <Badge className={cn("text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter", agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" : "bg-[#125d72] text-white")}>
+                                            <Badge className={cn(
+                                                "text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter",
+                                                agenda.status === "DRAFT" ? "bg-slate-100 text-slate-500" :
+                                                    agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" : // ✅ Tambah warna merah
+                                                        agenda.status === "DITUNDA" ? "bg-amber-100 text-amber-600" : // ✅ Tambah warna kuning
+                                                            "bg-[#125d72] text-white"
+                                            )}>
                                                 {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                             </Badge>
                                         </TableCell>

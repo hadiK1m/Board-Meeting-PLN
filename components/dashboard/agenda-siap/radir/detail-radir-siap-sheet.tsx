@@ -41,6 +41,7 @@ interface AgendaDetail {
     contactPerson?: string | null
     position?: string | null
     phone?: string | null
+    proposalNote?: string | null
     legalReview?: string | null
     riskReview?: string | null
     complianceReview?: string | null
@@ -62,9 +63,7 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
 
     const handleSecureView = async (path: string) => {
         try {
-            const signedUrl = await getSignedFileUrl(path)
-            if (!signedUrl) return
-            const result = await getSignedFileUrl(path)
+            const result = await getSignedFileUrl(path) // ✅ BARIS 63: Satu pemanggilan saja
             if (!result.success || !result.url) {
                 console.error(result.error)
                 return
@@ -204,14 +203,26 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                         </div>
 
                         {/* SECTION 4: LAMPIRAN */}
+                        {/* SECTION: LAMPIRAN DOKUMEN */}
                         <div className="space-y-4">
                             <h4 className="text-[10px] font-black text-[#14a2ba] uppercase tracking-[0.2em] border-b pb-2">Lampiran Dokumen</h4>
                             <div className="grid gap-2">
+                                {/* ✅ TAMBAHKAN BARIS INI (Sesuai dengan data SQL yang berisi proposal_note) */}
+                                <FileLink label="Nota Proposal / Nota Dinas" path={agenda.proposalNote} onOpen={handleSecureView} />
+
                                 <FileLink label="Kajian Hukum" path={agenda.legalReview} onOpen={handleSecureView} />
                                 <FileLink label="Kajian Risiko" path={agenda.riskReview} onOpen={handleSecureView} />
                                 <FileLink label="Kajian Kepatuhan" path={agenda.complianceReview} onOpen={handleSecureView} />
                                 <FileLink label="Nota Analisa" path={agenda.recommendationNote} onOpen={handleSecureView} />
                                 <FileLink label="Materi Presentasi" path={agenda.presentationMaterial} onOpen={handleSecureView} />
+
+                                {/* Helper jika semua kosong */}
+                                {!(agenda.proposalNote || agenda.legalReview || agenda.riskReview || agenda.complianceReview || agenda.recommendationNote || agenda.presentationMaterial) && (
+                                    <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                                        <FileText className="h-8 w-8 text-slate-300 mb-2" />
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Belum ada lampiran dokumen</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

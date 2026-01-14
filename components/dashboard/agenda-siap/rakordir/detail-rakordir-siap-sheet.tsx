@@ -98,9 +98,10 @@ export function DetailRakordirSiapSheet({ agenda, open, onOpenChange }: DetailRa
                             </Badge>
                             <Badge className={cn(
                                 "font-bold uppercase text-[10px] border-none px-4 py-1 shadow-sm",
+                                // Sinkronisasi Warna
                                 agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" :
                                     agenda.status === "DITUNDA" ? "bg-amber-500 text-white" :
-                                        "bg-[#efe62f] text-[#125d72]"
+                                        "bg-[#efe62f] text-[#125d72]" // Warna Kuning Terang PLN untuk Dijadwalkan/Aktif
                             )}>
                                 {agenda.status?.replace(/_/g, ' ')}
                             </Badge>
@@ -195,12 +196,37 @@ export function DetailRakordirSiapSheet({ agenda, open, onOpenChange }: DetailRa
                             </div>
                         </div>
 
-                        {/* SECTION 4: LAMPIRAN (FileLink Layout) */}
+                        {/* SECTION 4: BERKAS RAKORDIR (Hanya yang relevan untuk Rakordir) */}
                         <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-[#14a2ba] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">Berkas Rakordir</h4>
+                            <h4 className="text-[10px] font-black text-[#14a2ba] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">
+                                Berkas Rakordir
+                            </h4>
                             <div className="grid gap-2">
-                                <FileLink label="Nota Usulan Agenda (ND)" path={agenda.proposalNote} onOpen={handleSecureView} />
-                                <FileLink label="Materi Presentasi" path={agenda.presentationMaterial} onOpen={handleSecureView} />
+                                {/* Cek jika kedua file utama kosong */}
+                                {!(agenda.proposalNote || agenda.presentationMaterial) ? (
+                                    <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                                        <FileText className="h-8 w-8 text-slate-300 mb-2" />
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                                            Belum ada dokumen utama (Nota/Materi) yang diunggah
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Nota Proposal adalah dokumen wajib/utama di Rakordir */}
+                                        <FileLink
+                                            label="Nota Usulan Agenda (ND)"
+                                            path={agenda.proposalNote}
+                                            onOpen={handleSecureView}
+                                        />
+
+                                        {/* Materi Presentasi jika sudah tersedia */}
+                                        <FileLink
+                                            label="Materi Presentasi"
+                                            path={agenda.presentationMaterial}
+                                            onOpen={handleSecureView}
+                                        />
+                                    </>
+                                )}
                             </div>
                         </div>
 

@@ -368,7 +368,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                         </TableCell>
                                         <TableCell className="pl-6 align-top py-5">
                                             {agenda.cancellationReason ? (
-                                                <div className="flex items-start gap-2 max-w-[180px] bg-red-50 p-2 rounded-md border border-red-100">
+                                                <div className="flex items-start gap-2 max-w-45 bg-red-50 p-2 rounded-md border border-red-100">
                                                     <CheckSquare className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
                                                     <p className="text-[10px] text-red-600 italic leading-snug line-clamp-3 overflow-hidden">{agenda.cancellationReason}</p>
                                                 </div>

@@ -29,8 +29,6 @@ export default async function RakordirSiapPage() {
         // ✅ FITUR ALASAN (PENTING!)
         cancellationReason: agenda.cancellationReason ?? null,
         postponedReason: agenda.postponedReason ?? null, // Data penundaan untuk UI Kuning/Amber
-
-        // ✅ FITUR PRIORITAS (Untuk visual Badge di Client)
         priority: agenda.priority ?? "Low",
 
         // Field opsional untuk Detail Sheet Rakordir
