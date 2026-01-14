@@ -72,6 +72,25 @@ export interface AgendaReady {
 }
 
 export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
+    console.log("DATA DI CLIENT (Jadwal Rapat):", {
+        totalData: data.length,
+        scheduledData: data.filter(item => item.status === "DIJADWALKAN").length,
+        rakordirData: data.filter(item =>
+            item.meetingType === "RAKORDIR" ||
+            item.title.toLowerCase().includes("rakordir")
+        ).length,
+        radirData: data.filter(item =>
+            item.meetingType === "RADIR" ||
+            !item.title.toLowerCase().includes("rakordir")
+        ).length,
+        sampleItems: data.slice(0, 3).map(item => ({
+            title: item.title,
+            status: item.status,
+            meetingType: item.meetingType,
+            executionDate: item.executionDate
+        }))
+    });
+
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [meetingTypeFilter, setmeetingTypeFilter] = useState("all")
@@ -83,39 +102,54 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
     const [selectedEdit, setSelectedEdit] = useState<AgendaReady | null>(null)
     const [editOpen, setEditOpen] = useState(false)
 
+    const formatShortTime = (time: string | null | undefined) => {
+        if (!time || time === "Selesai") return time || "-";
+        return time.split(':').slice(0, 2).join(':');
+    };
+
     // Filter untuk tabel utama (yang sudah dijadwalkan)
     const filteredData = useMemo(() => {
         return data.filter(item => {
-            const isScheduled = item.status === "DIJADWALKAN";
-            if (!isScheduled) return false;
+            // ✅ FIX 1: Filter hanya agenda dengan status DIJADWALKAN
+            const isScheduledOrDone =
+                item.status === "DIJADWALKAN" ||
+                item.status === "RAPAT_SELESAI" ||
+                item.status === "SELESAI";
+            if (!isScheduledOrDone) return false;
 
+            // ✅ FIX 2: Search filter
             const matchesSearch =
                 item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (item.initiator || "").toLowerCase().includes(searchTerm.toLowerCase());
+                (item.initiator || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item.director || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-            // ✅ Perbaikan logika deteksi: Cek meetingType dari DB
-            const isRakordir = item.meetingType === "RAKORDIR" || item.title.toLowerCase().includes("rakordir");
+            if (!matchesSearch) return false;
 
-            let matchesType = true;
-            if (meetingTypeFilter === "radir") {
-                matchesType = !isRakordir;
-            } else if (meetingTypeFilter === "rakordir") {
-                matchesType = isRakordir;
-            }
+            // ✅ FIX 3: Meeting type filter (RADIR vs RAKORDIR)
+            const isRakordir = item.meetingType === "RAKORDIR" ||
+                item.title.toLowerCase().includes("rakordir") ||
+                (item.initiator || "").toLowerCase().includes("rakordir");
 
-            return matchesSearch && matchesType;
-        })
-    }, [data, searchTerm, meetingTypeFilter])
+            if (meetingTypeFilter === "all") return true;
+            if (meetingTypeFilter === "radir") return !isRakordir;
+            if (meetingTypeFilter === "rakordir") return isRakordir;
+
+            return true;
+        });
+    }, [data, searchTerm, meetingTypeFilter]);
 
     const availableAgendas = useMemo(() => {
         return data.filter(item => {
-            const normalizedStatus = item.status?.toUpperCase().replace(/\s/g, '_');
-            return (
-                normalizedStatus === "DAPAT_DILANJUTKAN" ||
-                item.status === "Dapat Dilanjutkan"
-            );
+            // ✅ FIX: Normalisasi status dengan benar
+            const normalizedStatus = item.status?.toUpperCase().trim().replace(/\s+/g, '_');
+            return normalizedStatus === "DAPAT_DILANJUTKAN" ||
+                normalizedStatus === "DAPAT_DILANJUTKAN_AGENDA" ||
+                item.status === "Dapat Dilanjutkan";
         });
     }, [data]);
+
+    // ✅ DEBUG: Cek available agendas
+    console.log("AVAILABLE AGENDAS (Dapat Dijadwalkan):", availableAgendas.length);
 
     const handleRollback = async (id: string, title: string) => {
         if (!confirm(`Apakah Anda yakin ingin membatalkan jadwal untuk agenda "${title}"? Agenda akan dikembalikan ke status 'Dapat Dilanjutkan'.`)) {
@@ -165,14 +199,23 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
         }
 
         // ✅ GUNAKAN meetingType (Sesuai dengan Page.tsx dan Drizzle Schema)
-        const hasRadir = selectedAgendas.some(a =>
-            a.meetingType === "RADIR" ||
-            (!a.meetingType && !a.title.toLowerCase().includes("rakordir"))
-        )
-        const hasRakordir = selectedAgendas.some(a =>
-            a.meetingType === "RAKORDIR" ||
-            a.title.toLowerCase().includes("rakordir")
-        )
+        const hasRadir = selectedAgendas.some(a => {
+            if (a.meetingType) {
+                return a.meetingType === "RADIR";
+            }
+            // Fallback: cek dari title atau initiator
+            return !a.title.toLowerCase().includes("rakordir") &&
+                !(a.initiator || "").toLowerCase().includes("rakordir");
+        });
+
+        const hasRakordir = selectedAgendas.some(a => {
+            if (a.meetingType) {
+                return a.meetingType === "RAKORDIR";
+            }
+            // Fallback: cek dari title atau initiator
+            return a.title.toLowerCase().includes("rakordir") ||
+                (a.initiator || "").toLowerCase().includes("rakordir");
+        });
 
         let meetingTitle = ""
         if (hasRadir && hasRakordir) meetingTitle = "Rapat Direksi dan Rapat Koordinasi Direksi"
@@ -315,7 +358,10 @@ _SEKPER PLN_`
                                             </p>
                                             <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
                                                 <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3 text-[#14a2ba]" /> {agenda.executionDate ? format(new Date(agenda.executionDate), "dd MMM yyyy", { locale: id }) : "-"}</span>
-                                                <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-[#14a2ba]" /> {agenda.startTime} - {agenda.endTime}</span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <Clock className="h-3 w-3 text-[#14a2ba]" />
+                                                    {formatShortTime(agenda.startTime)} - {formatShortTime(agenda.endTime)}
+                                                </span>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -323,7 +369,14 @@ _SEKPER PLN_`
                                         <Badge className="bg-blue-100 text-blue-700 text-[10px] font-bold uppercase border-none px-3">{agenda.meetingMethod}</Badge>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Badge className="bg-[#125d72] text-white text-[10px] font-bold px-3 py-0.5 rounded-full uppercase border-none">DIJADWALKAN</Badge>
+                                        <Badge className={cn(
+                                            "text-[10px] font-bold px-3 py-0.5 rounded-full uppercase border-none",
+                                            agenda.status === "RAPAT_SELESAI" || agenda.status === "SELESAI"
+                                                ? "bg-emerald-100 text-emerald-700" // Warna hijau untuk selesai
+                                                : "bg-[#125d72] text-white"         // Warna biru untuk dijadwalkan
+                                        )}>
+                                            {agenda.status?.replace(/_/g, " ")}
+                                        </Badge>
                                     </TableCell>
                                     <TableCell className="text-right pr-6">
                                         <DropdownMenu>
@@ -336,13 +389,18 @@ _SEKPER PLN_`
                                                 <DropdownMenuItem onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="rounded-lg py-2.5 font-bold text-[#125d72] cursor-pointer">
                                                     <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => { setSelectedEdit(agenda); setEditOpen(true); }} className="rounded-lg py-2.5 font-bold text-amber-600 focus:bg-amber-50 focus:text-amber-600 cursor-pointer">
-                                                    <FileEdit className="mr-3 h-4 w-4" /> Edit Jadwal Rapat
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator className="my-2" />
-                                                <DropdownMenuItem onClick={() => handleRollback(agenda.id, agenda.title)} className="rounded-lg py-2.5 font-bold text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer">
-                                                    <Undo2 className="mr-3 h-4 w-4" /> Batalkan Jadwal
-                                                </DropdownMenuItem>
+                                                {/* ✅ LOGIKA BARU: Tombol Batalkan Jadwal hanya muncul jika status DIJADWALKAN */}
+                                                {agenda.status === "DIJADWALKAN" && (
+                                                    <>
+                                                        <DropdownMenuSeparator className="my-2" />
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleRollback(agenda.id, agenda.title)}
+                                                            className="rounded-lg py-2.5 font-bold text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
+                                                        >
+                                                            <Undo2 className="mr-3 h-4 w-4" /> Batalkan Jadwal
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
@@ -369,7 +427,10 @@ _SEKPER PLN_`
                             <h3 className="font-bold text-[#125d72] text-sm uppercase line-clamp-2 h-10 mb-4 tracking-tight leading-snug">{agenda.title}</h3>
                             <div className="space-y-3 border-t pt-4">
                                 <div className="flex items-center gap-2 text-xs font-bold text-slate-600"><Calendar className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.executionDate ? format(new Date(agenda.executionDate), "dd MMM yyyy", { locale: id }) : "-"}</div>
-                                <div className="flex items-center gap-2 text-xs font-bold text-slate-600"><Clock className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.startTime} - {agenda.endTime}</div>
+                                <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                                    <Clock className="h-3.5 w-3.5 text-[#14a2ba]" />
+                                    {formatShortTime(agenda.startTime)} - {formatShortTime(agenda.endTime)}
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 mt-5">
                                 <Button variant="ghost" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="bg-slate-50 text-[#125d72] text-[10px] font-bold uppercase rounded-xl">Detail</Button>
@@ -378,12 +439,17 @@ _SEKPER PLN_`
                                         <Button variant="ghost" className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase rounded-xl">Aksi</Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-48 p-2 rounded-xl border-none shadow-xl">
-                                        <DropdownMenuItem onClick={() => { setSelectedEdit(agenda); setEditOpen(true); }} className="rounded-lg font-bold text-amber-600 focus:bg-amber-50 cursor-pointer text-xs">
-                                            <FileEdit className="mr-2 h-3.5 w-3.5" /> Edit Jadwal
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleRollback(agenda.id, agenda.title)} className="rounded-lg font-bold text-red-600 focus:bg-red-50 cursor-pointer text-xs">
-                                            <Undo2 className="mr-2 h-3.5 w-3.5" /> Batal Jadwal
-                                        </DropdownMenuItem>
+
+
+                                        {/* ✅ LOGIKA BARU: Batasi tombol Batal Jadwal di tampilan Grid */}
+                                        {agenda.status === "DIJADWALKAN" && (
+                                            <DropdownMenuItem
+                                                onClick={() => handleRollback(agenda.id, agenda.title)}
+                                                className="rounded-lg font-bold text-red-600 focus:bg-red-50 cursor-pointer text-xs"
+                                            >
+                                                <Undo2 className="mr-2 h-3.5 w-3.5" /> Batal Jadwal
+                                            </DropdownMenuItem>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>

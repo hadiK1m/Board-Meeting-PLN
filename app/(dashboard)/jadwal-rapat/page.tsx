@@ -1,10 +1,8 @@
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
-import { or, eq, desc as drizzleDesc } from "drizzle-orm";
-// ✅ Import Wrapper biasa, jangan pakai dynamic di sini
+import { eq, isNotNull, desc as drizzleDesc, and, ne } from "drizzle-orm"; // Tambahkan isNotNull
 import { JadwalRapatWrapper } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-wrapper";
 import { type AgendaReady } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-client";
-
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,13 +12,16 @@ export const metadata = {
 };
 
 export default async function JadwalRapatPage() {
+    // Logika baru: Ambil semua data yang statusnya 'DIJADWALKAN' 
+    // ATAU yang kolom executionDate-nya sudah terisi (tidak null)
     const allData = await db.query.agendas.findMany({
-        where: or(
-            eq(agendas.status, "DAPAT_DILANJUTKAN"),
-            eq(agendas.status, "Dapat Dilanjutkan"),
-            eq(agendas.status, "DIJADWALKAN")
+        where: and(
+            eq(agendas.meetingType, "RAKORDIR"), // Atau hapus filter ini jika ingin semua
+            // Ambil semua yang sudah punya tanggal eksekusi, apa pun statusnya (kecuali Draft)
+            isNotNull(agendas.executionDate),
+            ne(agendas.status, "DRAFT")
         ),
-        orderBy: [drizzleDesc(agendas.updatedAt)],
+        orderBy: [drizzleDesc(agendas.executionDate)],
     });
 
     const formattedData: AgendaReady[] = allData.map((agenda) => ({
@@ -41,7 +42,7 @@ export default async function JadwalRapatPage() {
         complianceReview: agenda.complianceReview ?? null,
         recommendationNote: agenda.recommendationNote ?? null,
         presentationMaterial: agenda.presentationMaterial ?? null,
-        executionDate: agenda.executionDate ?? null,
+        executionDate: agenda.executionDate ?? null, // Kolom kunci
         startTime: agenda.startTime ?? null,
         endTime: agenda.endTime ?? "Selesai",
         meetingMethod: agenda.meetingMethod ?? null,
@@ -52,7 +53,6 @@ export default async function JadwalRapatPage() {
     return (
         <main className="p-5 bg-slate-50/50 min-h-screen">
             <div className=" mx-auto">
-                {/* ✅ Kirim data ke Wrapper */}
                 <JadwalRapatWrapper data={formattedData} />
             </div>
         </main>
