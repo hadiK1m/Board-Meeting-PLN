@@ -88,6 +88,11 @@ export async function updateRakordirAction(id: string, formData: FormData) {
             return { success: false, error: "Agenda sudah dikunci." }
         }
 
+        // ✅ PERBAIKAN 1: Logika Update Status
+        const actionType = formData.get("actionType")
+        // Jika tombol 'Perbarui & Lanjutkan' diklik, set status ke DAPAT_DILANJUTKAN
+        const status = actionType === "submit" ? "DAPAT_DILANJUTKAN" : oldData.status
+
         // Ambil path baru dari client (bukan file biner)
         const proposalNotePath = formData.get("proposalNote") as string | null
         const presentationMaterialPath = formData.get("presentationMaterial") as string | null
@@ -171,7 +176,12 @@ export async function updateRakordirAction(id: string, formData: FormData) {
             presentationMaterial: finalPresentationMaterial,
             supportingDocuments: finalSupportingDocuments,
 
-            notRequiredFiles: formData.get("notRequiredFiles") as string || oldData.notRequiredFiles,
+            // ✅ PERBAIKAN 2: Simpan status baru
+            status: status,
+
+            // ✅ PERBAIKAN 3: Pastikan notRequiredFiles selalu terupdate (gunakan nullish coalescing)
+            notRequiredFiles: (formData.get("notRequiredFiles") as string) ?? "[]",
+
             updatedAt: new Date(),
         }).where(eq(agendas.id, id))
 

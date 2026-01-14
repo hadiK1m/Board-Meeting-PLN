@@ -52,6 +52,7 @@ export interface AgendaReady {
     deadline: Date
     initiator: string
     status: string
+    meetingType?: string | null
     director?: string | null
     support?: string | null
     contactPerson?: string | null
@@ -73,7 +74,7 @@ export interface AgendaReady {
 export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
-    const [meetingTypeFilter, setMeetingTypeFilter] = useState("all")
+    const [meetingTypeFilter, setmeetingTypeFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<string[]>([])
 
     // Modal & Sheet States
@@ -92,9 +93,10 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
                 item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (item.initiator || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-            const isRakordir = item.title.toLowerCase().includes("rakordir");
-            let matchesType = true;
+            // ✅ Perbaikan logika deteksi: Cek meetingType dari DB
+            const isRakordir = item.meetingType === "RAKORDIR" || item.title.toLowerCase().includes("rakordir");
 
+            let matchesType = true;
             if (meetingTypeFilter === "radir") {
                 matchesType = !isRakordir;
             } else if (meetingTypeFilter === "rakordir") {
@@ -139,8 +141,15 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
         if (selectedAgendas.length === 0) return
 
         const firstAgenda = selectedAgendas[0]
+
+        // ✅ Fungsi Helper untuk menghilangkan detik (:00)
+        const formatTime = (time: string | null | undefined) => {
+            if (!time || time === "Selesai") return "Selesai";
+            return time.split(':').slice(0, 2).join(':'); // Ambil jam:menit saja
+        };
+
         const dateStr = firstAgenda.executionDate ? format(new Date(firstAgenda.executionDate), "EEEE, dd MMMM yyyy", { locale: id }) : "-"
-        const timeStr = `${firstAgenda.startTime} - ${firstAgenda.endTime}`
+        const timeStr = `${formatTime(firstAgenda.startTime)} - ${formatTime(firstAgenda.endTime)}`
 
         const method = firstAgenda.meetingMethod?.toUpperCase()
         let methodText = "secara tatap muka"
@@ -155,16 +164,29 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
             locationDetail += `🌐  Link: ${firstAgenda.meetingLink || "-"}\n`
         }
 
-        const hasRadir = selectedAgendas.some(a => !a.title.toLowerCase().includes("rakordir"))
-        const hasRakordir = selectedAgendas.some(a => a.title.toLowerCase().includes("rakordir"))
+        // ✅ GUNAKAN meetingType (Sesuai dengan Page.tsx dan Drizzle Schema)
+        const hasRadir = selectedAgendas.some(a =>
+            a.meetingType === "RADIR" ||
+            (!a.meetingType && !a.title.toLowerCase().includes("rakordir"))
+        )
+        const hasRakordir = selectedAgendas.some(a =>
+            a.meetingType === "RAKORDIR" ||
+            a.title.toLowerCase().includes("rakordir")
+        )
 
         let meetingTitle = ""
         if (hasRadir && hasRakordir) meetingTitle = "Rapat Direksi dan Rapat Koordinasi Direksi"
         else if (hasRadir) meetingTitle = "Rapat Direksi"
         else if (hasRakordir) meetingTitle = "Rapat Koordinasi Direksi"
 
-        const radirAgendas = selectedAgendas.filter(a => !a.title.toLowerCase().includes("rakordir"))
-        const rakordirAgendas = selectedAgendas.filter(a => a.title.toLowerCase().includes("rakordir"))
+        const radirAgendas = selectedAgendas.filter(a =>
+            a.meetingType === "RADIR" ||
+            (!a.meetingType && !a.title.toLowerCase().includes("rakordir"))
+        )
+        const rakordirAgendas = selectedAgendas.filter(a =>
+            a.meetingType === "RAKORDIR" ||
+            a.title.toLowerCase().includes("rakordir")
+        )
 
         let agendaText = ""
         let counter = 1
@@ -247,7 +269,7 @@ _SEKPER PLN_`
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Select value={meetingTypeFilter} onValueChange={setMeetingTypeFilter}>
+                <Select value={meetingTypeFilter} onValueChange={setmeetingTypeFilter}>
                     <SelectTrigger className="w-44 h-11 border-slate-200 font-semibold text-[#125d72] focus:ring-[#14a2ba]">
                         <SelectValue placeholder="Jenis Rapat" />
                     </SelectTrigger>
@@ -292,7 +314,7 @@ _SEKPER PLN_`
                                                 {agenda.title}
                                             </p>
                                             <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                                                <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3 text-[#14a2ba]" /> {agenda.executionDate}</span>
+                                                <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3 text-[#14a2ba]" /> {agenda.executionDate ? format(new Date(agenda.executionDate), "dd MMM yyyy", { locale: id }) : "-"}</span>
                                                 <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-[#14a2ba]" /> {agenda.startTime} - {agenda.endTime}</span>
                                             </div>
                                         </div>
@@ -346,7 +368,7 @@ _SEKPER PLN_`
                             </div>
                             <h3 className="font-bold text-[#125d72] text-sm uppercase line-clamp-2 h-10 mb-4 tracking-tight leading-snug">{agenda.title}</h3>
                             <div className="space-y-3 border-t pt-4">
-                                <div className="flex items-center gap-2 text-xs font-bold text-slate-600"><Calendar className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.executionDate}</div>
+                                <div className="flex items-center gap-2 text-xs font-bold text-slate-600"><Calendar className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.executionDate ? format(new Date(agenda.executionDate), "dd MMM yyyy", { locale: id }) : "-"}</div>
                                 <div className="flex items-center gap-2 text-xs font-bold text-slate-600"><Clock className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.startTime} - {agenda.endTime}</div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 mt-5">

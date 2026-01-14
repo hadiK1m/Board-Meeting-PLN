@@ -30,6 +30,7 @@ export default async function JadwalRapatPage() {
         deadline: agenda.deadline ? new Date(agenda.deadline) : new Date(),
         initiator: agenda.initiator ?? "-",
         status: agenda.status ?? "",
+        meetingType: agenda.meetingType ?? "RADIR",
         director: agenda.director ?? null,
         support: agenda.support ?? null,
         contactPerson: agenda.contactPerson ?? null,
