@@ -236,6 +236,10 @@ export async function cancelAgendaAction(data: z.infer<typeof cancelSchema>) {
 // 5. ACTION: RESUME AGENDA
 // ────────────────────────────────────────────────
 
+/**
+ * ACTION: LANJUTKAN AGENDA (RESUME)
+ * Mengembalikan status ke DAPAT_DILANJUTKAN dan membersihkan alasan pembatalan/penundaan
+ */
 export async function resumeAgendaAction(id: string) {
     try {
         // Validasi format UUID sederhana
@@ -248,12 +252,15 @@ export async function resumeAgendaAction(id: string) {
 
         await db.update(agendas).set({
             status: "DAPAT_DILANJUTKAN",
-            cancellationReason: null,
+            cancellationReason: null, // ✅ Bersihkan alasan pembatalan
+            postponedReason: null, // ✅ Bersihkan alasan penundaan
             updatedAt: new Date(),
         }).where(eq(agendas.id, id))
 
-        revalidatePath("/agenda-siap/radir")
-        revalidatePath("/agenda/radir")
+        // Revalidasi halaman terkait agar data langsung update di UI
+        revalidatePath("/agenda-siap/radir");
+        revalidatePath("/agenda/radir");
+        revalidatePath("/agenda/rakordir");
 
         return { success: true }
     } catch (error: unknown) {
@@ -340,5 +347,41 @@ export async function createAgendaAction(formData: FormData) {
         const msg = error instanceof Error ? error.message : "Gagal membuat agenda."
         console.error("[CREATE_AGENDA_ERROR]:", msg)
         return { success: false, error: msg }
+    }
+}
+
+const postponeSchema = z.object({
+    id: z.string().uuid(),
+    reason: z.string().min(5, "Alasan penundaan minimal 5 karakter"),
+});
+
+/**
+ * ACTION: TUNDA AGENDA
+ * Mengubah status menjadi DITUNDA dan menyimpan alasannya ke kolom postponedReason
+ */
+export async function postponeAgendaAction(data: z.infer<typeof postponeSchema>) {
+    try {
+        // Validasi input menggunakan Zod
+        const validated = postponeSchema.parse(data);
+
+        // Cek login & pastikan data ada
+        await assertAgendaExists(validated.id);
+
+        await db.update(agendas).set({
+            status: "DITUNDA",
+            postponedReason: validated.reason, // ✅ Simpan ke kolom khusus
+            updatedAt: new Date(),
+        }).where(eq(agendas.id, validated.id));
+
+        // Revalidasi halaman terkait agar data langsung update di UI
+        revalidatePath("/agenda-siap/radir");
+        revalidatePath("/agenda/radir");
+        revalidatePath("/agenda/rakordir");
+
+        return { success: true };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Gagal menunda agenda.";
+        console.error("[POSTPONE_AGENDA_ERROR]:", msg);
+        return { success: false, error: msg };
     }
 }

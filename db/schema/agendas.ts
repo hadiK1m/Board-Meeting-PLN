@@ -42,6 +42,7 @@ export const agendas = pgTable("agendas", {
 
     /** FIELD PEMBATALAN */
     cancellationReason: text("cancellation_reason"),
+    postponedReason: text("postponed_reason"),
 
     /** FIELD LOGISTIK RAPAT */
     executionDate: date("execution_date"),

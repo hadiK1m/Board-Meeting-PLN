@@ -26,6 +26,8 @@ export default async function RadirSiapPage() {
         status: agenda.status || "DAPAT_DILANJUTKAN",
         contactPerson: agenda.contactPerson || "-",
         cancellationReason: agenda.cancellationReason ?? null,
+        // ✅ TAMBAHKAN BARIS INI: Kirim data alasan penundaan ke Client
+        postponedReason: agenda.postponedReason ?? null,
 
         // Field pendukung untuk Detail Sheet
         director: agenda.director || null,

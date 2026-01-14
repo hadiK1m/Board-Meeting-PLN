@@ -2,6 +2,9 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
+// 1. Import komponen baru - TAMBAHKAN di bagian import
+import { Clock } from "lucide-react"
+import { TundaRakordirSiapDialog } from "./tunda-rakordir-siap-dialog"
 import {
     Search,
     LayoutGrid,
@@ -67,6 +70,7 @@ export interface AgendaReady {
     status: string
     contactPerson: string
     cancellationReason?: string | null
+    postponedReason?: string | null
     director?: string | null
     support?: string | null
     position?: string | null
@@ -86,6 +90,8 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
     const [viewMode, setViewMode] = useState<"table" | "grid">("table")
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [tundaOpen, setTundaOpen] = useState(false)
+    const [selectedForTunda, setSelectedForTunda] = useState<AgendaReady | null>(null)
 
     const [selectedIds, setSelectedIds] = useState<string[]>([])
 
@@ -276,15 +282,18 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                         </TableCell>
                                         <TableCell className="text-center align-top py-5">
                                             <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
-                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" : agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" : "bg-[#125d72] text-white")}>
+                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" :
+                                                    agenda.status === "DITUNDA" ? "bg-amber-100 text-amber-600" : // ✅ TAMBAHKAN KONDISI DITUNDA
+                                                        agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" :
+                                                            "bg-[#125d72] text-white")}>
                                                 {agenda.status.replace(/_/g, ' ')}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="pl-6 align-top py-5">
                                             {agenda.cancellationReason ? (
-                                                <div className="flex items-start gap-2 max-w-xs bg-red-50 p-2 rounded-md border border-red-100">
+                                                <div className="flex items-start gap-2 max-w-45 bg-red-50 p-2 rounded-md border border-red-100">
                                                     <CheckSquare className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
-                                                    <p className="text-[10px] text-red-600 italic leading-snug">{agenda.cancellationReason}</p>
+                                                    <p className="text-[10px] text-red-600 italic leading-snug line-clamp-3 overflow-hidden">{agenda.cancellationReason}</p>
                                                 </div>
                                             ) : <span className="text-slate-300 text-[11px]">-</span>}
                                         </TableCell>
@@ -299,12 +308,28 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                                         <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
-                                                    {agenda.status === "DIBATALKAN" ? (
-                                                        <DropdownMenuItem onClick={() => handleResume(agenda.id, agenda.title)} className="rounded-lg py-2.5 cursor-pointer font-bold text-green-600"><Play className="mr-3 h-4 w-4" /> Lanjutkan Agenda</DropdownMenuItem>
-                                                    ) : (
-                                                        <DropdownMenuItem onClick={() => { setSelectedForCancel(agenda); setCancelOpen(true); }} className="rounded-lg py-2.5 cursor-pointer font-bold text-red-600 focus:bg-red-50">
-                                                            <Trash2 className="mr-3 h-4 w-4" /> Batalkan Agenda
+
+                                                    {/* ✅ UPDATE LOGIKA INI: */}
+                                                    {agenda.status === "DIBATALKAN" || agenda.status === "DITUNDA" ? ( // ✅ TAMBAHKAN kondisi DITUNDA
+                                                        <DropdownMenuItem onClick={() => handleResume(agenda.id, agenda.title)} className="rounded-lg py-2.5 cursor-pointer font-bold text-green-600">
+                                                            <Play className="mr-3 h-4 w-4" /> Lanjutkan Agenda
                                                         </DropdownMenuItem>
+                                                    ) : (
+                                                        <>
+                                                            {/* ✅ TAMBAHKAN TOMBOL TUNDA: */}
+                                                            <DropdownMenuItem
+                                                                onClick={() => { setSelectedForTunda(agenda); setTundaOpen(true); }}
+                                                                className="rounded-lg py-2.5 cursor-pointer font-bold text-amber-600"
+                                                            >
+                                                                <Clock className="mr-3 h-4 w-4" /> Tunda Agenda
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => { setSelectedForCancel(agenda); setCancelOpen(true); }}
+                                                                className="rounded-lg py-2.5 cursor-pointer font-bold text-red-600 focus:bg-red-50"
+                                                            >
+                                                                <Trash2 className="mr-3 h-4 w-4" /> Batalkan Agenda
+                                                            </DropdownMenuItem>
+                                                        </>
                                                     )}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -324,7 +349,11 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                         <div key={agenda.id} className={cn("bg-white border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border-slate-100 group relative", selectedIds.includes(agenda.id) && "border-[#14a2ba] ring-1 ring-[#14a2ba]/30")}>
                             <div className="absolute top-4 left-4 z-10"><Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} /></div>
                             <div className="flex items-center justify-between mb-4 pl-6">
-                                <Badge className={cn("text-[10px] font-bold px-3 uppercase", agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" : agenda.status === "DIJADWALKAN" ? "bg-blue-500 text-white" : "bg-[#125d72] text-white")}>
+                                <Badge className={cn("text-[10px] font-bold px-3 uppercase",
+                                    agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" :
+                                        agenda.status === "DITUNDA" ? "bg-amber-500 text-white" : // ✅ TAMBAHKAN KONDISI DITUNDA
+                                            agenda.status === "DIJADWALKAN" ? "bg-blue-500 text-white" :
+                                                "bg-[#125d72] text-white")}>
                                     {agenda.status.replace(/_/g, ' ')}
                                 </Badge>
                                 <Button variant="ghost" size="sm" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="h-8 w-8 p-0 rounded-full hover:bg-slate-100"><Eye className="h-4 w-4 text-[#14a2ba]" /></Button>
@@ -342,6 +371,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
             {/* MODALS */}
             <DetailRakordirSiapSheet agenda={selectedDetail} open={detailOpen} onOpenChange={setDetailOpen} />
             <BatalRakordirSiapDialog agenda={selectedForCancel} open={cancelOpen} onOpenChange={setCancelOpen} variant="dropdown" />
+            <TundaRakordirSiapDialog agenda={selectedForTunda} open={tundaOpen} onOpenChange={setTundaOpen} />
         </div>
     )
 }

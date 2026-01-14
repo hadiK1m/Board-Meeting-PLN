@@ -21,7 +21,8 @@ import {
     LucideIcon,
     Info,
     X,
-    ShieldCheck // Menambahkan icon untuk Urgensi/Prioritas
+    ShieldCheck, // Menambahkan icon untuk Urgensi/Prioritas
+    Clock
 } from "lucide-react"
 import { getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { format } from "date-fns"
@@ -47,6 +48,7 @@ interface AgendaDetail {
     presentationMaterial?: string | null
     status?: string | null
     cancellationReason?: string | null
+    postponedReason?: string | null
 }
 
 interface DetailAgendaSheetProps {
@@ -114,14 +116,26 @@ export function DetailAgendaSheet({ agenda, open, onOpenChange }: DetailAgendaSh
                     {/* ✅ Fix Scroll 3: Padding bottom lebih besar (pb-40) agar konten bawah tidak tertutup di layar kecil */}
                     <div className="p-6 md:p-8 space-y-6 md:space-y-8 pb-40">
 
-                        {/* ALERT: ALASAN PEMBATALAN */}
+                        {/* --- KODE LAMA: ALERT ALASAN PEMBATALAN (DI PERTAHANKAN) --- */}
                         {agenda.status === "DIBATALKAN" && (
-                            <div className="p-5 bg-red-50 border border-red-100 rounded-2xl space-y-2 shadow-sm animate-in fade-in slide-in-from-top-2">
+                            <div className="p-5 bg-red-50 border border-red-100 rounded-2xl space-y-2 shadow-sm animate-in fade-in slide-in-from-top-2 mb-4">
                                 <div className="flex items-center gap-2 text-red-600 font-black text-[10px] uppercase tracking-[0.2em]">
                                     <AlertCircle className="h-4 w-4" /> Alasan Pembatalan
                                 </div>
                                 <p className="text-sm text-red-700 italic font-medium leading-relaxed">
                                     &quot;{agenda.cancellationReason || "Tidak ada alasan spesifik yang dicantumkan."}&quot;
+                                </p>
+                            </div>
+                        )}
+
+                        {/* ✅ --- KODE BARU: ALERT ALASAN PENUNDAAN (TAMBAHKAN DISINI) --- ✅ */}
+                        {agenda.status === "DITUNDA" && (
+                            <div className="p-5 bg-amber-50 border border-amber-100 rounded-2xl space-y-2 shadow-sm animate-in fade-in slide-in-from-top-2 mb-4">
+                                <div className="flex items-center gap-2 text-amber-600 font-black text-[10px] uppercase tracking-[0.2em]">
+                                    <Clock className="h-4 w-4" /> Alasan Penundaan
+                                </div>
+                                <p className="text-sm text-amber-700 italic font-medium leading-relaxed">
+                                    &quot;{agenda.postponedReason || "Tidak ada alasan penundaan yang dicantumkan."}&quot;
                                 </p>
                             </div>
                         )}

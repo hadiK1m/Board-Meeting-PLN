@@ -66,6 +66,7 @@ import { BulkScheduleRadirDialog } from "./bulk-schedule-radir-dialog"
 
 // Server Actions
 import { resumeAgendaAction, deleteBulkAgendasAction } from "@/server/actions/agenda-actions"
+import { PostponeAgendaDialog } from "./tunda-radir-siap-dialog"
 
 export interface AgendaReady {
     id: string
@@ -355,16 +356,21 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center align-top py-5">
-                                            <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
-                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" : agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" : "bg-[#125d72] text-white")}>
+                                            <Badge className={cn(
+                                                "text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
+                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" :
+                                                    agenda.status === "DITUNDA" ? "bg-amber-100 text-amber-600" : // ✅ Tambahkan ini
+                                                        agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" :
+                                                            "bg-[#125d72] text-white"
+                                            )}>
                                                 {agenda.status.replace(/_/g, ' ')}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="pl-6 align-top py-5">
                                             {agenda.cancellationReason ? (
-                                                <div className="flex items-start gap-2 max-w-xs bg-red-50 p-2 rounded-md border border-red-100">
+                                                <div className="flex items-start gap-2 max-w-[180px] bg-red-50 p-2 rounded-md border border-red-100">
                                                     <CheckSquare className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
-                                                    <p className="text-[10px] text-red-600 italic leading-snug">{agenda.cancellationReason}</p>
+                                                    <p className="text-[10px] text-red-600 italic leading-snug line-clamp-3 overflow-hidden">{agenda.cancellationReason}</p>
                                                 </div>
                                             ) : <span className="text-slate-300 text-[11px]">-</span>}
                                         </TableCell>
@@ -375,20 +381,34 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                                         <MoreHorizontal className="h-4 w-4 text-slate-500" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-52 p-2 rounded-xl shadow-2xl border-none">
-                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Pilih Aksi</DropdownMenuLabel>
+                                                <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl shadow-2xl border-none">
+                                                    <DropdownMenuLabel className="text-[10px] uppercase text-slate-400 px-2 py-1.5">Opsi Agenda</DropdownMenuLabel>
                                                     <DropdownMenuItem onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="rounded-lg py-2.5 cursor-pointer font-bold text-[#125d72]">
                                                         <Eye className="mr-3 h-4 w-4 text-[#14a2ba]" /> Lihat Detail
                                                     </DropdownMenuItem>
+
                                                     <DropdownMenuSeparator />
-                                                    {agenda.status === "DIBATALKAN" ? (
-                                                        <DropdownMenuItem onClick={() => handleResume(agenda.id, agenda.title)} className="rounded-lg py-2.5 cursor-pointer font-bold text-green-600">
+
+                                                    {/* Logika Kondisional Tombol */}
+                                                    {agenda.status === "DIBATALKAN" || agenda.status === "DITUNDA" ? (
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleResume(agenda.id, agenda.title)}
+                                                            className="rounded-lg py-2.5 cursor-pointer font-bold text-emerald-600 focus:bg-emerald-50 focus:text-emerald-600"
+                                                        >
                                                             <Play className="mr-3 h-4 w-4" /> Lanjutkan Agenda
                                                         </DropdownMenuItem>
                                                     ) : (
-                                                        <div className="p-1">
-                                                            <CancelAgendaDialog agendaId={agenda.id} agendaTitle={agenda.title} variant="dropdown" />
-                                                        </div>
+                                                        <>
+                                                            {/* Opsi Tunda Agenda (Baru) */}
+                                                            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()} className="p-0">
+                                                                <PostponeAgendaDialog agendaId={agenda.id} agendaTitle={agenda.title} />
+                                                            </DropdownMenuItem>
+
+                                                            {/* Opsi Batalkan Agenda (Lama - Menggunakan variant dropdown) */}
+                                                            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()} className="p-0">
+                                                                <CancelAgendaDialog agendaId={agenda.id} agendaTitle={agenda.title} variant="dropdown" />
+                                                            </DropdownMenuItem>
+                                                        </>
                                                     )}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -412,8 +432,13 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                 <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
                             </div>
                             <div className="flex items-center justify-between mb-4 pl-6">
-                                <Badge className={cn("text-[10px] font-bold px-3 uppercase",
-                                    agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" : agenda.status === "DIJADWALKAN" ? "bg-blue-500 text-white" : "bg-[#125d72] text-white")}>
+                                <Badge className={cn(
+                                    "text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
+                                    agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" :
+                                        agenda.status === "DITUNDA" ? "bg-amber-100 text-amber-600" : // ✅ Tambahkan ini
+                                            agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" :
+                                                "bg-[#125d72] text-white"
+                                )}>
                                     {agenda.status.replace(/_/g, ' ')}
                                 </Badge>
                                 <Button variant="ghost" size="sm" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="h-8 w-8 p-0 rounded-full hover:bg-slate-100">

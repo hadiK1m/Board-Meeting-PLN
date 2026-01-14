@@ -1,37 +1,42 @@
 "use client"
 
-import * as React from "react"
+import React from "react"
 import {
     Sheet,
     SheetContent,
-    SheetDescription,
     SheetHeader,
     SheetTitle,
+    SheetClose,
 } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import {
-    Building2,
-    Info,
+    Calendar,
+    Briefcase,
     FileText,
-    Presentation,
+    ExternalLink,
+    AlertCircle,
     User,
     Phone,
-    Briefcase,
-    Calendar,
-    AlertCircle
+    LucideIcon,
+    Info,
+    X,
+    ShieldCheck,
+    Clock,
+    Building2
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { format } from "date-fns"
-import { id as localeID } from "date-fns/locale"
+import { id } from "date-fns/locale"
+import { cn } from "@/lib/utils"
 
-// ✅ Tipe Data yang ketat sesuai dengan Interface Rakordir
+// ✅ Tipe Data Rakordir yang disesuaikan
 interface AgendaDetail {
     id: string
     title: string
     urgency: string
-    deadline: Date
+    priority?: string | null
+    deadline: string | Date
     status: string
     initiator: string
     contactPerson: string
@@ -42,6 +47,7 @@ interface AgendaDetail {
     proposalNote?: string | null
     presentationMaterial?: string | null
     cancellationReason?: string | null
+    postponedReason?: string | null
 }
 
 interface DetailRakordirSiapSheetProps {
@@ -53,143 +59,203 @@ interface DetailRakordirSiapSheetProps {
 export function DetailRakordirSiapSheet({ agenda, open, onOpenChange }: DetailRakordirSiapSheetProps) {
     if (!agenda) return null
 
+    // ✅ Fungsi Secure View Identik dengan Radir
+    const handleSecureView = async (path: string) => {
+        try {
+            const result = await getSignedFileUrl(path)
+            if (!result.success || !result.url) {
+                console.error(result.error)
+                return
+            }
+            const response = await fetch(result.url)
+            if (!response.ok) return
+            const blob = await response.blob()
+            const localBlobUrl = URL.createObjectURL(blob)
+            window.open(localBlobUrl, '_blank')
+            setTimeout(() => URL.revokeObjectURL(localBlobUrl), 60_000)
+        } catch (err) {
+            console.error('Error secure view', err)
+        }
+    }
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="sm:max-w-125 p-0 border-none shadow-2xl">
-                <SheetHeader className="p-6 bg-[#125d72] text-white">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Badge className="bg-[#14a2ba] hover:bg-[#14a2ba] text-white border-none text-[10px] font-bold uppercase">
-                            RAKORDIR
-                        </Badge>
-                        <Badge variant="outline" className="text-white border-white/30 text-[10px] uppercase">
-                            {agenda.status.replace(/_/g, ' ')}
-                        </Badge>
+            <SheetContent
+                side="right"
+                className="w-full sm:max-w-150 p-0 flex flex-col h-dvh border-none shadow-2xl overflow-hidden bg-white"
+            >
+                {/* TOMBOL CLOSE OVERLAY */}
+                <SheetClose className="absolute right-6 top-6 z-50 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 focus:outline-none active:scale-95">
+                    <X className="h-5 w-5" />
+                </SheetClose>
+
+                {/* HEADER: Solid Dark Teal (Identik Radir) */}
+                <SheetHeader className="p-6 md:p-8 bg-[#125d72] text-white shrink-0 z-10 shadow-md relative">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex gap-2">
+                            <Badge className="bg-[#14a2ba] text-white border-none px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                                RAKORDIR
+                            </Badge>
+                            <Badge className={cn(
+                                "font-bold uppercase text-[10px] border-none px-4 py-1 shadow-sm",
+                                agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" :
+                                    agenda.status === "DITUNDA" ? "bg-amber-500 text-white" :
+                                        "bg-[#efe62f] text-[#125d72]"
+                            )}>
+                                {agenda.status?.replace(/_/g, ' ')}
+                            </Badge>
+                        </div>
                     </div>
-                    <SheetTitle className="text-white font-black text-xl leading-tight uppercase tracking-tight">
-                        Detail Agenda Rakordir
+                    <SheetTitle className="text-lg md:text-2xl font-black text-white leading-tight uppercase tracking-tight pr-10">
+                        {agenda.title}
                     </SheetTitle>
-                    <SheetDescription className="text-white/70 text-xs italic font-medium">
-                        ID Agenda: {agenda.id}
-                    </SheetDescription>
+                    <p className="text-[#e7f6f9] text-[11px] md:text-xs italic opacity-80 mt-1">
+                        Informasi lengkap agenda RAKORDIR yang telah divalidasi
+                    </p>
                 </SheetHeader>
 
-                <ScrollArea className="h-[calc(100vh-140px)] p-6">
-                    <div className="space-y-8">
-                        {/* Judul & Urgency */}
-                        <div className="space-y-3">
-                            <h3 className="font-bold text-[#125d72] text-sm uppercase leading-relaxed">
-                                {agenda.title}
-                            </h3>
-                            <div className="flex flex-wrap gap-4 pt-2">
-                                <div className="flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                                    <span className="text-xs font-bold text-slate-600 uppercase">Urgensi: {agenda.urgency}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Calendar className="h-4 w-4 text-[#14a2ba]" />
-                                    <span className="text-xs font-bold text-slate-600 uppercase">
-                                        Deadline: {format(new Date(agenda.deadline), "dd MMMM yyyy", { locale: localeID })}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                <ScrollArea className="flex-1 min-h-0 bg-slate-50 border-t">
+                    <div className="p-6 md:p-8 space-y-6 md:space-y-8 pb-40">
 
-                        <Separator className="bg-slate-100" />
-
-                        {/* Status Batal jika ada */}
-                        {agenda.status === "DIBATALKAN" && agenda.cancellationReason && (
-                            <div className="p-4 bg-red-50 border border-red-100 rounded-xl space-y-2">
-                                <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase tracking-wider">
-                                    <Info className="h-4 w-4" /> Alasan Pembatalan
+                        {/* --- ALERT: ALASAN PEMBATALAN --- */}
+                        {agenda.status === "DIBATALKAN" && (
+                            <div className="p-5 bg-red-50 border border-red-100 rounded-2xl space-y-2 shadow-sm animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2 text-red-600 font-black text-[10px] uppercase tracking-[0.2em]">
+                                    <AlertCircle className="h-4 w-4" /> Alasan Pembatalan
                                 </div>
-                                <p className="text-xs text-red-700 italic leading-snug">
-                                    &quot;{agenda.cancellationReason}&quot;
+                                <p className="text-sm text-red-700 italic font-medium leading-relaxed">
+                                    &quot;{agenda.cancellationReason || "Tidak ada alasan spesifik yang dicantumkan."}&quot;
                                 </p>
                             </div>
                         )}
 
-                        {/* Dokumen Utama Rakordir */}
+                        {/* --- ALERT: ALASAN PENUNDAAN --- */}
+                        {agenda.status === "DITUNDA" && (
+                            <div className="p-5 bg-amber-50 border border-amber-100 rounded-2xl space-y-2 shadow-sm animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2 text-amber-600 font-black text-[10px] uppercase tracking-[0.2em]">
+                                    <Clock className="h-4 w-4" /> Alasan Penundaan
+                                </div>
+                                <p className="text-sm text-amber-700 italic font-medium leading-relaxed">
+                                    &quot;{agenda.postponedReason || "Tidak ada alasan penundaan yang dicantumkan."}&quot;
+                                </p>
+                            </div>
+                        )}
+
+                        {/* SECTION 1: INFO UTAMA (InfoCard Layout) */}
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div className="col-span-1 md:col-span-2">
+                                <InfoCard
+                                    icon={Briefcase}
+                                    label="Urgensi Usulan"
+                                    content={
+                                        <Badge variant="outline" className="border-[#14a2ba] text-[#14a2ba] font-bold uppercase text-[10px] whitespace-normal text-left h-auto py-1.5 leading-tight">
+                                            {agenda.urgency}
+                                        </Badge>
+                                    }
+                                />
+                            </div>
+                            <InfoCard
+                                icon={Calendar}
+                                label="Deadline Usulan"
+                                content={<p className="text-xs md:text-sm font-black text-[#125d72]">{format(new Date(agenda.deadline), "dd MMMM yyyy", { locale: id })}</p>}
+                            />
+                            <InfoCard
+                                icon={ShieldCheck}
+                                label="Prioritas"
+                                content={
+                                    <div className={cn(
+                                        "text-[10px] font-black italic px-3 py-1 rounded-md border w-fit uppercase tracking-wider",
+                                        agenda.priority === 'High' ? 'text-red-600 bg-red-50 border-red-200' :
+                                            agenda.priority === 'Medium' ? 'text-orange-600 bg-orange-50 border-orange-200' :
+                                                'text-green-600 bg-green-50 border-green-200'
+                                    )}>
+                                        {agenda.priority || 'Low'}
+                                    </div>
+                                }
+                            />
+                        </div>
+
+                        {/* SECTION 2: PEMRAKARSA (DetailItem Layout) */}
                         <div className="space-y-4">
-                            <div className="flex items-center gap-2 text-[#125d72] font-bold text-xs uppercase tracking-wider">
-                                <FileText className="h-4 w-4" /> Dokumen Utama
-                            </div>
-                            <div className="grid gap-3">
-                                <div className={cn(
-                                    "flex items-center justify-between p-3 rounded-xl border transition-colors",
-                                    agenda.proposalNote ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100 opacity-60"
-                                )}>
-                                    <div className="flex items-center gap-3">
-                                        <FileText className={cn("h-5 w-5", agenda.proposalNote ? "text-emerald-600" : "text-slate-400")} />
-                                        <span className="text-xs font-bold text-slate-700">Nota Proposal</span>
-                                    </div>
-                                    <Badge className={cn("text-[9px] uppercase", agenda.proposalNote ? "bg-emerald-600" : "bg-slate-400")}>
-                                        {agenda.proposalNote ? "Tersedia" : "Kosong"}
-                                    </Badge>
-                                </div>
-
-                                <div className={cn(
-                                    "flex items-center justify-between p-3 rounded-xl border transition-colors",
-                                    agenda.presentationMaterial ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-100 opacity-60"
-                                )}>
-                                    <div className="flex items-center gap-3">
-                                        <Presentation className={cn("h-5 w-5", agenda.presentationMaterial ? "text-blue-600" : "text-slate-400")} />
-                                        <span className="text-xs font-bold text-slate-700">Materi Presentasi</span>
-                                    </div>
-                                    <Badge className={cn("text-[9px] uppercase", agenda.presentationMaterial ? "bg-blue-600" : "bg-slate-400")}>
-                                        {agenda.presentationMaterial ? "Tersedia" : "Kosong"}
-                                    </Badge>
-                                </div>
+                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">Struktur Pemrakarsa</h4>
+                            <div className="grid gap-4 p-5 md:p-6 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                                <DetailItem label="Direktur Pemrakarsa" value={agenda.director} icon={User} />
+                                <DetailItem label="Divisi Pemrakarsa" value={agenda.initiator} icon={Building2} />
+                                <DetailItem label="Divisi Support" value={agenda.support} icon={Briefcase} />
                             </div>
                         </div>
 
-                        {/* Narahubung / PIC */}
+                        {/* SECTION 3: NARAHUBUNG (Dashed Layout) */}
                         <div className="space-y-4">
-                            <div className="flex items-center gap-2 text-[#125d72] font-bold text-xs uppercase tracking-wider">
-                                <User className="h-4 w-4" /> Narahubung (PIC)
-                            </div>
-                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-full bg-white border flex items-center justify-center text-[#14a2ba] font-bold">
-                                        {agenda.contactPerson.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-slate-700 uppercase">{agenda.contactPerson}</p>
-                                        <p className="text-[10px] text-slate-500 flex items-center gap-1 uppercase">
-                                            <Briefcase className="h-3 w-3" /> {agenda.position || "N/A"}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="pt-2 flex items-center gap-4">
-                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                                        <Phone className="h-3.5 w-3.5 text-[#14a2ba]" /> {agenda.phone || "-"}
-                                    </div>
-                                </div>
+                            <h4 className="text-[10px] font-black text-[#125d72] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">Narahubung (PIC)</h4>
+                            <div className="grid gap-4 p-5 md:p-6 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+                                <DetailItem label="Nama Lengkap" value={agenda.contactPerson} icon={User} />
+                                <DetailItem label="Jabatan" value={agenda.position} icon={Info} />
+                                <DetailItem label="Kontak / No. HP" value={agenda.phone} icon={Phone} />
                             </div>
                         </div>
 
-                        {/* Struktur Pemrakarsa */}
-                        <div className="space-y-4 pb-10">
-                            <div className="flex items-center gap-2 text-[#125d72] font-bold text-xs uppercase tracking-wider">
-                                <Building2 className="h-4 w-4" /> Struktur Pemrakarsa
-                            </div>
-                            <div className="grid gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Direktur Pemrakarsa</p>
-                                    <p className="text-sm font-semibold text-slate-700 uppercase">{agenda.director || "-"}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Divisi Pemrakarsa</p>
-                                    <p className="text-sm font-semibold text-slate-700 uppercase">{agenda.initiator || "-"}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Divisi Support</p>
-                                    <p className="text-sm font-semibold text-slate-700 uppercase">{agenda.support || "-"}</p>
-                                </div>
+                        {/* SECTION 4: LAMPIRAN (FileLink Layout) */}
+                        <div className="space-y-4">
+                            <h4 className="text-[10px] font-black text-[#14a2ba] uppercase tracking-[0.2em] border-l-4 border-[#14a2ba] pl-3">Berkas Rakordir</h4>
+                            <div className="grid gap-2">
+                                <FileLink label="Nota Usulan Agenda (ND)" path={agenda.proposalNote} onOpen={handleSecureView} />
+                                <FileLink label="Materi Presentasi" path={agenda.presentationMaterial} onOpen={handleSecureView} />
                             </div>
                         </div>
+
+                        <div className="h-20 w-full" />
                     </div>
                 </ScrollArea>
             </SheetContent>
         </Sheet>
+    )
+}
+
+// ────────────────────────────────────────────────
+// REUSABLE SUB-COMPONENTS (IDENTIK DENGAN RADIR)
+// ────────────────────────────────────────────────
+
+function InfoCard({ label, icon: Icon, content }: { label: string, icon?: LucideIcon, content: React.ReactNode }) {
+    return (
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-sm flex flex-col justify-center h-full min-h-20">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
+                {Icon && <Icon className="h-3 w-3 text-[#14a2ba]" />} {label}
+            </p>
+            {content}
+        </div>
+    )
+}
+
+function DetailItem({ label, value, icon: Icon }: { label: string, value: string | null | undefined, icon: LucideIcon }) {
+    return (
+        <div className="flex items-start gap-4 group">
+            <div className="mt-1 text-[#14a2ba] opacity-70 shrink-0 group-hover:opacity-100 transition-opacity">
+                <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{label}</p>
+                <p className="text-xs md:text-sm font-semibold text-[#125d72] leading-tight wrap-break-word">
+                    {value && value !== "" ? value : "-"}
+                </p>
+            </div>
+        </div>
+    )
+}
+
+function FileLink({ label, path, onOpen }: { label: string, path: string | null | undefined, onOpen: (path: string) => Promise<void> }) {
+    if (!path) return null
+    return (
+        <button
+            type="button"
+            onClick={() => onOpen(path)}
+            className="w-full flex items-center justify-between p-4 rounded-xl border bg-white hover:bg-[#e7f6f9] hover:border-[#14a2ba] transition-all group shadow-sm active:scale-[0.98]"
+        >
+            <div className="flex items-center gap-3 truncate">
+                <FileText className="h-4 w-4 text-slate-400 group-hover:text-[#14a2ba] shrink-0" />
+                <span className="text-xs font-bold text-[#125d72] truncate uppercase tracking-tight">{label}</span>
+            </div>
+            <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-[#14a2ba] shrink-0" />
+        </button>
     )
 }
