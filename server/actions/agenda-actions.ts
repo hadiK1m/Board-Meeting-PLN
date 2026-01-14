@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
@@ -51,44 +52,50 @@ async function assertAgendaExists(agendaIds: string | string[]) {
 // 2. ACTION: GET SIGNED URL (VERSI TERBARU & AMAN)
 // ────────────────────────────────────────────────
 
-/**
- * Menghasilkan signed URL sementara untuk mengakses file private di Supabase Storage.
- * @param path Path file di bucket (contoh: "radir/uuid/filename.pdf")
- * @returns Object dengan signed URL atau error
- */
-export async function getSignedFileUrl(path: string) {
+export async function getSignedFileUrl(path: string | null | undefined) {
     try {
-        // 1. Pastikan user sudah login (wajib untuk akses file private)
+        // 1. Validasi awal: Jika path kosong, langsung kembalikan error yang jelas
+        if (!path) {
+            return { success: false, error: "Berkas tidak ditemukan atau belum diunggah." };
+        }
+
+        // 2. Pastikan user sudah login
         const user = await assertAuthenticated();
 
-        // 2. Validasi path sederhana (opsional tapi mencegah abuse)
-        if (!path || typeof path !== "string" ||
-            (!path.startsWith("radir/") && !path.startsWith("rakordir/"))) {
-            throw new Error("Path file tidak valid atau tidak diizinkan.");
+        // 3. Bersihkan path (menghilangkan '/' di awal jika ada)
+        const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+
+        // 4. Validasi Folder yang diizinkan
+        // Jika path Anda menggunakan folder "notulensi/...", tambahkan di sini
+        const isAllowed =
+            cleanPath.startsWith("radir/") ||
+            cleanPath.startsWith("rakordir/") ||
+            cleanPath.includes("notulensi/");
+
+        if (!isAllowed) {
+            console.error("[SECURITY_WARNING] Percobaan akses path tidak sah:", cleanPath);
+            throw new Error("Akses ditolak: Folder file tidak diizinkan.");
         }
 
         const supabase = await createClient();
 
-        // 3. Buat signed URL dengan expiry 1 jam (3600 detik)
-        //    Bisa diubah ke 7200 (2 jam) jika dokumen panjang
+        // 5. Buat signed URL
+        // PENTING: Pastikan nama bucket "agenda-attachments" sama persis dengan di Supabase Dashboard
         const { data, error } = await supabase.storage
             .from("agenda-attachments")
-            .createSignedUrl(path, 3600, {
-                // Opsi tambahan untuk keamanan (opsional)
-                download: false, // default: false → buka di browser, bukan force download
-            });
+            .createSignedUrl(cleanPath, 3600); // Expiry 1 jam
 
         if (error) {
-            console.error("[SIGNED_URL_GENERATION_ERROR]", {
-                path,
-                userId: user.id,
-                errorMessage: error.message,
+            console.error("[SUPABASE_STORAGE_ERROR]", {
+                message: error.message,
+                path: cleanPath,
+                userId: user.id
             });
-            throw error;
+            throw new Error(`Gagal akses storage: ${error.message}`);
         }
 
         if (!data?.signedUrl) {
-            throw new Error("Gagal menghasilkan signed URL.");
+            throw new Error("Gagal membuat link akses berkas.");
         }
 
         return {
@@ -97,8 +104,7 @@ export async function getSignedFileUrl(path: string) {
         };
 
     } catch (error: unknown) {
-        const errorMessage =
-            error instanceof Error ? error.message : "Gagal menghasilkan link akses file.";
+        const errorMessage = error instanceof Error ? error.message : "Gagal menghasilkan link akses file.";
 
         console.error("[GET_SIGNED_URL_ERROR]", {
             path,
@@ -111,6 +117,8 @@ export async function getSignedFileUrl(path: string) {
         };
     }
 }
+
+
 // ────────────────────────────────────────────────
 // 3. ACTION: BULK DELETE AGENDA
 // ────────────────────────────────────────────────
@@ -383,5 +391,102 @@ export async function postponeAgendaAction(data: z.infer<typeof postponeSchema>)
         const msg = error instanceof Error ? error.message : "Gagal menunda agenda.";
         console.error("[POSTPONE_AGENDA_ERROR]:", msg);
         return { success: false, error: msg };
+    }
+}
+
+
+export async function uploadAgendaFileAction(formData: FormData) {
+    try {
+        const file = formData.get("file") as File;
+        const agendaId = formData.get("agendaId") as string;
+        const fileType = formData.get("fileType") as string;
+
+        if (!file || !agendaId) return { success: false, error: "Data tidak lengkap" };
+
+        const supabase = await createClient(); // Pastikan utility createClient sudah benar
+
+        // 1. BUAT PATH FILE
+        const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+        const filePath = `rakordir/notulensi/${agendaId}/${fileName}`;
+
+        // 2. UNGGAH KE SUPABASE STORAGE (Penting!)
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from("agenda-attachments") // Pastikan nama bucket ini sama di Supabase dashboard
+            .upload(filePath, file);
+
+        if (uploadError) {
+            console.error("Storage Upload Error:", uploadError);
+            return { success: false, error: `Gagal upload ke storage: ${uploadError.message}` };
+        }
+
+        // 3. UPDATE DATABASE (Hanya jika upload sukses)
+        await db.update(agendas)
+            .set({
+                risalahTtd: filePath,
+                status: "RAPAT_SELESAI",
+                updatedAt: new Date()
+            })
+            .where(eq(agendas.id, agendaId));
+
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+        return { success: true, path: filePath };
+
+    } catch (error) {
+        console.error("Server Action Error:", error);
+        return { success: false, error: "Terjadi kesalahan internal" };
+    }
+}
+
+
+// server/actions/agenda-actions.ts
+
+export async function deleteFinalMinutesAction(agendaId: string) {
+    try {
+        // 1. Ambil data agenda terlebih dahulu untuk mendapatkan PATH file-nya
+        const agenda = await db.query.agendas.findFirst({
+            where: eq(agendas.id, agendaId),
+            columns: {
+                risalahTtd: true,
+            },
+        });
+
+        const filePath = agenda?.risalahTtd;
+
+        // 2. Jika ada path file, hapus file fisik di Supabase Bucket
+        if (filePath) {
+            const supabase = await createClient();
+
+            // Bersihkan path jika ada '/' di awal
+            const cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+
+            const { error: storageError } = await supabase.storage
+                .from("agenda-attachments") // Pastikan nama bucket sesuai
+                .remove([cleanPath]); // Remove menerima array of paths
+
+            if (storageError) {
+                console.error("[STORAGE_DELETE_ERROR]", storageError);
+                // Kita lanjutkan tetap hapus di DB atau throw error tergantung kebijakan Anda
+                // Biasanya kita lanjut agar DB tetap bersih jika file fisik sudah "hilang" duluan
+            } else {
+                console.log("[STORAGE_DELETE_SUCCESS] File terhapus:", cleanPath);
+            }
+        }
+
+        // 3. Update database: Set risalahTtd ke NULL dan kembalikan status
+        await db.update(agendas)
+            .set({
+                risalahTtd: null,
+                status: "DIJADWALKAN", // Kembalikan agar bisa diupload ulang
+                updatedAt: new Date()
+            })
+            .where(eq(agendas.id, agendaId));
+
+        // 4. Revalidasi halaman agar UI berubah
+        revalidatePath("/pelaksanaan-rapat/rakordir");
+
+        return { success: true, message: "Notulensi fisik dan data berhasil dihapus" };
+    } catch (error) {
+        console.error("Delete Action Error:", error);
+        return { success: false, error: "Gagal menghapus notulensi" };
     }
 }

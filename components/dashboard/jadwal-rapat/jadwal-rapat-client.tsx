@@ -111,11 +111,12 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
     const filteredData = useMemo(() => {
         return data.filter(item => {
             // ✅ FIX 1: Filter hanya agenda dengan status DIJADWALKAN
-            const isScheduledOrDone =
+            const isVisibleInTable =
                 item.status === "DIJADWALKAN" ||
                 item.status === "RAPAT_SELESAI" ||
                 item.status === "SELESAI";
-            if (!isScheduledOrDone) return false;
+
+            if (!isVisibleInTable) return false;
 
             // ✅ FIX 2: Search filter
             const matchesSearch =
@@ -140,11 +141,10 @@ export function JadwalRapatClient({ data }: { data: AgendaReady[] }) {
 
     const availableAgendas = useMemo(() => {
         return data.filter(item => {
-            // ✅ FIX: Normalisasi status dengan benar
-            const normalizedStatus = item.status?.toUpperCase().trim().replace(/\s+/g, '_');
-            return normalizedStatus === "DAPAT_DILANJUTKAN" ||
-                normalizedStatus === "DAPAT_DILANJUTKAN_AGENDA" ||
-                item.status === "Dapat Dilanjutkan";
+            // Normalisasi status agar tahan terhadap perbedaan penulisan (case-insensitive)
+            const s = item.status?.toUpperCase().trim().replace(/\s+/g, '_') || "";
+
+            return s === "DAPAT_DILANJUTKAN" || item.status === "Dapat Dilanjutkan";
         });
     }, [data]);
 
@@ -392,13 +392,18 @@ _SEKPER PLN_`
                                                 {/* ✅ LOGIKA BARU: Tombol Batalkan Jadwal hanya muncul jika status DIJADWALKAN */}
                                                 {agenda.status === "DIJADWALKAN" && (
                                                     <>
+                                                        <DropdownMenuItem onClick={() => { setSelectedEdit(agenda); setEditOpen(true); }} className="rounded-lg font-bold text-amber-600 focus:bg-amber-50 cursor-pointer text-xs">
+                                                            <FileEdit className="mr-2 h-3.5 w-3.5" /> Edit Jadwal
+                                                        </DropdownMenuItem>
                                                         <DropdownMenuSeparator className="my-2" />
                                                         <DropdownMenuItem
                                                             onClick={() => handleRollback(agenda.id, agenda.title)}
                                                             className="rounded-lg py-2.5 font-bold text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer"
                                                         >
+
                                                             <Undo2 className="mr-3 h-4 w-4" /> Batalkan Jadwal
                                                         </DropdownMenuItem>
+
                                                     </>
                                                 )}
                                             </DropdownMenuContent>
@@ -440,13 +445,15 @@ _SEKPER PLN_`
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-48 p-2 rounded-xl border-none shadow-xl">
 
-
                                         {/* ✅ LOGIKA BARU: Batasi tombol Batal Jadwal di tampilan Grid */}
                                         {agenda.status === "DIJADWALKAN" && (
                                             <DropdownMenuItem
                                                 onClick={() => handleRollback(agenda.id, agenda.title)}
                                                 className="rounded-lg font-bold text-red-600 focus:bg-red-50 cursor-pointer text-xs"
                                             >
+                                                <DropdownMenuItem onClick={() => { setSelectedEdit(agenda); setEditOpen(true); }} className="rounded-lg font-bold text-amber-600 focus:bg-amber-50 cursor-pointer text-xs">
+                                                    <FileEdit className="mr-2 h-3.5 w-3.5" /> Edit Jadwal
+                                                </DropdownMenuItem>
                                                 <Undo2 className="mr-2 h-3.5 w-3.5" /> Batal Jadwal
                                             </DropdownMenuItem>
                                         )}

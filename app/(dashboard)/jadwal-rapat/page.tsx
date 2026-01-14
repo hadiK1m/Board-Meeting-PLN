@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agendas } from "@/db/schema/agendas";
-import { eq, isNotNull, desc as drizzleDesc, and, ne } from "drizzle-orm"; // Tambahkan isNotNull
+import { eq, isNotNull, desc as drizzleDesc, and, ne, or } from "drizzle-orm"; // Tambahkan isNotNull
 import { JadwalRapatWrapper } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-wrapper";
 import { type AgendaReady } from "@/components/dashboard/jadwal-rapat/jadwal-rapat-client";
 
@@ -13,15 +13,23 @@ export const metadata = {
 
 export default async function JadwalRapatPage() {
     // Logika baru: Ambil semua data yang statusnya 'DIJADWALKAN' 
-    // ATAU yang kolom executionDate-nya sudah terisi (tidak null)
     const allData = await db.query.agendas.findMany({
         where: and(
-            eq(agendas.meetingType, "RAKORDIR"), // Atau hapus filter ini jika ingin semua
-            // Ambil semua yang sudah punya tanggal eksekusi, apa pun statusnya (kecuali Draft)
-            isNotNull(agendas.executionDate),
-            ne(agendas.status, "DRAFT")
+            // ✅ HAPUS eq(agendas.meetingType, "RAKORDIR")
+            // Gunakan filter yang mengizinkan keduanya:
+            or(
+                eq(agendas.meetingType, "RADIR"),
+                eq(agendas.meetingType, "RAKORDIR")
+            ),
+            ne(agendas.status, "DRAFT"),
+            or(
+                isNotNull(agendas.executionDate),
+                eq(agendas.status, "DAPAT_DILANJUTKAN"),
+                eq(agendas.status, "Dapat Dilanjutkan"),
+                eq(agendas.status, "RAPAT_SELESAI")
+            )
         ),
-        orderBy: [drizzleDesc(agendas.executionDate)],
+        orderBy: [drizzleDesc(agendas.updatedAt)],
     });
 
     const formattedData: AgendaReady[] = allData.map((agenda) => ({

@@ -64,12 +64,22 @@ export function ScheduleMeetingDialog({ availableAgendas }: ScheduleMeetingDialo
     const [link, setLink] = useState("")
 
     const options: AgendaOption[] = useMemo(() => {
-        return availableAgendas.map(a => ({
-            value: a.id,
-            label: a.title,
-            initiator: a.initiator || "-"
-        }))
-    }, [availableAgendas])
+        // Menambahkan filter ketat khusus di dalam komponen dialog ini
+        return availableAgendas
+            .filter(a => {
+                const normalizedStatus = a.status?.toUpperCase().trim().replace(/\s+/g, '_');
+                return (
+                    normalizedStatus === "DAPAT_DILANJUTKAN" ||
+                    normalizedStatus === "DAPAT_DILANJUTKAN_AGENDA" ||
+                    a.status === "Dapat Dilanjutkan"
+                );
+            })
+            .map(a => ({
+                value: a.id,
+                label: a.title,
+                initiator: a.initiator || "-"
+            }));
+    }, [availableAgendas]);
 
     const handleOpenChange = (newOpen: boolean) => {
         if (newOpen) router.refresh()

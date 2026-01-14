@@ -22,6 +22,9 @@ import {
     CheckCircle2,
     Clock,
     Hash,
+    FileUp,
+    FileDown,
+    Trash2,
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -37,7 +40,9 @@ import { id } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRakordirToDocx } from "@/server/actions/export-actions"
+import { deleteFinalMinutesAction, getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { cn } from "@/lib/utils"
+import { UploadNotulensiDialog } from "./upload-notulensi-dialog"
 
 interface RakordirListViewProps {
     initialData: any[] // grouped meetings
@@ -49,10 +54,24 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
     const [searchTerm, setSearchTerm] = useState("")
     const [isExporting, setIsExporting] = useState(false)
 
+    // ✅ State untuk Dialog Upload
+    const [uploadOpen, setUploadOpen] = useState(false)
+    const [selectedGroup, setSelectedGroup] = useState<any>(null)
+
     const filteredData = initialData.filter((item) => {
         const searchStr = `${item.meetingNumber} ${item.location} ${item.meetingYear}`.toLowerCase()
         return searchStr.includes(searchTerm.toLowerCase())
     })
+
+    const handleOpenUpload = (group: any) => {
+        // Kita parsing data group agar sesuai dengan interface agenda di dialog
+        // Menggunakan agenda pertama sebagai representasi atau membuat objek virtual
+        setSelectedGroup({
+            id: group.agendas[0]?.id, // Mengambil ID dari agenda pertama dalam grup
+            title: `Rakordir #${group.meetingNumber} / ${group.meetingYear}`
+        })
+        setUploadOpen(true)
+    }
 
     const handleExportRakordir = async (meetingNumber: string, meetingYear: string) => {
         setIsExporting(true)
@@ -136,11 +155,19 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
                             <ActionDropdown
                                 group={group}
                                 onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
+                                onUpload={() => handleOpenUpload(group)}
                                 isExporting={isExporting}
                             />
                         </div>
                     </div>
                 ))}
+
+                {/* ✅ Render Dialog di Grid View */}
+                <UploadNotulensiDialog
+                    agenda={selectedGroup}
+                    open={uploadOpen}
+                    onOpenChange={setUploadOpen}
+                />
             </div>
         )
     }
@@ -218,6 +245,7 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
                                         <ActionDropdown
                                             group={group}
                                             onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
+                                            onUpload={() => handleOpenUpload(group)}
                                             isExporting={isExporting}
                                         />
                                     </TableCell>
@@ -227,21 +255,70 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
                     </TableBody>
                 </Table>
             </div>
+
+            {/* ✅ Render Dialog di Table View */}
+            <UploadNotulensiDialog
+                agenda={selectedGroup}
+                open={uploadOpen}
+                onOpenChange={setUploadOpen}
+            />
         </div>
     )
 }
 
-// Updated ActionDropdown (mirip Radir, tapi khusus Rakordir)
+// ✅ Update ActionDropdown dengan logika tombol kondisional
 function ActionDropdown({
     group,
     onExport,
+    onUpload,
     isExporting,
 }: {
     group: any
     onExport: () => void
+    onUpload: () => void
     isExporting: boolean
 }) {
     const router = useRouter()
+
+    // ✅ 1. Cek keberadaan file pada agenda pertama di grup tersebut
+    const finalMinutesPath = group.agendas[0]?.risalahTtd
+
+    // ✅ 2. Handler Download
+    const handleDownloadFinal = async () => {
+        if (!finalMinutesPath) {
+            toast.error("File tidak ditemukan")
+            return
+        }
+
+        const res = await getSignedFileUrl(finalMinutesPath)
+        if (res.success && res.url) {
+            // Membuka file di tab baru
+            window.open(res.url, "_blank")
+            toast.success("Membuka file notulensi...")
+        } else {
+            toast.error("Gagal mendapatkan link download")
+        }
+    }
+
+    // ✅ 3. Handler Hapus (Dengan Dialog Konfirmasi)
+    const handleDeleteFinal = async () => {
+        // Menggunakan confirm bawaan browser agar ringkas,
+        // atau bisa gunakan AlertDialog dari shadcn jika sudah ada.
+        const confirmDelete = window.confirm(
+            "Apakah Anda yakin ingin menghapus Notulensi Final ini? Status agenda akan dikembalikan ke 'DIJADWALKAN'."
+        )
+
+        if (!confirmDelete) return
+
+        const toastId = toast.loading("Sedang menghapus...")
+        const res = await deleteFinalMinutesAction(group.agendas[0].id)
+
+        if (res.success) {
+            toast.success("Notulensi berhasil dihapus", { id: toastId })
+        } else {
+            toast.error(res.error || "Gagal menghapus", { id: toastId })
+        }
+    }
 
     return (
         <DropdownMenu>
@@ -250,37 +327,64 @@ function ActionDropdown({
                     <MoreHorizontal className="h-4 w-4 text-slate-400" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60 rounded-xl shadow-xl border-slate-200">
+            <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-xl border-slate-200">
                 <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">
-                    Opsi Rakordir
+                    Opsi Sesi
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
 
-                {/* Kelola Sesi Rapat */}
+                {/* Tombol Kelola (Selalu ada) */}
                 <DropdownMenuItem
                     className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-[#125d72]/5 group"
-                    onClick={() =>
-                        router.push(
-                            `/pelaksanaan-rapat/rakordir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
-                        )
-                    }
+                    onClick={() => router.push(`/pelaksanaan-rapat/rakordir/live?number=${group.meetingNumber}&year=${group.meetingYear}`)}
                 >
                     <Settings2 className="h-4 w-4 text-slate-400 group-hover:text-[#125d72]" />
                     <span className="text-xs font-bold text-slate-700">Kelola Sesi Rapat</span>
                 </DropdownMenuItem>
 
-                {/* Export Notulensi */}
-                <DropdownMenuItem
-                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
-                    disabled={isExporting}
-                    onClick={onExport}
-                >
-                    <FileText className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
-                    <span className="text-xs font-bold text-slate-700">Export Notulensi (2.0)</span>
-                </DropdownMenuItem>
+                {/* ✅ KONDISI: JIKA BELUM UPLOAD */}
+                {!finalMinutesPath ? (
+                    <DropdownMenuItem
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
+                        onClick={onUpload}
+                    >
+                        <FileUp className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
+                        <span className="text-xs font-bold text-slate-700">Upload Notulensi Final</span>
+                    </DropdownMenuItem>
+                ) : (
+                    /* ✅ KONDISI: JIKA SUDAH UPLOAD (DOWNLOAD + DELETE) */
+                    <>
+                        <DropdownMenuItem
+                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
+                            onClick={handleDownloadFinal}
+                        >
+                            <FileDown className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
+                            <span className="text-xs font-bold text-slate-700">Download Notulensi Final</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-red-50 group"
+                            onClick={handleDeleteFinal}
+                        >
+                            <Trash2 className="h-4 w-4 text-red-500 group-hover:text-red-700" />
+                            <span className="text-xs font-bold text-red-600">Hapus Notulensi</span>
+                        </DropdownMenuItem>
+                    </>
+                )}
 
                 <DropdownMenuSeparator />
 
+                {/* Export Draft (Selalu ada) */}
+                <DropdownMenuItem
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-slate-50 group"
+                    disabled={isExporting}
+                    onClick={onExport}
+                >
+                    <FileText className="h-4 w-4 text-slate-400 group-hover:text-slate-600" />
+                    <span className="text-xs font-bold text-slate-700">Export Draft Notulensi</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-[9px] text-slate-400 px-3 py-1 italic" disabled>
                     ID Sesi: {group.groupKey}
                 </DropdownMenuItem>
