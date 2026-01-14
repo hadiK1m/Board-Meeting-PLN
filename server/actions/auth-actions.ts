@@ -41,37 +41,34 @@ async function recordLogin(userId: string) {
 
 // --- 1. LOGIN ACTION ---
 export async function loginAction(prevState: FormState, formData: FormData) {
-    // [FIX] Mengambil data mentah untuk validasi
     const rawData = {
         email: formData.get('email'),
         password: formData.get('password'),
     }
 
     const validatedFields = loginSchema.safeParse(rawData)
-
-    if (!validatedFields.success) {
-        // [SECURE] Jangan beritahu field mana yang salah secara spesifik jika itu password/email sensitif
-        return { error: "Format input tidak valid." }
-    }
+    if (!validatedFields.success) return { error: "Format input tidak valid." }
 
     const { email, password } = validatedFields.data
     const supabase = await createClient()
 
+    // Variabel untuk menyimpan data user setelah lolos try-catch
+    let userToRedirect = null;
+
     try {
-        // [SECURE FLOW CHANGE] 
-        // 1. Login ke Supabase terlebih dahulu.
-        // Ini mencegah attacker mengetahui apakah email ada di DB lokal atau tidak (User Enumeration).
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email,
             password,
         })
 
-        if (authError || !authData.user) {
-            // [SECURE] Pesan error GENERIC. Jangan bedakan antara email salah atau password salah.
-            return { error: "Email atau kata sandi tidak valid." }
+        if (authError) {
+            // ✅ DEBUG: Ubah sementara agar kita tahu alasan aslinya
+            console.error("SUPABASE AUTH ERROR:", authError.message)
+            return { error: `Auth Error: ${authError.message}` }
         }
 
-        // 2. Setelah password valid di Supabase, baru cek otorisasi di DB Lokal
+        if (!authData.user) return { error: "User tidak ditemukan." }
+
         const userResult = await db.select()
             .from(users)
             .where(ilike(users.email, email))
@@ -80,13 +77,10 @@ export async function loginAction(prevState: FormState, formData: FormData) {
         const userProfile = userResult[0]
 
         if (!userProfile) {
-            // Kasus langka: User ada di Auth Supabase tapi tidak ada di DB User Profile.
-            // Tetap gunakan pesan error yang agak samar atau arahkan ke support.
-            await supabase.auth.signOut() // Force logout jika data tidak konsisten
-            return { error: "Akun tidak memiliki akses ke sistem ini." }
+            await supabase.auth.signOut()
+            return { error: "Profil database tidak ditemukan. Hubungi Admin." }
         }
 
-        // C. Cek 2FA
         if (userProfile.twoFactorEnabled) {
             return {
                 twoFactorRequired: true,
@@ -95,18 +89,25 @@ export async function loginAction(prevState: FormState, formData: FormData) {
             }
         }
 
-        // D. Sukses Tanpa 2FA
         await recordLogin(userProfile.id)
         await createSession(userProfile.id, userProfile.role)
 
+        // Simpan tanda sukses
+        userToRedirect = true;
+
     } catch (error) {
+        // Jika ini adalah error redirect internal Next.js, lemparkan kembali
+        if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
+
         console.error('Login Error (Internal):', error)
-        return { error: "Terjadi kesalahan pada server." }
+        return { error: "Terjadi kesalahan pada server internal." }
     }
 
-    redirect('/dashboard')
+    // ✅ Pindahkan redirect ke LUAR blok try-catch
+    if (userToRedirect) {
+        redirect('/dashboard')
+    }
 }
-
 // --- 2. VERIFY 2FA ACTION ---
 export async function verifyTwoFactorAction(userId: string, token: string) {
     if (!token || token.length !== 6) {
