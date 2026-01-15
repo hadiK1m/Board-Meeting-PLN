@@ -80,6 +80,7 @@ export const agendas = pgTable("agendas", {
     // GROUPING UNTUK RISALAH
     risalahGroupId: uuid("risalah_group_id").defaultRandom(),
     risalahTtd: text("risalah_ttd"),
+    petikanRisalah: text("petikan_risalah"),
     monevStatus: text("monev_status").default("ON_PROGRESS"),
 
     // Audit Trail

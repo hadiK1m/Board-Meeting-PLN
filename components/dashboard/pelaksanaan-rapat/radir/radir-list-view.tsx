@@ -25,9 +25,11 @@ import {
     CheckCircle2,
     Clock,
     Upload,
-    Trash2, // Icon Trash
-    FileCheck, // Icon File Check
-    Activity
+    Trash2,
+    FileCheck,
+    Activity,
+    FileUp,
+    FileDown
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -43,9 +45,11 @@ import { id } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
-import { getRisalahDownloadUrlAction } from "@/server/actions/radir-actions" // Action baru
+import { getRisalahDownloadUrlAction } from "@/server/actions/radir-actions"
+import { deletePetikanAction } from "@/server/actions/agenda-actions"
 import { UploadRisalahDialog } from "./upload-risalah-dialog"
-import { DeleteRisalahDialog } from "./delete-risalah-dialog" // Dialog baru
+import { DeleteRisalahDialog } from "./delete-risalah-dialog"
+import { UploadPetikanDialog } from "./upload-petikan-dialog"
 
 interface RadirListViewProps {
     initialData: any[] // grouped meetings
@@ -57,29 +61,40 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [isExporting, setIsExporting] = useState(false)
 
-    // State untuk Upload Dialog
+    // State untuk Upload Dialog Risalah TTD
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-
-    // State untuk Delete Dialog
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [fileToDelete, setFileToDelete] = useState("")
-
-    // Shared State
     const [selectedAgendaId, setSelectedAgendaId] = useState("")
     const [selectedMeetingTitle, setSelectedMeetingTitle] = useState("")
 
-    // Handler Buka Upload
+    // State untuk Delete Dialog Risalah TTD
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [fileToDelete, setFileToDelete] = useState("")
+
+    // ✅ State Baru untuk Upload Petikan Risalah
+    const [petikanDialogOpen, setPetikanDialogOpen] = useState(false)
+    const [selectedPetikanAgenda, setSelectedPetikanAgenda] = useState<{
+        id: string
+        title: string
+    } | null>(null)
+
+    // Handler Buka Upload Risalah TTD
     const handleOpenUpload = (agendaId: string, meetingNumber: string) => {
         setSelectedAgendaId(agendaId)
         setSelectedMeetingTitle(`Meeting #${meetingNumber}`)
         setUploadDialogOpen(true)
     }
 
-    // Handler Buka Delete
+    // Handler Buka Delete Risalah TTD
     const handleOpenDelete = (agendaId: string, filePath: string) => {
         setSelectedAgendaId(agendaId)
         setFileToDelete(filePath)
         setDeleteDialogOpen(true)
+    }
+
+    // ✅ Handler Buka Upload Petikan
+    const handleOpenPetikan = (agendaId: string, groupKey: string) => {
+        setSelectedPetikanAgenda({ id: agendaId, title: groupKey })
+        setPetikanDialogOpen(true)
     }
 
     const filteredData = initialData.filter((item) => {
@@ -94,68 +109,70 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
         return (
             <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredData.map((group) => (
-                        <div
-                            key={group.groupKey}
-                            className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card"
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="space-y-1">
-                                    <Badge className="bg-[#125d72]/10 text-[#125d72] hover:bg-[#125d72]/20 border-none text-[10px] font-black">
-                                        NOMOR MEETING: {group.meetingNumber}
-                                    </Badge>
-                                    <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
-                                        TAHUN {group.meetingYear}
-                                    </h3>
-                                </div>
-                                <div className="flex gap-2">
-                                    <StatusBadge status={group.status} />
-                                    <ActionDropdown
-                                        group={group}
-                                        isExporting={isExporting}
-                                        setIsExporting={setIsExporting}
-                                        onOpenUpload={handleOpenUpload}
-                                        onOpenDelete={handleOpenDelete} // Pass delete handler
-                                    />
-                                </div>
-                            </div>
-
-                            {/* ... Content Card Info (Sama seperti sebelumnya) ... */}
-                            <div className="space-y-3 mb-6">
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <Calendar className="h-3.5 w-3.5" />
-                                    <span className="text-[11px] font-medium">
-                                        {group.executionDate
-                                            ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id })
-                                            : "-"}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <MapPin className="h-3.5 w-3.5" />
-                                    <span className="text-[11px] font-medium truncate">
-                                        {group.location || "Lokasi belum diatur"}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <FileText className="h-3.5 w-3.5" />
-                                    <span className="text-[11px] font-bold text-[#125d72]">
-                                        {group.agendas.length} Agenda Terkait
-                                    </span>
-                                </div>
-                            </div>
-
-                            <Button
-                                className="w-full bg-[#125d72] hover:bg-[#0d4a5b] text-white text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
-                                onClick={() =>
-                                    router.push(
-                                        `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
-                                    )
-                                }
+                    {filteredData.map((group) => {
+                        return (
+                            <div
+                                key={group.groupKey}
+                                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all group/card"
                             >
-                                <Settings2 className="mr-2 h-3.5 w-3.5" /> Kelola Sesi Rapat
-                            </Button>
-                        </div>
-                    ))}
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="space-y-1">
+                                        <Badge className="bg-[#125d72]/10 text-[#125d72] hover:bg-[#125d72]/20 border-none text-[10px] font-black">
+                                            NOMOR MEETING: {group.meetingNumber}
+                                        </Badge>
+                                        <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
+                                            TAHUN {group.meetingYear}
+                                        </h3>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <StatusBadge status={group.status} />
+                                        <ActionDropdown
+                                            group={group}
+                                            isExporting={isExporting}
+                                            setIsExporting={setIsExporting}
+                                            onOpenUpload={handleOpenUpload}
+                                            onOpenDelete={handleOpenDelete}
+                                            onOpenPetikan={handleOpenPetikan}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 mb-6">
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        <span className="text-[11px] font-medium">
+                                            {group.executionDate
+                                                ? format(new Date(group.executionDate), "dd MMMM yyyy", { locale: id })
+                                                : "-"}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <MapPin className="h-3.5 w-3.5" />
+                                        <span className="text-[11px] font-medium truncate">
+                                            {group.location || "Lokasi belum diatur"}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <FileText className="h-3.5 w-3.5" />
+                                        <span className="text-[11px] font-bold text-[#125d72]">
+                                            {group.agendas.length} Agenda Terkait
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    className="w-full bg-[#125d72] hover:bg-[#0d4a5b] text-white text-[10px] font-black uppercase tracking-widest h-10 rounded-xl"
+                                    onClick={() =>
+                                        router.push(
+                                            `/pelaksanaan-rapat/radir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
+                                        )
+                                    }
+                                >
+                                    <Settings2 className="mr-2 h-3.5 w-3.5" /> Kelola Sesi Rapat
+                                </Button>
+                            </div>
+                        )
+                    })}
                 </div>
 
                 {/* Dialogs */}
@@ -172,6 +189,12 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                     agendaId={selectedAgendaId}
                     filePath={fileToDelete}
                 />
+
+                <UploadPetikanDialog
+                    open={petikanDialogOpen}
+                    onOpenChange={setPetikanDialogOpen}
+                    agenda={selectedPetikanAgenda}
+                />
             </>
         )
     }
@@ -179,7 +202,6 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
     // Table View
     return (
         <div className="space-y-4">
-            {/* ... Search Bar ... */}
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
@@ -231,7 +253,8 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                                             isExporting={isExporting}
                                             setIsExporting={setIsExporting}
                                             onOpenUpload={handleOpenUpload}
-                                            onOpenDelete={handleOpenDelete} // Pass delete handler
+                                            onOpenDelete={handleOpenDelete}
+                                            onOpenPetikan={handleOpenPetikan}
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -255,6 +278,12 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
                 agendaId={selectedAgendaId}
                 filePath={fileToDelete}
             />
+
+            <UploadPetikanDialog
+                open={petikanDialogOpen}
+                onOpenChange={setPetikanDialogOpen}
+                agenda={selectedPetikanAgenda}
+            />
         </div>
     )
 }
@@ -268,18 +297,21 @@ function ActionDropdown({
     setIsExporting,
     onOpenUpload,
     onOpenDelete,
+    onOpenPetikan,
 }: {
     group: any
     isExporting: boolean
     setIsExporting: (val: boolean) => void
     onOpenUpload: (agendaId: string, meetingNumber: string) => void
     onOpenDelete: (agendaId: string, filePath: string) => void
+    onOpenPetikan: (agendaId: string, groupKey: string) => void
 }) {
     const router = useRouter()
 
     // Cek apakah ada risalah yang sudah diupload pada agenda pertama
     const firstAgenda = group.agendas && group.agendas[0]
     const risalahTtdPath = firstAgenda?.risalahTtd
+    const petikanPath = firstAgenda?.petikanRisalah
 
     // Handler Download Risalah TTD
     const handleDownloadRisalahTtd = async () => {
@@ -289,7 +321,6 @@ function ActionDropdown({
         try {
             const res = await getRisalahDownloadUrlAction(risalahTtdPath)
             if (res.success && res.url) {
-                // Buka link di tab baru untuk download
                 window.open(res.url, "_blank")
             } else {
                 toast.error("Gagal mendapatkan link download", { description: res.error })
@@ -297,6 +328,81 @@ function ActionDropdown({
         } catch (err) {
             toast.error("Terjadi kesalahan saat download")
         }
+    }
+
+    // Handler Download Petikan Risalah
+    const handleDownloadPetikan = async () => {
+        if (!petikanPath) return
+        toast.info("Mengunduh Petikan Risalah...")
+
+        try {
+            const res = await getRisalahDownloadUrlAction(petikanPath)
+            if (res.success && res.url) {
+                window.open(res.url, "_blank")
+                toast.success("Download berhasil")
+            } else {
+                toast.error("Gagal mendapatkan link download", { description: res.error })
+            }
+        } catch (err) {
+            toast.error("Terjadi kesalahan saat download")
+        }
+    }
+
+    // Handler Delete Petikan Risalah
+    const handleDeletePetikan = async () => {
+        if (!firstAgenda?.id) return
+
+        await new Promise((resolve) => {
+            toast.custom((t) => (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-4 w-80">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-red-100 rounded-lg">
+                            <Trash2 className="h-5 w-5 text-red-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800">Hapus Petikan Risalah?</h3>
+                            <p className="text-xs text-slate-500 mt-1">File tidak dapat dikembalikan setelah dihapus</p>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                                toast.dismiss(t)
+                                resolve(false)
+                            }}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            className="text-xs"
+                            onClick={async () => {
+                                const tid = toast.loading("Menghapus petikan risalah...")
+                                try {
+                                    const res = await deletePetikanAction(firstAgenda.id)
+                                    if (res.success) {
+                                        toast.success("Petikan risalah berhasil dihapus", { id: tid })
+                                        router.refresh()
+                                    } else {
+                                        toast.error(res.error || "Gagal menghapus", { id: tid })
+                                    }
+                                } catch (error) {
+                                    toast.error("Terjadi kesalahan", { id: tid })
+                                }
+                                toast.dismiss(t)
+                                resolve(true)
+                            }}
+                        >
+                            Hapus
+                        </Button>
+                    </div>
+                </div>
+            ))
+        })
     }
 
     const handleExport = async (type: "ISI" | "TTD") => {
@@ -352,7 +458,6 @@ function ActionDropdown({
 
                 {/* LOGIKA KONDISIONAL TOMBOL RISALAH TTD */}
                 {risalahTtdPath ? (
-                    // KONDISI 1: File ADA -> Tampilkan Download & Hapus
                     <div className="flex items-center gap-1 px-2 py-1">
                         <div
                             className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-green-50 rounded-md text-green-700 transition-colors"
@@ -374,7 +479,6 @@ function ActionDropdown({
                         </div>
                     </div>
                 ) : (
-                    // KONDISI 2: File TIDAK ADA -> Tampilkan Upload
                     <DropdownMenuItem
                         className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-orange-50 group"
                         onClick={() => {
@@ -387,6 +491,42 @@ function ActionDropdown({
                     >
                         <Upload className="h-4 w-4 text-orange-600 group-hover:text-orange-700" />
                         <span className="text-xs font-bold text-slate-700">Upload Risalah Final (TTD)</span>
+                    </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
+                {/* ✅ LOGIKA TOMBOL PETIKAN RISALAH */}
+                <DropdownMenuLabel className="text-[9px] uppercase opacity-50 px-3 py-1">
+                    Petikan Risalah
+                </DropdownMenuLabel>
+
+                {petikanPath ? (
+                    <div className="flex items-center gap-1 px-2 py-1">
+                        <div
+                            className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-amber-50 rounded-md text-amber-700 transition-colors"
+                            onClick={handleDownloadPetikan}
+                        >
+                            <FileDown className="h-4 w-4" />
+                            <span className="text-xs font-bold">Download Petikan</span>
+                        </div>
+                        <div
+                            className="flex-none p-1.5 cursor-pointer hover:bg-red-50 rounded-md text-red-600 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeletePetikan()
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </div>
+                    </div>
+                ) : (
+                    <DropdownMenuItem
+                        onClick={() => firstAgenda && onOpenPetikan(firstAgenda.id, group.groupKey)}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-amber-50 group"
+                    >
+                        <FileUp className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-bold text-slate-700">Upload Petikan Risalah</span>
                     </DropdownMenuItem>
                 )}
 
@@ -422,7 +562,6 @@ function ActionDropdown({
 }
 
 function StatusBadge({ status }: { status: string }) {
-    // Menangani status Rapat Selesai
     if (status === "RAPAT_SELESAI" || status === "SELESAI_RAPAT" || status === "COMPLETED") {
         return (
             <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
@@ -431,7 +570,6 @@ function StatusBadge({ status }: { status: string }) {
         )
     }
 
-    // Menangani status Sedang Berlangsung / In Progress
     if (status === "SEDANG_BERLANGSUNG" || status === "ON_PROGRESS") {
         return (
             <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
@@ -440,7 +578,6 @@ function StatusBadge({ status }: { status: string }) {
         )
     }
 
-    // Default (Dijadwalkan)
     return (
         <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto">
             <Clock className="h-2.5 w-2.5" /> DIJADWALKAN

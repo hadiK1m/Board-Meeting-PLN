@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
@@ -395,23 +394,26 @@ export async function postponeAgendaAction(data: z.infer<typeof postponeSchema>)
 }
 
 
+// server/actions/agenda-actions.ts
+
 export async function uploadAgendaFileAction(formData: FormData) {
     try {
         const file = formData.get("file") as File;
         const agendaId = formData.get("agendaId") as string;
-        const fileType = formData.get("fileType") as string;
+        const fileType = formData.get("fileType") as string; // "risalah_ttd" atau "petikanRisalah"
 
         if (!file || !agendaId) return { success: false, error: "Data tidak lengkap" };
 
-        const supabase = await createClient(); // Pastikan utility createClient sudah benar
+        const supabase = await createClient();
 
-        // 1. BUAT PATH FILE
+        // 1. BUAT PATH FILE (Kita bedakan folder agar rapi)
+        const subFolder = fileType === "petikanRisalah" ? "petikan" : "notulensi";
         const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-        const filePath = `rakordir/notulensi/${agendaId}/${fileName}`;
+        const filePath = `rakordir/${subFolder}/${agendaId}/${fileName}`;
 
-        // 2. UNGGAH KE SUPABASE STORAGE (Penting!)
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from("agenda-attachments") // Pastikan nama bucket ini sama di Supabase dashboard
+        // 2. UNGGAH KE SUPABASE STORAGE
+        const { error: uploadError } = await supabase.storage
+            .from("agenda-attachments")
             .upload(filePath, file);
 
         if (uploadError) {
@@ -419,16 +421,29 @@ export async function uploadAgendaFileAction(formData: FormData) {
             return { success: false, error: `Gagal upload ke storage: ${uploadError.message}` };
         }
 
-        // 3. UPDATE DATABASE (Hanya jika upload sukses)
+        // 3. LOGIKA UPDATE DATABASE DINAMIS
+        // Buat objek update kosong
+        const updateData: any = {
+            updatedAt: new Date()
+        };
+
+        // Tentukan kolom mana yang diisi berdasarkan fileType
+        if (fileType === "petikanRisalah") {
+            updateData.petikanRisalah = filePath;
+        } else {
+            // Jika yang diupload adalah Risalah Final TTD
+            updateData.risalahTtd = filePath;
+            updateData.status = "RAPAT_SELESAI"; // Hanya Risalah Final yang otomatis mengubah status
+        }
+
         await db.update(agendas)
-            .set({
-                risalahTtd: filePath,
-                status: "RAPAT_SELESAI",
-                updatedAt: new Date()
-            })
+            .set(updateData)
             .where(eq(agendas.id, agendaId));
 
+        // Revalidasi kedua halaman agar data sinkron
+        revalidatePath("/pelaksanaan-rapat/radir");
         revalidatePath("/pelaksanaan-rapat/rakordir");
+
         return { success: true, path: filePath };
 
     } catch (error) {
@@ -488,5 +503,72 @@ export async function deleteFinalMinutesAction(agendaId: string) {
     } catch (error) {
         console.error("Delete Action Error:", error);
         return { success: false, error: "Gagal menghapus notulensi" };
+    }
+}
+
+// ────────────────────────────────────────────────
+// 8. ACTION: DELETE PETIKAN RISALAH
+// ────────────────────────────────────────────────
+
+/**
+ * ACTION: HAPUS PETIKAN RISALAH
+ * Menghapus file petikan risalah dari storage dan menghapus referensi di database
+ */
+
+// Di agenda-actions.ts, cari fungsi deletePetikanAction dan perbaiki:
+
+export async function deletePetikanAction(agendaId: string) {
+    try {
+        // 1. Ambil data agenda terlebih dahulu untuk mendapatkan PATH file-nya
+        const agenda = await db.query.agendas.findFirst({
+            where: eq(agendas.id, agendaId),
+            columns: {
+                petikanRisalah: true
+            },
+        });
+
+        const filePath = agenda?.petikanRisalah;
+
+        // 2. Jika ada path file, hapus file fisik di Supabase Bucket
+        if (filePath) {
+            const supabase = await createClient();
+
+            // Bersihkan path jika ada '/' di awal
+            const cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+
+            const { error: storageError } = await supabase.storage
+                .from("agenda-attachments")
+                .remove([cleanPath]);
+
+            if (storageError) {
+                console.error("[STORAGE_DELETE_PETIKAN_ERROR]", storageError);
+                // Lanjutkan tetap hapus di DB meskipun ada error storage
+            } else {
+                console.log("[STORAGE_DELETE_PETIKAN_SUCCESS] File petikan terhapus:", cleanPath);
+            }
+        }
+
+        // 3. Update database: Set petikanRisalah ke NULL
+        await db.update(agendas)
+            .set({
+                petikanRisalah: null,
+                updatedAt: new Date()
+            })
+            .where(eq(agendas.id, agendaId));
+
+        // 4. ✅ PERBAIKAN: Tambahkan revalidatePath yang benar
+        revalidatePath("/pelaksanaan-rapat/radir");
+        revalidatePath("/dashboard"); // Optional, untuk update statistik
+
+        return {
+            success: true,
+            message: "Petikan risalah berhasil dihapus"
+        };
+    } catch (error) {
+        console.error("Delete Petikan Action Error:", error);
+        return {
+            success: false,
+            error: "Gagal menghapus petikan risalah"
+        };
     }
 }
