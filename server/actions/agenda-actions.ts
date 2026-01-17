@@ -53,7 +53,7 @@ async function assertAgendaExists(agendaIds: string | string[]) {
 
 export async function getSignedFileUrl(path: string | null | undefined) {
     try {
-        // 1. Validasi awal: Jika path kosong, langsung kembalikan error yang jelas
+        // 1. Validasi awal
         if (!path) {
             return { success: false, error: "Berkas tidak ditemukan atau belum diunggah." };
         }
@@ -61,14 +61,14 @@ export async function getSignedFileUrl(path: string | null | undefined) {
         // 2. Pastikan user sudah login
         const user = await assertAuthenticated();
 
-        // 3. Bersihkan path (menghilangkan '/' di awal jika ada)
+        // 3. Bersihkan path
         const cleanPath = path.startsWith('/') ? path.substring(1) : path;
 
-        // 4. Validasi Folder yang diizinkan
-        // Jika path Anda menggunakan folder "notulensi/...", tambahkan di sini
+        // 4. Validasi Folder yang diizinkan (WHITELIST)
         const isAllowed =
             cleanPath.startsWith("radir/") ||
             cleanPath.startsWith("rakordir/") ||
+            cleanPath.startsWith("risalah-rakordir/") || // <--- TAMBAHKAN INI (Wajib untuk fitur baru)
             cleanPath.includes("notulensi/");
 
         if (!isAllowed) {
@@ -79,7 +79,6 @@ export async function getSignedFileUrl(path: string | null | undefined) {
         const supabase = await createClient();
 
         // 5. Buat signed URL
-        // PENTING: Pastikan nama bucket "agenda-attachments" sama persis dengan di Supabase Dashboard
         const { data, error } = await supabase.storage
             .from("agenda-attachments")
             .createSignedUrl(cleanPath, 3600); // Expiry 1 jam
@@ -103,20 +102,11 @@ export async function getSignedFileUrl(path: string | null | undefined) {
         };
 
     } catch (error: unknown) {
+        // ... error handling
         const errorMessage = error instanceof Error ? error.message : "Gagal menghasilkan link akses file.";
-
-        console.error("[GET_SIGNED_URL_ERROR]", {
-            path,
-            error: errorMessage,
-        });
-
-        return {
-            success: false,
-            error: errorMessage,
-        };
+        return { success: false, error: errorMessage };
     }
 }
-
 
 // ────────────────────────────────────────────────
 // 3. ACTION: BULK DELETE AGENDA

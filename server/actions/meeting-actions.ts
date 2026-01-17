@@ -227,43 +227,49 @@ export async function getRadirMonitoringData() {
 /**
  * 6. UPDATE RAKORDIR LIVE (LOGIKA TRANSACTION ASLI DIPERTAHANKAN)
  */
-export async function updateRakordirLiveAction(
-    agendasData: any[],
-    meetingInfo: {
-        number: string; year: string; date: string; day?: string; location: string;
-        startTime: string; endTime: string; pimpinanRapat: string; catatanKetidakhadiran: string;
-    }
-) {
+export async function updateRakordirLiveAction(agendasData: any[]) {
     try {
         await assertAuthenticated() // [SECURE]
+
         await db.transaction(async (tx) => {
             for (const item of agendasData) {
                 await tx.update(agendas)
                     .set({
-                        meetingNumber: meetingInfo.number,
-                        meetingYear: meetingInfo.year,
-                        executionDate: meetingInfo.date || null,
-                        startTime: meetingInfo.startTime || null,
-                        endTime: meetingInfo.endTime || "Selesai",
-                        meetingLocation: meetingInfo.location || null,
-                        pimpinanRapat: meetingInfo.pimpinanRapat,
-                        catatanRapat: meetingInfo.catatanKetidakhadiran,
+                        // Update Data Logistik
+                        meetingNumber: item.meetingNumber,
+                        meetingYear: item.meetingYear,
+                        executionDate: item.executionDate || null,
+                        startTime: item.startTime || null,
+                        endTime: item.endTime || "Selesai",
+                        meetingLocation: item.meetingLocation || null,
+
+                        // ✅ PERBAIKAN 2: Simpan Data Kehadiran & Pimpinan dari 'item'
+                        pimpinanRapat: item.pimpinanRapat,       // Pastikan nama ini sesuai payload client
+                        attendanceData: item.attendanceData,     // Pastikan nama ini sesuai payload client
+                        guestParticipants: item.guestParticipants, // ✅ TAMBAHKAN INI (Sebelumnya hilang)
+
+                        // Data Konten
+                        catatanRapat: item.catatanRapat,
                         executiveSummary: item.executiveSummary,
                         arahanDireksi: item.arahanDireksi,
-                        attendanceData: item.attendanceData,
+
+                        // Status
                         meetingStatus: "COMPLETED",
-                        status: "SELESAI",
+                        status: "SELESAI", // Atau "RAPAT_SELESAI" sesuai konsistensi project Anda
                         updatedAt: new Date(),
                     })
                     .where(eq(agendas.id, item.id));
             }
         });
 
+        // Revalidate path agar UI terupdate
         revalidatePath("/pelaksanaan-rapat/rakordir");
-        revalidatePath(`/pelaksanaan-rapat/rakordir/live`);
+        // Jika path live menggunakan query params, revalidate path induknya saja seringkali cukup,
+        // atau gunakan path spesifik jika perlu.
 
-        return { success: true, message: "Notulensi Rakordir berhasil disimpan dan disinkronkan." };
+        return { success: true, message: "Notulensi Rakordir berhasil disimpan." };
     } catch (error: any) {
+        console.error("[UPDATE_RAKORDIR_ERROR]", error);
         return { success: false, error: error.message };
     }
 }

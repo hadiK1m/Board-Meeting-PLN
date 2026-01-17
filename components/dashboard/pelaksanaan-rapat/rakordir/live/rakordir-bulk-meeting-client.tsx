@@ -56,9 +56,10 @@ export default function RakordirBulkMeetingClient({
         location: agendas[0]?.meetingLocation || "Gedung Kantor Pusat",
         startTime: agendas[0]?.startTime || "09:00",
         endTime: agendas[0]?.endTime || "Selesai",
-        selectedPimpinan: [] as MultiValue<Option>,
-        attendance: {} as Record<string, any>,
-        guests: [] as any[],
+
+        selectedPimpinan: (agendas[0]?.pimpinanRapat as unknown as MultiValue<Option>) || [],
+        attendance: (agendas[0]?.attendanceData as Record<string, any>) || {},
+        guests: (agendas[0]?.guestParticipants as any[]) || [],
     })
 
     // B. Specific State: Data yang berbeda-beda tiap agenda (Ringkasan & Arahan)
@@ -102,28 +103,34 @@ export default function RakordirBulkMeetingClient({
         try {
             const finalPayload = agendas.map(a => ({
                 id: a.id,
-                number: globalDraft.number,
-                year: globalDraft.year,
-                date: globalDraft.date,
-                location: globalDraft.location,
+                // Pastikan field ini dikirim jika server action membutuhkannya dari item
+                meetingNumber: globalDraft.number,
+                meetingYear: globalDraft.year,
+                executionDate: globalDraft.date,
                 startTime: globalDraft.startTime,
                 endTime: globalDraft.endTime,
-                attendance: globalDraft.attendance,
-                guests: globalDraft.guests, // ✅ PASTIKAN INI ADA
-                selectedPimpinan: globalDraft.selectedPimpinan,
-                catatanKetidakhadiran: "", // Tambahkan jika diperlukan
+                meetingLocation: globalDraft.location,
+
+                // ✅ PERBAIKAN 1: Mapping Nama Field agar sesuai Schema DB
+                attendanceData: globalDraft.attendance,       // Ganti 'attendance' -> 'attendanceData'
+                guestParticipants: globalDraft.guests,        // Ganti 'guests' -> 'guestParticipants'
+                pimpinanRapat: globalDraft.selectedPimpinan,  // Ganti 'selectedPimpinan' -> 'pimpinanRapat'
+
+                catatanRapat: "",
                 ...specificDrafts[a.id],
             }))
 
+            // Kita kirim array ini sebagai satu-satunya argumen
             const result = await updateRakordirLiveAction(finalPayload)
 
             if (result.success) {
-                toast.success("Notulensi Rakordir berhasil disimpan secara massal")
+                toast.success("Notulensi Rakordir berhasil disimpan.")
                 router.refresh()
             } else {
                 toast.error(result.error || "Gagal menyimpan")
             }
         } catch (error) {
+            console.error(error)
             toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsSubmitting(false)

@@ -1,3 +1,4 @@
+// components/dashboard/pelaksanaan-rapat/rakordir/rakordir-list-view.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
@@ -22,9 +23,9 @@ import {
     CheckCircle2,
     Clock,
     Hash,
-    FileUp,
-    FileDown,
     Trash2,
+    FileCheck,
+    UploadCloud,
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -41,8 +42,8 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRakordirToDocx } from "@/server/actions/export-actions"
 import { deleteFinalMinutesAction, getSignedFileUrl } from "@/server/actions/agenda-actions"
-import { cn } from "@/lib/utils"
 import { UploadNotulensiDialog } from "./upload-notulensi-dialog"
+import { deleteRisalahRakordirAction } from "@/server/actions/rakordir-actions"
 
 interface RakordirListViewProps {
     initialData: any[] // grouped meetings
@@ -56,21 +57,24 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
 
     // ✅ State untuk Dialog Upload
     const [uploadOpen, setUploadOpen] = useState(false)
-    const [selectedGroup, setSelectedGroup] = useState<any>(null)
+    const [selectedAgendaId, setSelectedAgendaId] = useState<string | null>(null)
+    const [selectedMeetingNumber, setSelectedMeetingNumber] = useState<string | null>(null)
 
     const filteredData = initialData.filter((item) => {
         const searchStr = `${item.meetingNumber} ${item.location} ${item.meetingYear}`.toLowerCase()
         return searchStr.includes(searchTerm.toLowerCase())
     })
 
-    const handleOpenUpload = (group: any) => {
-        // Kita parsing data group agar sesuai dengan interface agenda di dialog
-        // Menggunakan agenda pertama sebagai representasi atau membuat objek virtual
-        setSelectedGroup({
-            id: group.agendas[0]?.id, // Mengambil ID dari agenda pertama dalam grup
-            title: `Rakordir #${group.meetingNumber} / ${group.meetingYear}`
-        })
+    const handleOpenUpload = (agendaId: string, meetingNumber: string) => {
+        setSelectedAgendaId(agendaId)
+        setSelectedMeetingNumber(meetingNumber)
         setUploadOpen(true)
+    }
+
+    const handleCloseUpload = () => {
+        setUploadOpen(false)
+        setSelectedAgendaId(null)
+        setSelectedMeetingNumber(null)
     }
 
     const handleExportRakordir = async (meetingNumber: string, meetingYear: string) => {
@@ -99,74 +103,99 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
         }
     }
 
+
+    const handleDeleteFinal = async (agendaId: string, risalahPath: string) => {
+        const confirmDelete = window.confirm(
+            "Apakah Anda yakin ingin menghapus Notulensi Final ini? File akan dihapus dari seluruh agenda di sesi ini."
+        )
+
+        if (!confirmDelete) return
+
+        const toastId = toast.loading("Sedang menghapus...")
+
+        // ✅ Panggil Action Baru (Bulk Delete & Keep Status)
+        const res = await deleteRisalahRakordirAction(agendaId)
+
+        if (res.success) {
+            toast.success("Notulensi berhasil dihapus", { id: toastId })
+            router.refresh()
+        } else {
+            toast.error(res.error || "Gagal menghapus", { id: toastId })
+        }
+    }
     if (viewMode === "grid") {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-                {filteredData.map((group) => (
-                    <div
-                        key={group.groupKey}
-                        className="bg-white rounded-[24px] border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
-                    >
-                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <FileText size={80} className="text-[#125d72]" />
-                        </div>
-
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="space-y-1">
-                                <Badge className="bg-[#125d72]/10 text-[#125d72] border-none text-[10px] font-black uppercase tracking-widest px-3 py-1">
-                                    #{group.meetingNumber} / {group.meetingYear}
-                                </Badge>
-                                <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
-                                    {group.agendas.length} Materi Agenda
-                                </h3>
+                {filteredData.map((group) => {
+                    const firstAgenda = group.agendas && group.agendas[0]
+                    return (
+                        <div
+                            key={group.groupKey}
+                            className="bg-white rounded-[24px] border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <FileText size={80} className="text-[#125d72]" />
                             </div>
-                            <StatusBadge status={group.status} />
-                        </div>
 
-                        <div className="space-y-3 mb-6">
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <Calendar className="h-3.5 w-3.5 text-[#14a2ba]" />
-                                <span className="text-[11px] font-bold uppercase tracking-tight">
-                                    {group.executionDate
-                                        ? format(new Date(group.executionDate), "EEEE, dd MMM yyyy", { locale: id })
-                                        : "TBD"}
-                                </span>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="space-y-1">
+                                    <Badge className="bg-[#125d72]/10 text-[#125d72] border-none text-[10px] font-black uppercase tracking-widest px-3 py-1">
+                                        #{group.meetingNumber} / {group.meetingYear}
+                                    </Badge>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase leading-tight mt-2">
+                                        {group.agendas.length} Materi Agenda
+                                    </h3>
+                                </div>
+                                <StatusBadge status={group.status} />
                             </div>
-                            <div className="flex items-center gap-2 text-slate-500">
-                                <MapPin className="h-3.5 w-3.5 text-[#14a2ba]" />
-                                <span className="text-[11px] font-bold uppercase tracking-tight truncate">
-                                    {group.location || "Lokasi belum diatur"}
-                                </span>
+
+                            <div className="space-y-3 mb-6">
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <Calendar className="h-3.5 w-3.5 text-[#14a2ba]" />
+                                    <span className="text-[11px] font-bold uppercase tracking-tight">
+                                        {group.executionDate
+                                            ? format(new Date(group.executionDate), "EEEE, dd MMM yyyy", { locale: id })
+                                            : "TBD"}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <MapPin className="h-3.5 w-3.5 text-[#14a2ba]" />
+                                    <span className="text-[11px] font-bold uppercase tracking-tight truncate">
+                                        {group.location || "Lokasi belum diatur"}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                                <Button
+                                    onClick={() =>
+                                        router.push(
+                                            `/pelaksanaan-rapat/rakordir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
+                                        )
+                                    }
+                                    className="flex-1 bg-[#125d72] hover:bg-[#0e4b5d] text-white rounded-xl h-10 text-[10px] font-black uppercase tracking-widest gap-2 shadow-lg shadow-[#125d72]/20 transition-transform active:scale-95"
+                                >
+                                    <Settings2 className="h-3 w-3" /> Kelola Sesi Rapat
+                                </Button>
+
+                                <ActionDropdown
+                                    group={group}
+                                    isExporting={isExporting}
+                                    onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
+                                    onOpenUpload={() => firstAgenda && handleOpenUpload(firstAgenda.id, group.meetingNumber)}
+                                    onOpenDelete={handleDeleteFinal}
+                                />
                             </div>
                         </div>
-
-                        <div className="flex gap-2">
-                            <Button
-                                onClick={() =>
-                                    router.push(
-                                        `/pelaksanaan-rapat/rakordir/live?number=${group.meetingNumber}&year=${group.meetingYear}`
-                                    )
-                                }
-                                className="flex-1 bg-[#125d72] hover:bg-[#0e4b5d] text-white rounded-xl h-10 text-[10px] font-black uppercase tracking-widest gap-2 shadow-lg shadow-[#125d72]/20 transition-transform active:scale-95"
-                            >
-                                <Settings2 className="h-3 w-3" /> Kelola Sesi Rapat
-                            </Button>
-
-                            <ActionDropdown
-                                group={group}
-                                onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
-                                onUpload={() => handleOpenUpload(group)}
-                                isExporting={isExporting}
-                            />
-                        </div>
-                    </div>
-                ))}
+                    )
+                })}
 
                 {/* ✅ Render Dialog di Grid View */}
                 <UploadNotulensiDialog
-                    agenda={selectedGroup}
+                    agendaId={selectedAgendaId}
+                    meetingNumber={selectedMeetingNumber}
                     open={uploadOpen}
-                    onOpenChange={setUploadOpen}
+                    onOpenChange={handleCloseUpload}
                 />
             </div>
         )
@@ -217,40 +246,44 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredData.map((group) => (
-                                <TableRow key={group.groupKey} className="hover:bg-slate-50/50 transition-colors group">
-                                    <TableCell>
-                                        <div className="flex items-center gap-2 font-black text-slate-800 text-xs">
-                                            <Hash className="h-3 w-3 text-[#14a2ba]" />
-                                            {group.meetingNumber} / {group.meetingYear}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-[11px] font-bold text-slate-600">
-                                        {group.executionDate
-                                            ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id })
-                                            : "-"}
-                                    </TableCell>
-                                    <TableCell className="text-[11px] font-bold text-slate-500 italic truncate max-w-50">
-                                        {group.location || "-"}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] font-black px-3">
-                                            {group.agendas.length} MATERI
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <StatusBadge status={group.status} />
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <ActionDropdown
-                                            group={group}
-                                            onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
-                                            onUpload={() => handleOpenUpload(group)}
-                                            isExporting={isExporting}
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                            filteredData.map((group) => {
+                                const firstAgenda = group.agendas && group.agendas[0]
+                                return (
+                                    <TableRow key={group.groupKey} className="hover:bg-slate-50/50 transition-colors group">
+                                        <TableCell>
+                                            <div className="flex items-center gap-2 font-black text-slate-800 text-xs">
+                                                <Hash className="h-3 w-3 text-[#14a2ba]" />
+                                                {group.meetingNumber} / {group.meetingYear}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-[11px] font-bold text-slate-600">
+                                            {group.executionDate
+                                                ? format(new Date(group.executionDate), "dd MMM yyyy", { locale: id })
+                                                : "-"}
+                                        </TableCell>
+                                        <TableCell className="text-[11px] font-bold text-slate-500 italic truncate max-w-50">
+                                            {group.location || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <Badge className="bg-slate-100 text-slate-600 border-none text-[10px] font-black px-3">
+                                                {group.agendas.length} MATERI
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <StatusBadge status={group.status} />
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <ActionDropdown
+                                                group={group}
+                                                isExporting={isExporting}
+                                                onExport={() => handleExportRakordir(group.meetingNumber, group.meetingYear)}
+                                                onOpenUpload={() => firstAgenda && handleOpenUpload(firstAgenda.id, group.meetingNumber)}
+                                                onOpenDelete={handleDeleteFinal}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })
                         )}
                     </TableBody>
                 </Table>
@@ -258,9 +291,10 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
 
             {/* ✅ Render Dialog di Table View */}
             <UploadNotulensiDialog
-                agenda={selectedGroup}
+                agendaId={selectedAgendaId}
+                meetingNumber={selectedMeetingNumber}
                 open={uploadOpen}
-                onOpenChange={setUploadOpen}
+                onOpenChange={handleCloseUpload}
             />
         </div>
     )
@@ -269,54 +303,39 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
 // ✅ Update ActionDropdown dengan logika tombol kondisional
 function ActionDropdown({
     group,
-    onExport,
-    onUpload,
     isExporting,
+    onExport,
+    onOpenUpload,
+    onOpenDelete,
 }: {
     group: any
-    onExport: () => void
-    onUpload: () => void
     isExporting: boolean
+    onExport: () => void
+    onOpenUpload: () => void
+    onOpenDelete: (agendaId: string, risalahPath: string) => void
 }) {
     const router = useRouter()
 
     // ✅ 1. Cek keberadaan file pada agenda pertama di grup tersebut
-    const finalMinutesPath = group.agendas[0]?.risalahTtd
+    const firstAgenda = group.agendas && group.agendas[0]
+    const hasRisalah = !!firstAgenda?.risalahTtd
+    const risalahPath = firstAgenda?.risalahTtd
 
     // ✅ 2. Handler Download
     const handleDownloadFinal = async () => {
-        if (!finalMinutesPath) {
+        if (!risalahPath) {
             toast.error("File tidak ditemukan")
             return
         }
 
-        const res = await getSignedFileUrl(finalMinutesPath)
+        toast.info("Mengunduh Notulensi Final...")
+        const res = await getSignedFileUrl(risalahPath)
         if (res.success && res.url) {
             // Membuka file di tab baru
             window.open(res.url, "_blank")
-            toast.success("Membuka file notulensi...")
+            toast.success("File berhasil dibuka")
         } else {
             toast.error("Gagal mendapatkan link download")
-        }
-    }
-
-    // ✅ 3. Handler Hapus (Dengan Dialog Konfirmasi)
-    const handleDeleteFinal = async () => {
-        // Menggunakan confirm bawaan browser agar ringkas,
-        // atau bisa gunakan AlertDialog dari shadcn jika sudah ada.
-        const confirmDelete = window.confirm(
-            "Apakah Anda yakin ingin menghapus Notulensi Final ini? Status agenda akan dikembalikan ke 'DIJADWALKAN'."
-        )
-
-        if (!confirmDelete) return
-
-        const toastId = toast.loading("Sedang menghapus...")
-        const res = await deleteFinalMinutesAction(group.agendas[0].id)
-
-        if (res.success) {
-            toast.success("Notulensi berhasil dihapus", { id: toastId })
-        } else {
-            toast.error(res.error || "Gagal menghapus", { id: toastId })
         }
     }
 
@@ -342,32 +361,48 @@ function ActionDropdown({
                     <span className="text-xs font-bold text-slate-700">Kelola Sesi Rapat</span>
                 </DropdownMenuItem>
 
-                {/* ✅ KONDISI: JIKA BELUM UPLOAD */}
-                {!finalMinutesPath ? (
-                    <DropdownMenuItem
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
-                        onClick={onUpload}
-                    >
-                        <FileUp className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
-                        <span className="text-xs font-bold text-slate-700">Upload Notulensi Final</span>
-                    </DropdownMenuItem>
-                ) : (
-                    /* ✅ KONDISI: JIKA SUDAH UPLOAD (DOWNLOAD + DELETE) */
+                <DropdownMenuSeparator />
+
+                {/* ✅ KONDISI: JIKA SUDAH ADA NOTULENSI FINAL */}
+                {hasRisalah ? (
                     <>
+                        <DropdownMenuLabel className="text-[9px] uppercase opacity-50 px-3 py-1">
+                            Notulensi Final (TTD)
+                        </DropdownMenuLabel>
+                        <div className="flex items-center gap-1 px-2 py-1">
+                            <div
+                                className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-green-50 rounded-md text-green-700 transition-colors"
+                                onClick={handleDownloadFinal}
+                            >
+                                <FileCheck className="h-4 w-4" />
+                                <span className="text-xs font-bold">Download File</span>
+                            </div>
+                            {/* Tombol Hapus */}
+                            <div
+                                className="flex-none p-1.5 cursor-pointer hover:bg-red-50 rounded-md text-red-600 transition-colors"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (firstAgenda) {
+                                        onOpenDelete(firstAgenda.id, risalahPath)
+                                    }
+                                }}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    /* ✅ KONDISI: JIKA BELUM ADA NOTULENSI FINAL */
+                    <>
+                        <DropdownMenuLabel className="text-[9px] uppercase opacity-50 px-3 py-1">
+                            Notulensi Final (TTD)
+                        </DropdownMenuLabel>
                         <DropdownMenuItem
                             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-blue-50 group"
-                            onClick={handleDownloadFinal}
+                            onClick={onOpenUpload}
                         >
-                            <FileDown className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
-                            <span className="text-xs font-bold text-slate-700">Download Notulensi Final</span>
-                        </DropdownMenuItem>
-
-                        <DropdownMenuItem
-                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-red-50 group"
-                            onClick={handleDeleteFinal}
-                        >
-                            <Trash2 className="h-4 w-4 text-red-500 group-hover:text-red-700" />
-                            <span className="text-xs font-bold text-red-600">Hapus Notulensi</span>
+                            <UploadCloud className="h-4 w-4 text-blue-600" />
+                            <span className="text-xs font-bold text-slate-700">Upload Notulensi Final</span>
                         </DropdownMenuItem>
                     </>
                 )}
@@ -393,17 +428,30 @@ function ActionDropdown({
     )
 }
 
+
 function StatusBadge({ status }: { status: string }) {
-    const isCompleted = status === "COMPLETED" || status === "SELESAI"
+    // 1. Cek Status Selesai (Mencakup RAPAT_SELESAI, COMPLETED, dll)
+    if (status === "RAPAT_SELESAI" || status === "SELESAI_RAPAT" || status === "COMPLETED" || status === "SELESAI") {
+        return (
+            <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto px-3 py-1">
+                <CheckCircle2 className="h-2.5 w-2.5" /> RAPAT SELESAI
+            </Badge>
+        )
+    }
+
+    // 2. Cek Status Sedang Berlangsung
+    if (status === "SEDANG_BERLANGSUNG" || status === "ON_PROGRESS") {
+        return (
+            <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto px-3 py-1">
+                <Clock className="h-2.5 w-2.5" /> SEDANG BERLANGSUNG
+            </Badge>
+        )
+    }
+
+    // 3. Default (Draft / Dijadwalkan)
     return (
-        <Badge
-            className={cn(
-                "border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto px-3 py-1",
-                isCompleted ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
-            )}
-        >
-            {isCompleted ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
-            {isCompleted ? "SELESAI" : "DRAF"}
+        <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-none text-[9px] font-black flex w-fit items-center gap-1 mx-auto px-3 py-1">
+            <Clock className="h-2.5 w-2.5" /> DIJADWALKAN
         </Badge>
     )
 }

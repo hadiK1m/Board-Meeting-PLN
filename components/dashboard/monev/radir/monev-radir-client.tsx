@@ -34,11 +34,9 @@ import {
     LayoutGrid,
     List,
     Calendar,
-    Plus,
-    Paperclip,
-    ArrowRight,
     Target,
-    Phone
+    Phone,
+    ArrowRight
 } from "lucide-react"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -69,6 +67,7 @@ interface MonevItem {
     position: string | null
     phone: string | null
     risalahTtd: string | null
+    petikanRisalah: string | null // ✅ Added: Agar data petikan risalah terbaca
     monevStatus: string | null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meetingDecisions: DecisionItem[] | any
@@ -113,7 +112,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
     }
 
     const handleDownloadRisalah = async (path: string | null) => {
-        if (!path) return toast.error("File risalah belum tersedia.")
+        if (!path) return toast.error("File belum tersedia.")
         try {
             const res = await getRisalahDownloadUrlAction(path)
             if (res.success && res.url) window.open(res.url, "_blank")
@@ -139,11 +138,9 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                 </p>
             </div>
             {/* --- TOOLBAR SECTION --- */}
-            {/* Tambahkan bg-white, border, shadow-sm, padding (p-4), dan rounded-xl */}
             <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center bg-white border border-slate-200 shadow-sm p-4 rounded-xl">
                 <div className="relative w-full lg:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    {/* Input background diubah jadi bg-slate-50 agar kontras dengan card putih */}
                     <Input
                         placeholder="Cari Judul, Nomor Rapat..."
                         className="pl-10 h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:border-[#125d72] focus:ring-[#125d72] transition-all"
@@ -247,7 +244,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                     ))}
                 </div>
             ) : (
-                // TABLE VIEW (RAPIH & MODERN)
+                // TABLE VIEW
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <Table>
                         <TableHeader className="bg-linear-to-r from-slate-50 to-slate-100">
@@ -259,7 +256,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                                     Narahubung
                                 </TableHead>
                                 <TableHead className="w-[12%] text-[10px] font-black uppercase tracking-wider text-slate-600 text-center">
-                                    Risalah TTD
+                                    Petikan Risalah
                                 </TableHead>
                                 <TableHead className="w-[25%] text-[10px] font-black uppercase tracking-wider text-slate-600">
                                     Detail Keputusan
@@ -286,7 +283,8 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                                         className="hover:bg-slate-50/70 transition-colors border-b border-slate-100 last:border-none group"
                                     >
                                         {/* 1. PEMRAKARSA & AGENDA */}
-                                        <TableCell className="align-top py-5 pl-6">
+                                        {/* Fix: min-w agar tidak terlalu sempit, whitespace-normal agar wrap */}
+                                        <TableCell className="align-top py-5 pl-6 min-w-62.5">
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2">
                                                     <Badge
@@ -300,7 +298,7 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                                                     </span>
                                                 </div>
                                                 <p
-                                                    className="font-semibold text-sm text-slate-800 line-clamp-2 leading-tight group-hover:text-[#125d72] transition-colors"
+                                                    className="font-semibold text-sm text-slate-800 leading-tight group-hover:text-[#125d72] transition-colors whitespace-normal wrap-break-word"
                                                     title={item.title}
                                                 >
                                                     {item.title}
@@ -333,14 +331,14 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
                                             </div>
                                         </TableCell>
 
-                                        {/* 3. RISALAH TTD */}
+                                        {/* 3. PETIKAN RISALAH (Menggunakan data petikanRisalah) */}
                                         <TableCell className="align-top py-5 text-center">
-                                            {item.risalahTtd ? (
+                                            {item.petikanRisalah ? (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     className="h-8 text-[10px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                                                    onClick={() => handleDownloadRisalah(item.risalahTtd)}
+                                                    onClick={() => handleDownloadRisalah(item.petikanRisalah)}
                                                 >
                                                     <Download className="h-3.5 w-3.5 mr-1.5" /> Unduh
                                                 </Button>
@@ -439,21 +437,15 @@ export function MonevRadirClient({ initialData }: MonevRadirClientProps) {
 
                                                     {item.meetingNumber !== "MANUAL" && (
                                                         <>
-                                                            <DropdownMenuItem
-                                                                onClick={() => window.open(`/pelaksanaan-rapat/radir/live?number=${item.meetingNumber}&year=${item.meetingYear}`, '_blank')}
-                                                                className="cursor-pointer gap-2.5 py-2.5 px-3 rounded-lg hover:bg-slate-100 focus:bg-slate-100"
-                                                            >
-                                                                <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
-                                                                <span className="text-xs font-bold text-slate-700">Lihat Notulensi</span>
-                                                            </DropdownMenuItem>
 
-                                                            {item.risalahTtd && (
+
+                                                            {item.petikanRisalah && (
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleDownloadRisalah(item.risalahTtd)}
+                                                                    onClick={() => handleDownloadRisalah(item.petikanRisalah)}
                                                                     className="cursor-pointer gap-2.5 py-2.5 px-3 rounded-lg hover:bg-slate-100 focus:bg-slate-100"
                                                                 >
                                                                     <Download className="h-3.5 w-3.5 text-slate-500" />
-                                                                    <span className="text-xs font-bold text-slate-700">Unduh Risalah</span>
+                                                                    <span className="text-xs font-bold text-slate-700">Unduh Petikan</span>
                                                                 </DropdownMenuItem>
                                                             )}
                                                         </>

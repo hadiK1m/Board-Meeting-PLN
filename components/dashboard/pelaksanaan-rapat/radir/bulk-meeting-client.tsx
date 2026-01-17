@@ -30,7 +30,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData"
-import { saveMeetingRisalahAction } from "@/server/actions/meeting-actions"
+import { saveMeetingRisalahAction, finishMeetingAction } from "@/server/actions/meeting-actions"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
 import { Agenda } from "@/db/schema/agendas"
 import { cn } from "@/lib/utils"
@@ -186,6 +186,7 @@ export function BulkMeetingClient({
                 localStorage.setItem("lastRisalahGroupId", groupId)
             }
 
+            // 1. Simpan Konten Risalah per Agenda
             const savePromises = agendas.map((agenda) => {
                 const draft = specificDrafts[agenda.id];
                 const considerationsString = draft.considerations
@@ -201,7 +202,7 @@ export function BulkMeetingClient({
                     meetingNumber: initialMeetingNumber,
                     meetingYear: initialMeetingYear,
                     pimpinanRapat: globalDraft.pimpinanRapat as Option[],
-                    attendanceData: globalDraft.attendanceData, // Ini sekarang pasti berisi data Hadir
+                    attendanceData: globalDraft.attendanceData,
                     guestParticipants: globalDraft.guestParticipants,
                     executiveSummary: draft.executiveSummary,
                     considerations: considerationsString,
@@ -213,8 +214,25 @@ export function BulkMeetingClient({
             });
 
             const results = await Promise.all(savePromises);
+
+            // 2. Jika Berhasil Disimpan, Ubah Status Menjadi RAPAT_SELESAI
             if (results.every(res => res.success)) {
-                toast.success("Progress Berhasil Disimpan Ke Seluruh Agenda");
+
+                // --- KODE BARU DIMULAI DARI SINI ---
+                if (initialMeetingNumber && initialMeetingYear) {
+                    const finishRes = await finishMeetingAction(initialMeetingNumber, initialMeetingYear)
+
+                    if (finishRes.success) {
+                        toast.success("Risalah disimpan & Status Rapat Selesai")
+                        router.push("/monev/radir") // Opsional: Redirect langsung ke Monev
+                    } else {
+                        toast.error("Risalah tersimpan, tapi gagal update status selesai")
+                    }
+                } else {
+                    toast.success("Progress Berhasil Disimpan (Tanpa Finish)")
+                }
+                // --- KODE BARU SELESAI ---
+
                 router.refresh()
             } else {
                 toast.error("Gagal menyimpan beberapa agenda.");
@@ -222,6 +240,33 @@ export function BulkMeetingClient({
         } catch (err: unknown) {
             console.error(err)
             toast.error("Terjadi kesalahan sistem.");
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    const handleFinishMeeting = async () => {
+        if (!initialMeetingNumber || !initialMeetingYear) {
+            toast.error("Nomor referensi rapat tidak ditemukan.")
+            return
+        }
+
+        const confirm = window.confirm("Apakah Anda yakin ingin menyelesaikan rapat ini? Status akan berubah menjadi RAPAT_SELESAI dan masuk ke tahap Monev.")
+        if (!confirm) return
+
+        setIsSubmitting(true)
+        try {
+            const result = await finishMeetingAction(initialMeetingNumber, initialMeetingYear)
+            if (result.success) {
+                toast.success("Rapat berhasil diselesaikan!")
+                // Redirect ke halaman Monev atau kembali ke dashboard
+                router.push("/monev/radir")
+            } else {
+                toast.error(result.error || "Gagal menyelesaikan rapat.")
+            }
+        } catch (error) {
+            console.error(error)
+            toast.error("Terjadi kesalahan sistem.")
         } finally {
             setIsSubmitting(false)
         }
@@ -340,7 +385,25 @@ export function BulkMeetingClient({
                                 const currentIndex = agendas.findIndex(a => a.id === activeAgendaId)
                                 const nextAgenda = agendas[currentIndex + 1]
                                 if (nextAgenda) return <Button size="lg" className="w-full max-w-md h-14 bg-[#125d72] text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl gap-3 transition-transform active:scale-95" onClick={() => setActiveAgendaId(nextAgenda.id)}>BAHAS AGENDA BERIKUTNYA <ChevronRight className="h-5 w-5" /></Button>
-                                return <div className="p-8 bg-green-50 border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center text-center w-full max-w-md"><CheckCircle2 className="h-8 w-8 text-green-600 mb-2" /><p className="text-xs font-black text-green-700 uppercase tracking-widest">Sesi Selesai</p><p className="text-[10px] text-green-600/70 font-bold mt-1">Seluruh agenda dalam sesi ini telah dibahas.</p></div>
+                                return (
+                                    <div className="p-8 bg-green-50 border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center text-center w-full max-w-md space-y-4">
+                                        <div>
+                                            <CheckCircle2 className="h-8 w-8 text-green-600 mb-2 mx-auto" />
+                                            <p className="text-xs font-black text-green-700 uppercase tracking-widest">Sesi Selesai</p>
+                                            <p className="text-[10px] text-green-600/70 font-bold mt-1">Seluruh agenda dalam sesi ini telah dibahas.</p>
+                                        </div>
+
+                                        {/* --- TOMBOL PENYELESAIAN --- */}
+                                        <Button
+                                            onClick={handleFinishMeeting}
+                                            disabled={isSubmitting}
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold"
+                                        >
+                                            {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+                                            SELESAIKAN RAPAT & KE MONEV
+                                        </Button>
+                                    </div>
+                                )
                             })()}
                         </div>
                     </div>

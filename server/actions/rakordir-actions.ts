@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server"
 import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { revalidatePath } from "next/cache"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
+import { randomUUID } from "crypto"
 
 // --- HELPER: AUTH GUARD ---
 async function assertAuthenticated() {
@@ -299,5 +300,112 @@ export async function updateRakordirLiveAction(payloads: any[]) {
     } catch (error: any) {
         console.error("[ACTION-LIVE-ERROR]:", error)
         return { success: false, error: "Gagal menyimpan data pelaksanaan." }
+    }
+}
+
+export async function uploadRisalahRakordirAction(agendaId: string, formData: FormData) {
+    try {
+        // 1. Auth Check
+        const { supabase } = await assertAuthenticated()
+
+        const file = formData.get("file") as File
+        if (!file || file.size === 0) throw new Error("File tidak ditemukan")
+
+        // 2. Ambil Data Agenda saat ini untuk mendapatkan Nomor & Tahun Rapat
+        const currentAgenda = await db.query.agendas.findFirst({
+            where: eq(agendas.id, agendaId),
+        })
+
+        if (!currentAgenda) throw new Error("Agenda tidak ditemukan")
+
+        // 3. Upload File ke Supabase
+        const fileExt = file.name.split(".").pop()
+
+        // Path penyimpanan: risalah-rakordir/TAHUN/NOMOR/UUID.pdf
+        const fileName = `risalah-rakordir/${currentAgenda.meetingYear}/${currentAgenda.meetingNumber}/${randomUUID()}.${fileExt}`
+
+        // ✅ BUCKET NAME DIUBAH MENJADI 'agenda-attachments'
+        const { error: uploadError } = await supabase.storage
+            .from("agenda-attachments")
+            .upload(fileName, file)
+
+        if (uploadError) throw new Error("Gagal upload ke storage: " + uploadError.message)
+
+        // 4. BULK UPDATE: Update SEMUA agenda dalam sesi rapat tersebut
+        // Logic: Cari agenda dengan Meeting Number, Year, dan Type yang sama
+        await db.update(agendas)
+            .set({
+                risalahTtd: fileName, // Link file masuk ke semua agenda
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(agendas.meetingNumber, currentAgenda.meetingNumber!),
+                    eq(agendas.meetingYear, currentAgenda.meetingYear!),
+                    eq(agendas.meetingType, "RAKORDIR")
+                )
+            )
+
+        // 5. Revalidate halaman terkait
+        revalidatePath("/pelaksanaan-rapat/rakordir")
+        revalidatePath("/monev/rakordir") // Agar muncul di Monev
+
+        return { success: true, message: "Notulensi Final berhasil diupload untuk seluruh agenda sesi ini." }
+
+    } catch (error: any) {
+        console.error("Upload Error:", error)
+        return { success: false, error: error.message }
+    }
+}
+
+export async function deleteRisalahRakordirAction(agendaId: string) {
+    try {
+        const { supabase } = await assertAuthenticated()
+
+        // 1. Ambil data agenda untuk mendapatkan path file & identitas rapat
+        const currentAgenda = await db.query.agendas.findFirst({
+            where: eq(agendas.id, agendaId),
+        })
+
+        if (!currentAgenda) throw new Error("Agenda tidak ditemukan")
+
+        const filePath = currentAgenda.risalahTtd
+
+        // 2. Hapus file fisik di Storage (jika ada)
+        if (filePath) {
+            const cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath
+            const { error: storageError } = await supabase.storage
+                .from("agenda-attachments")
+                .remove([cleanPath])
+
+            if (storageError) {
+                console.error("[STORAGE DELETE ERROR]", storageError)
+            }
+        }
+
+        // 3. BULK UPDATE DATABASE
+        // Kosongkan kolom risalahTtd untuk SEMUA agenda di sesi ini
+        // TAPI JANGAN UBAH STATUS (agar tetap muncul di Monev sebagai 'RAPAT_SELESAI')
+        await db.update(agendas)
+            .set({
+                risalahTtd: null,
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(agendas.meetingNumber, currentAgenda.meetingNumber!),
+                    eq(agendas.meetingYear, currentAgenda.meetingYear!),
+                    eq(agendas.meetingType, "RAKORDIR")
+                )
+            )
+
+        revalidatePath("/pelaksanaan-rapat/rakordir")
+        revalidatePath("/monev/rakordir")
+
+        return { success: true, message: "Notulensi berhasil dihapus dari sesi ini." }
+
+    } catch (error: any) {
+        console.error("[DELETE_RISALAH_ERROR]", error)
+        return { success: false, error: error.message }
     }
 }

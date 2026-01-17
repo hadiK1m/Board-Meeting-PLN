@@ -15,19 +15,22 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { uploadAgendaFileAction } from "@/server/actions/agenda-actions"
+// Pastikan Anda sudah membuat action ini di langkah sebelumnya
+import { uploadRisalahRakordirAction } from "@/server/actions/rakordir-actions"
 
 interface Props {
-    agenda: { id: string; title: string } | null
+    agendaId: string | null        // ✅ Diubah: Menerima ID string
+    meetingNumber: string | null   // ✅ Diubah: Menerima Nomor Rapat untuk display
     open: boolean
     onOpenChange: (open: boolean) => void
 }
 
-export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
+export function UploadNotulensiDialog({ agendaId, meetingNumber, open, onOpenChange }: Props) {
     const [file, setFile] = useState<File | null>(null)
     const [isPending, setIsPending] = useState(false)
 
-    if (!agenda) return null
+    // Jika agendaId null, jangan render konten (prevents error)
+    if (!agendaId) return null
 
     const handleUpload = async () => {
         if (!file) {
@@ -39,12 +42,16 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
         try {
             const formData = new FormData()
             formData.append("file", file)
-            formData.append("agendaId", agenda.id)
-            formData.append("fileType", "risalah_ttd")
 
-            const res = await uploadAgendaFileAction(formData)
+            // Panggil Server Action khusus Rakordir (Bulk Upload)
+            // Action ini akan mencari agenda berdasarkan ID, lalu mengupdate 
+            // semua agenda lain dengan meetingNumber yang sama.
+            const res = await uploadRisalahRakordirAction(agendaId, formData)
+
             if (res.success) {
-                toast.success("Notulensi Final Berhasil Diunggah!")
+                toast.success("Notulensi Final Berhasil Diunggah!", {
+                    description: "File telah tertaut ke semua agenda dalam sesi ini."
+                })
                 onOpenChange(false)
                 setFile(null)
             } else {
@@ -52,7 +59,7 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
             }
         } catch (err) {
             console.error("Upload error:", err)
-            toast.error("Gagal mengunggah berkas")
+            toast.error("Terjadi kesalahan saat mengunggah")
         } finally {
             setIsPending(false)
         }
@@ -68,9 +75,9 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
                     </DialogTitle>
 
                     <DialogDescription className="text-xs font-medium italic">
-                        Unggah berkas risalah rapat (PDF) yang telah ditandatangani untuk sesi: <br />
+                        Unggah berkas risalah rapat (PDF) yang telah ditandatangani untuk: <br />
                         <span className="font-bold text-slate-800 not-italic uppercase block mt-1">
-                            {agenda.title}
+                            Sesi Rapat Rakordir #{meetingNumber || "-"}
                         </span>
                     </DialogDescription>
                 </DialogHeader>
@@ -85,7 +92,6 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
                             "relative border-2 border-dashed rounded-2xl transition-all duration-300 min-h-40 flex items-center justify-center",
                             file ? "border-emerald-500 bg-emerald-50/30" : "border-slate-200 bg-slate-50/50 hover:border-[#14a2ba]"
                         )}>
-                            {/* 1. Perbaikan: Tambahkan w-full h-full dan pastikan z-index benar */}
                             <Input
                                 type="file"
                                 accept=".pdf"
@@ -93,7 +99,6 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                             />
 
-                            {/* 2. Perbaikan: Tambahkan pointer-events-none agar klik tembus ke Input */}
                             <div className="py-12 flex flex-col items-center justify-center text-center px-4 pointer-events-none">
                                 {!file ? (
                                     <>
@@ -117,7 +122,6 @@ export function UploadNotulensiDialog({ agenda, open, onOpenChange }: Props) {
                                 )}
                             </div>
 
-                            {/* Tombol X tetap harus bisa diklik, maka z-20 (di atas input) */}
                             {file && (
                                 <Button
                                     type="button"

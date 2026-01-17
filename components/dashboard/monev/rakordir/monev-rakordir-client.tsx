@@ -15,7 +15,7 @@ import {
 import {
     Search, Filter, MoreHorizontal, Edit, Download, ExternalLink, CheckCircle2,
     Clock, LayoutGrid, List, Calendar, Plus, Paperclip, ArrowRight, Target,
-    Phone, FileText // Tambahkan FileText untuk icon petikan
+    Phone, FileText
 } from "lucide-react"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -48,7 +48,7 @@ interface MonevItem {
     position: string | null
     phone: string | null
     risalahTtd: string | null
-    petikanRisalah: string | null // ✅ Tambahkan field petikanRisalah
+    petikanRisalah: string | null
     monevStatus: string | null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meetingDecisions: DecisionItem[] | any
@@ -92,25 +92,13 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
     }
 
     const handleDownloadRisalah = async (path: string | null) => {
-        if (!path) return toast.error("File risalah belum tersedia.")
+        if (!path) return toast.error("File belum tersedia.")
         try {
             const res = await getRisalahDownloadUrlAction(path)
             if (res.success && res.url) window.open(res.url, "_blank")
             else toast.error(res.error || "Gagal")
         } catch (_) {
             toast.error("Gagal mendownload file.")
-        }
-    }
-
-    // ✅ Fungsi baru untuk membuka petikan risalah
-    const handleOpenPetikanRisalah = async (path: string | null) => {
-        if (!path) return toast.error("Petikan risalah belum tersedia.")
-        try {
-            const res = await getRisalahDownloadUrlAction(path)
-            if (res.success && res.url) window.open(res.url, "_blank")
-            else toast.error(res.error || "Gagal membuka petikan")
-        } catch (_) {
-            toast.error("Gagal membuka petikan risalah.")
         }
     }
 
@@ -173,17 +161,17 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                 </div>
                                 <h3 className="font-bold text-slate-800 leading-snug mb-3 line-clamp-2 min-h-10" title={item.title}>{item.title}</h3>
 
-                                {/* ✅ Tambahkan Petikan Risalah di Card View */}
-                                {item.petikanRisalah && (
+                                {/* ✅ Notulensi Final di Card View */}
+                                {item.risalahTtd && (
                                     <div className="mb-3">
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             className="w-full h-8 text-[10px] font-bold border-slate-200 text-slate-700 hover:text-[#125d72] hover:border-[#125d72]"
-                                            onClick={() => handleOpenPetikanRisalah(item.petikanRisalah)}
+                                            onClick={() => handleDownloadRisalah(item.risalahTtd)}
                                         >
-                                            <FileText className="h-3 w-3 mr-2" />
-                                            BUKA PETIKAN
+                                            <Download className="h-3 w-3 mr-2" />
+                                            DOWNLOAD NOTULENSI
                                         </Button>
                                     </div>
                                 )}
@@ -209,13 +197,13 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-[25%] text-[10px] font-black uppercase text-slate-500">Pemrakarsa & Agenda</TableHead>
+                                <TableHead className="w-[25%] text-[10px] font-black uppercase text-slate-500 pl-6">Pemrakarsa & Agenda</TableHead>
                                 <TableHead className="w-[15%] text-[10px] font-black uppercase text-slate-500">Narahubung</TableHead>
-                                {/* ✅ KOLOM BARU: PETIKAN RISALAH */}
-                                <TableHead className="w-[15%] text-[10px] font-black uppercase text-slate-500 text-center">Petikan Risalah</TableHead>
+                                {/* ✅ Ganti Petikan Risalah -> Notulensi Final */}
+                                <TableHead className="w-[15%] text-[10px] font-black uppercase text-slate-500 text-center">Notulensi Final</TableHead>
                                 <TableHead className="w-[25%] text-[10px] font-black uppercase text-slate-500">Detail Arahan</TableHead>
                                 <TableHead className="w-[10%] text-[10px] font-black uppercase text-slate-500 text-center">Status Monev</TableHead>
-                                <TableHead className="w-[10%] text-[10px] font-black uppercase text-slate-500 text-right">Aksi</TableHead>
+                                <TableHead className="w-[10%] text-[10px] font-black uppercase text-slate-500 text-right pr-6">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -227,17 +215,21 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
 
                                 return (
                                     <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <TableCell className="align-top py-4">
-                                            <div className="space-y-1.5">
+                                        {/* ✅ Kolom Agenda Rapih (min-w, wrap) */}
+                                        <TableCell className="align-top py-5 pl-6 min-w-62.5">
+                                            <div className="space-y-2">
                                                 <div className="flex items-center gap-2">
                                                     <Badge variant="outline" className="text-[9px] font-black border-slate-300 text-slate-500">#{item.meetingNumber ?? "-"}</Badge>
                                                     <span className="text-[10px] font-medium text-slate-400">{item.executionDate ? format(new Date(item.executionDate), "dd MMM yyyy", { locale: id }) : "-"}</span>
                                                 </div>
-                                                <p className="font-bold text-sm text-[#125d72] line-clamp-2 leading-snug" title={item.title}>{item.title}</p>
+                                                <p className="font-bold text-sm text-[#125d72] leading-snug whitespace-normal wrap-break-word" title={item.title}>
+                                                    {item.title}
+                                                </p>
                                                 <div className="inline-block bg-[#125d72]/5 text-[#125d72] text-[10px] font-bold px-2 py-0.5 rounded">{item.initiator || "Tanpa Pemrakarsa"}</div>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="align-top py-4">
+
+                                        <TableCell className="align-top py-5">
                                             <div className="space-y-1">
                                                 <p className="text-xs font-bold text-slate-700">{item.contactPerson || "-"}</p>
                                                 <p className="text-[10px] text-slate-500">{item.position || "-"}</p>
@@ -245,24 +237,28 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                             </div>
                                         </TableCell>
 
-                                        {/* ✅ KOLOM BARU: PETIKAN RISALAH */}
-                                        <TableCell className="align-top py-4 text-center">
-                                            {item.petikanRisalah ? (
+                                        {/* ✅ KOLOM NOTULENSI FINAL (Menggunakan risalahTtd) */}
+                                        <TableCell className="align-top py-5 text-center">
+                                            {item.risalahTtd ? (
                                                 <Button
-                                                    variant="ghost"
+                                                    variant="outline"
                                                     size="sm"
-                                                    className="h-8 px-3 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-100 rounded-lg transition-colors"
-                                                    onClick={() => handleOpenPetikanRisalah(item.petikanRisalah)}
+                                                    className="h-8 text-[10px] font-bold text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                                    onClick={() => handleDownloadRisalah(item.risalahTtd)}
                                                 >
-                                                    <FileText className="h-3.5 w-3.5 mr-1.5" />
-                                                    Buka
+                                                    <Download className="h-3.5 w-3.5 mr-1.5" /> Unduh
                                                 </Button>
                                             ) : (
-                                                <span className="text-xs text-slate-400 italic">Tidak ada</span>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-[9px] text-slate-400 bg-slate-100/80 font-semibold px-2.5 py-1"
+                                                >
+                                                    BELUM UPLOAD
+                                                </Badge>
                                             )}
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4">
+                                        <TableCell className="align-top py-5">
                                             {firstDecision ? (
                                                 <div className="space-y-3">
                                                     <div><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><Target className="h-3 w-3" /> Output</div><p className="text-xs font-medium text-slate-800 leading-relaxed">{firstDecision.targetOutput || <span className="text-slate-400 italic">Belum diisi...</span>}</p></div>
@@ -272,11 +268,11 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                             ) : <span className="text-xs text-slate-400 italic">Data arahan kosong</span>}
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4 text-center">
+                                        <TableCell className="align-top py-5 text-center">
                                             <MonevStatusBadge status={item.monevStatus} />
                                             <div className="mt-2 text-[10px] text-slate-400 font-medium">{doneCount} / {decisionCount} Item Selesai</div>
                                         </TableCell>
-                                        <TableCell className="align-top py-4 text-right">
+                                        <TableCell className="align-top py-5 text-right pr-6">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-[#125d72]"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-48 rounded-xl shadow-lg border-slate-100">
@@ -285,8 +281,8 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                                     <DropdownMenuItem onClick={() => openUpdateDialog(item)} className="cursor-pointer gap-2 py-2.5"><Edit className="h-3.5 w-3.5 text-slate-500" /><span className="text-xs font-bold text-slate-700">Update Progress</span></DropdownMenuItem>
                                                     {item.meetingNumber !== "MANUAL" && (
                                                         <>
-                                                            <DropdownMenuItem onClick={() => window.open(`/pelaksanaan-rapat/rakordir/live?number=${item.meetingNumber}&year=${item.meetingYear}`, '_blank')} className="cursor-pointer gap-2 py-2.5"><ExternalLink className="h-3.5 w-3.5 text-slate-500" /><span className="text-xs font-bold text-slate-700">Lihat Notulensi</span></DropdownMenuItem>
-                                                            {item.risalahTtd && <DropdownMenuItem onClick={() => handleDownloadRisalah(item.risalahTtd)} className="cursor-pointer gap-2 py-2.5"><Download className="h-3.5 w-3.5 text-slate-500" /><span className="text-xs font-bold text-slate-700">Download Risalah</span></DropdownMenuItem>}
+                                                            {/* Hapus opsi 'Lihat Notulensi' sesuai permintaan sebelumnya */}
+                                                            {item.risalahTtd && <DropdownMenuItem onClick={() => handleDownloadRisalah(item.risalahTtd)} className="cursor-pointer gap-2 py-2.5"><Download className="h-3.5 w-3.5 text-slate-500" /><span className="text-xs font-bold text-slate-700">Download Notulensi</span></DropdownMenuItem>}
                                                         </>
                                                     )}
                                                 </DropdownMenuContent>

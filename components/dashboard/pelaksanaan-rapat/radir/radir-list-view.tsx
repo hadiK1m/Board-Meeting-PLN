@@ -291,6 +291,9 @@ export function RadirListView({ initialData, viewMode }: RadirListViewProps) {
 // ----------------------------------------------------------------------
 // Component: Action Dropdown
 // ----------------------------------------------------------------------
+
+// ... (kode sebelumnya tetap sama)
+
 function ActionDropdown({
     group,
     isExporting,
@@ -438,8 +441,9 @@ function ActionDropdown({
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-xl border-slate-200">
+                {/* 1. UBAH LABEL DISINI */}
                 <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-3 py-2">
-                    Opsi Sesi Rapat
+                    Aksi Sesi Rapat
                 </DropdownMenuLabel>
 
                 <DropdownMenuItem
@@ -456,8 +460,8 @@ function ActionDropdown({
 
                 <DropdownMenuSeparator />
 
-                {/* LOGIKA KONDISIONAL TOMBOL RISALAH TTD */}
-                {risalahTtdPath ? (
+                {/* 2. HAPUS LOGIKA UPLOAD (ELSE BLOCK DIHILANGKAN) */}
+                {risalahTtdPath && (
                     <div className="flex items-center gap-1 px-2 py-1">
                         <div
                             className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-green-50 rounded-md text-green-700 transition-colors"
@@ -478,25 +482,10 @@ function ActionDropdown({
                             <Trash2 className="h-4 w-4" />
                         </div>
                     </div>
-                ) : (
-                    <DropdownMenuItem
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-orange-50 group"
-                        onClick={() => {
-                            if (firstAgenda) {
-                                onOpenUpload(firstAgenda.id, group.meetingNumber)
-                            } else {
-                                toast.error("Data agenda tidak ditemukan")
-                            }
-                        }}
-                    >
-                        <Upload className="h-4 w-4 text-orange-600 group-hover:text-orange-700" />
-                        <span className="text-xs font-bold text-slate-700">Upload Risalah Final (TTD)</span>
-                    </DropdownMenuItem>
                 )}
 
-                <DropdownMenuSeparator />
 
-                {/* ✅ LOGIKA TOMBOL PETIKAN RISALAH */}
+                {/* LOGIKA TOMBOL PETIKAN RISALAH (Tetap dipertahankan) */}
                 <DropdownMenuLabel className="text-[9px] uppercase opacity-50 px-3 py-1">
                     Petikan Risalah
                 </DropdownMenuLabel>
@@ -541,17 +530,6 @@ function ActionDropdown({
                     <span className="text-xs font-bold text-slate-700">Export Risalah Isi (1.2)</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
-                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-emerald-50 group"
-                    disabled={isExporting}
-                    onClick={() => handleExport("TTD")}
-                >
-                    <Download className="h-4 w-4 text-emerald-600 group-hover:text-emerald-700" />
-                    <span className="text-xs font-bold text-slate-700">Export Risalah TTD (1.3)</span>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator />
-
                 <DropdownMenuItem className="flex items-center gap-3 px-3 py-2.5 cursor-pointer focus:bg-slate-100 text-slate-400 italic">
                     <Eye className="h-4 w-4" />
                     <span className="text-[10px] font-medium">Aksi lainnya menyusul...</span>
@@ -560,6 +538,8 @@ function ActionDropdown({
         </DropdownMenu>
     )
 }
+
+// ... (sisa kode lainnya tetap sama)
 
 function StatusBadge({ status }: { status: string }) {
     if (status === "RAPAT_SELESAI" || status === "SELESAI_RAPAT" || status === "COMPLETED") {
