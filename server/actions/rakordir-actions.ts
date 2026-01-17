@@ -247,110 +247,57 @@ export async function deleteRakordirAction(id: string) {
 /**
  * 4. ACTION: UPDATE RAKORDIR (LIVE / PELAKSANAAN)
  */
+
 export async function updateRakordirLiveAction(payloads: any[]) {
-
     try {
-
-        // [SECURE] Auth Check
-
         await assertAuthenticated()
 
-
-
-        // Menggunakan Transaction agar jika satu gagal, semua batal (Atomic)
-
         await db.transaction(async (tx) => {
-
             for (const data of payloads) {
-
-                // Sanitasi input list arahan
-
                 const listArahan = Array.isArray(data.arahanDireksi) ? data.arahanDireksi : [];
 
-
-
-                // Generate keputusan rapat awal
-
                 const meetingDecisions = listArahan.map((item: any) => ({
-
                     id: item.id || crypto.randomUUID(),
-
                     text: item.text || item.value,
-
                     targetOutput: "",
-
                     currentProgress: "",
-
                     evidencePath: null,
-
                     status: "ON_PROGRESS",
-
                     lastUpdated: new Date().toISOString()
-
                 }));
 
-
-
                 await tx.update(agendas)
-
                     .set({
-
                         meetingNumber: data.number,
-
                         meetingYear: data.year,
-
                         executionDate: data.date,
-
                         meetingLocation: data.location,
-
                         startTime: data.startTime,
-
                         endTime: data.endTime,
 
-                        attendanceData: data.attendance, // Pastikan JSON valid dari client
-
-                        guestParticipants: data.guests,  // Pastikan JSON valid dari client
-
-                        pimpinanRapat: JSON.stringify(data.selectedPimpinan),
+                        // ✅ PERBAIKAN: Kirim object/array langsung untuk kolom jsonb
+                        attendanceData: data.attendance,
+                        guestParticipants: data.guests,
+                        pimpinanRapat: data.selectedPimpinan, // Hapus JSON.stringify
 
                         catatanRapat: data.catatanKetidakhadiran,
-
                         executiveSummary: data.executiveSummary,
-
                         arahanDireksi: listArahan,
-
                         meetingDecisions: meetingDecisions,
-
                         status: "RAPAT_SELESAI",
-
                         meetingStatus: "COMPLETED",
-
                         monevStatus: "ON_PROGRESS",
-
                         updatedAt: new Date(),
-
                     })
-
                     .where(eq(agendas.id, data.id))
-
             }
-
         })
 
-
-
         revalidatePath("/pelaksanaan-rapat/rakordir")
-
         revalidatePath("/monev/rakordir")
-
         return { success: true }
-
     } catch (error: any) {
-
         console.error("[ACTION-LIVE-ERROR]:", error)
-
         return { success: false, error: "Gagal menyimpan data pelaksanaan." }
-
     }
-
 }

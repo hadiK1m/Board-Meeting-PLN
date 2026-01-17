@@ -13,7 +13,9 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import {
-    Search, Filter, MoreHorizontal, Edit, Download, ExternalLink, CheckCircle2, Clock, LayoutGrid, List, Calendar, Plus, Paperclip, ArrowRight, Target, Phone
+    Search, Filter, MoreHorizontal, Edit, Download, ExternalLink, CheckCircle2,
+    Clock, LayoutGrid, List, Calendar, Plus, Paperclip, ArrowRight, Target,
+    Phone, FileText // Tambahkan FileText untuk icon petikan
 } from "lucide-react"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
@@ -46,6 +48,7 @@ interface MonevItem {
     position: string | null
     phone: string | null
     risalahTtd: string | null
+    petikanRisalah: string | null // ✅ Tambahkan field petikanRisalah
     monevStatus: string | null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     meetingDecisions: DecisionItem[] | any
@@ -96,6 +99,18 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
             else toast.error(res.error || "Gagal")
         } catch (_) {
             toast.error("Gagal mendownload file.")
+        }
+    }
+
+    // ✅ Fungsi baru untuk membuka petikan risalah
+    const handleOpenPetikanRisalah = async (path: string | null) => {
+        if (!path) return toast.error("Petikan risalah belum tersedia.")
+        try {
+            const res = await getRisalahDownloadUrlAction(path)
+            if (res.success && res.url) window.open(res.url, "_blank")
+            else toast.error(res.error || "Gagal membuka petikan")
+        } catch (_) {
+            toast.error("Gagal membuka petikan risalah.")
         }
     }
 
@@ -157,6 +172,22 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                     <MonevStatusBadge status={item.monevStatus} />
                                 </div>
                                 <h3 className="font-bold text-slate-800 leading-snug mb-3 line-clamp-2 min-h-10" title={item.title}>{item.title}</h3>
+
+                                {/* ✅ Tambahkan Petikan Risalah di Card View */}
+                                {item.petikanRisalah && (
+                                    <div className="mb-3">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full h-8 text-[10px] font-bold border-slate-200 text-slate-700 hover:text-[#125d72] hover:border-[#125d72]"
+                                            onClick={() => handleOpenPetikanRisalah(item.petikanRisalah)}
+                                        >
+                                            <FileText className="h-3 w-3 mr-2" />
+                                            BUKA PETIKAN
+                                        </Button>
+                                    </div>
+                                )}
+
                                 <div className="bg-slate-50 rounded-lg p-3 mb-4 space-y-2">
                                     {(() => {
                                         const decision = Array.isArray(item.meetingDecisions) ? item.meetingDecisions[0] : null
@@ -178,11 +209,11 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-[30%] text-[10px] font-black uppercase text-slate-500">Pemrakarsa & Agenda</TableHead>
-                                <TableHead className="w-[20%] text-[10px] font-black uppercase text-slate-500">Narahubung</TableHead>
-                                {/* KOLOM RISALAH TTD DIHAPUS */}
-                                <TableHead className="w-[30%] text-[10px] font-black uppercase text-slate-500">Detail Arahan</TableHead>
-                                {/* KOLOM EVIDENCE DIHAPUS */}
+                                <TableHead className="w-[25%] text-[10px] font-black uppercase text-slate-500">Pemrakarsa & Agenda</TableHead>
+                                <TableHead className="w-[15%] text-[10px] font-black uppercase text-slate-500">Narahubung</TableHead>
+                                {/* ✅ KOLOM BARU: PETIKAN RISALAH */}
+                                <TableHead className="w-[15%] text-[10px] font-black uppercase text-slate-500 text-center">Petikan Risalah</TableHead>
+                                <TableHead className="w-[25%] text-[10px] font-black uppercase text-slate-500">Detail Arahan</TableHead>
                                 <TableHead className="w-[10%] text-[10px] font-black uppercase text-slate-500 text-center">Status Monev</TableHead>
                                 <TableHead className="w-[10%] text-[10px] font-black uppercase text-slate-500 text-right">Aksi</TableHead>
                             </TableRow>
@@ -214,7 +245,22 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                             </div>
                                         </TableCell>
 
-                                        {/* KOLOM RISALAH TTD DIHAPUS DARI SINI */}
+                                        {/* ✅ KOLOM BARU: PETIKAN RISALAH */}
+                                        <TableCell className="align-top py-4 text-center">
+                                            {item.petikanRisalah ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 px-3 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-100 rounded-lg transition-colors"
+                                                    onClick={() => handleOpenPetikanRisalah(item.petikanRisalah)}
+                                                >
+                                                    <FileText className="h-3.5 w-3.5 mr-1.5" />
+                                                    Buka
+                                                </Button>
+                                            ) : (
+                                                <span className="text-xs text-slate-400 italic">Tidak ada</span>
+                                            )}
+                                        </TableCell>
 
                                         <TableCell className="align-top py-4">
                                             {firstDecision ? (
@@ -225,8 +271,6 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                                 </div>
                                             ) : <span className="text-xs text-slate-400 italic">Data arahan kosong</span>}
                                         </TableCell>
-
-                                        {/* KOLOM EVIDENCE DIHAPUS DARI SINI */}
 
                                         <TableCell className="align-top py-4 text-center">
                                             <MonevStatusBadge status={item.monevStatus} />

@@ -94,16 +94,24 @@ export default function RakordirBulkMeetingClient({
         return data?.executiveSummary?.length > 20 && data?.arahanDireksi?.length > 0
     }
 
-    // --- 4. SAVE HANDLER ---
+    // Di rakordir-bulk-meeting-client.tsx - Bagian handleSave
     const handleSave = async () => {
         if (!passedNumber) return toast.error("Nomor rapat tidak terdeteksi")
 
         setIsSubmitting(true)
         try {
-            // Gabungkan data Global dan Specific untuk tiap baris agenda di database
             const finalPayload = agendas.map(a => ({
                 id: a.id,
-                ...globalDraft,
+                number: globalDraft.number,
+                year: globalDraft.year,
+                date: globalDraft.date,
+                location: globalDraft.location,
+                startTime: globalDraft.startTime,
+                endTime: globalDraft.endTime,
+                attendance: globalDraft.attendance,
+                guests: globalDraft.guests, // ✅ PASTIKAN INI ADA
+                selectedPimpinan: globalDraft.selectedPimpinan,
+                catatanKetidakhadiran: "", // Tambahkan jika diperlukan
                 ...specificDrafts[a.id],
             }))
 

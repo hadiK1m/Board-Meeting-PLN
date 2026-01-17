@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import React, { useEffect } from "react"
@@ -7,11 +6,10 @@ import {
     UserCheck,
     ShieldCheck,
     Users2,
-    UserCircle,
     Trash2,
     Info,
     CheckCircle2,
-    XCircle
+    Plus
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -212,58 +210,67 @@ export function AttendanceAndLeadershipSection({
                     </div>
                 </div>
 
-                {/* 3. PESERTA TAMU (DYNAMIC LIST) */}
+                {/* 3. PESERTA TAMU */}
                 <div className="space-y-4 pt-4 border-t border-slate-100 h-auto">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-[#125d72]">
                             <Users2 className="h-4 w-4" />
-                            <h4 className="text-[11px] font-black uppercase tracking-wider">Peserta Tambahan / Tamu</h4>
+                            <h4 className="text-[11px] font-black uppercase tracking-wider">
+                                Peserta Tambahan / Tamu
+                            </h4>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setGuests(prev => [...prev, { id: Date.now(), name: "", position: "" }])}
-                            className="h-8 text-[9px] font-black uppercase border-[#125d72] text-[#125d72] hover:bg-[#125d72]/5 rounded-xl"
-                        >
-                            + Tambah Peserta
-                        </Button>
                     </div>
 
+                    {/* LIST PESERTA */}
                     <div className="space-y-3 h-auto">
                         {guests.map((guest) => (
-                            <div key={guest.id} className="flex items-center gap-3 p-3 bg-slate-50/50 border border-slate-200 rounded-xl group animate-in fade-in slide-in-from-top-1 duration-200 h-auto">
+                            <div
+                                key={guest.id}
+                                className="flex items-center gap-3 p-3 bg-slate-50/50 border border-slate-200 rounded-xl group animate-in fade-in slide-in-from-top-1 duration-200"
+                            >
                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
                                     <Input
                                         placeholder="Nama Lengkap"
                                         value={guest.name}
                                         onChange={(e) => setGuests(prev => prev.map(g => g.id === guest.id ? { ...g, name: e.target.value } : g))}
-                                        className="h-8 text-[10px] font-bold bg-white"
+                                        className="h-8 text-[10px] font-bold bg-white focus-visible:ring-[#125d72]"
                                     />
                                     <Input
                                         placeholder="Jabatan"
                                         value={guest.position}
                                         onChange={(e) => setGuests(prev => prev.map(g => g.id === guest.id ? { ...g, position: e.target.value } : g))}
-                                        className="h-8 text-[10px] font-bold bg-white"
+                                        className="h-8 text-[10px] font-bold bg-white focus-visible:ring-[#125d72]"
                                     />
                                 </div>
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => setGuests(prev => prev.filter(g => g.id !== guest.id))}
-                                    className="h-8 w-8 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                    className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
                                 >
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             </div>
                         ))}
                     </div>
+
+                    {/* ✅ TOMBOL TAMBAH PINDAH KE SINI (PALING BAWAH) */}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setGuests(prev => [...prev, { id: Date.now(), name: "", position: "" }])}
+                        className="w-full border-dashed border-2 border-slate-200 hover:border-[#125d72] hover:bg-[#125d72]/5 text-slate-400 hover:text-[#125d72] h-12 rounded-xl transition-all group"
+                    >
+                        <Plus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Tambah Peserta / Undangan Baru</span>
+                    </Button>
                 </div>
             </CardContent>
 
             <div className="bg-slate-50/80 p-4 border-t flex items-center gap-3 shrink-0">
                 <Info className="h-4 w-4 text-[#14a2ba]" />
                 <p className="text-[9px] font-bold text-slate-400 uppercase italic tracking-tighter">
-                    Status kehadiran akan memengaruhi lembar daftar hadir pada draf risalah Rakordir final.
+                    Daftar tamu akan otomatis masuk ke dalam lampiran daftar hadir risalah.
                 </p>
             </div>
         </Card>

@@ -29,10 +29,17 @@ export function MonevAddRakordirDialog({ open, onOpenChange }: MonevAddDialogPro
         const res = await createManualMonevRakordirAction(formData)
 
         if (res.success) {
-            toast.success("Berhasil", { description: res.message })
+            toast.success("Berhasil", {
+                description: "Arahan Rakordir berhasil ditambahkan",
+                // ✅ Tambahkan style PLN untuk konsistensi
+                className: "border-l-4 border-[#14a2ba]"
+            })
             onOpenChange(false)
         } else {
-            toast.error("Gagal", { description: res.error })
+            toast.error("Gagal", {
+                description: res.error,
+                className: "border-l-4 border-red-500"
+            })
         }
         setIsLoading(false)
     }
