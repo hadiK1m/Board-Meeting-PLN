@@ -8,11 +8,6 @@ import {
 } from "lucide-react"
 
 import {
-    Avatar,
-    AvatarFallback,
-    AvatarImage,
-} from "@/components/ui/avatar"
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuGroup,
@@ -28,6 +23,9 @@ import {
     useSidebar,
 } from "@/components/ui/sidebar"
 import { signOutAction } from "@/server/actions/auth-actions"
+
+// Pastikan path import ini sesuai dengan lokasi file avatar-02.tsx Anda
+import AvatarRingDemo from "../shadcn-studio/avatar/avatar-02"
 
 export function NavUser({
     user,
@@ -60,17 +58,14 @@ export function NavUser({
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <Avatar className="h-8 w-8 rounded-lg bg-slate-100 border border-slate-200">
-                                {/* Jika src valid & ada, gambar muncul.
-                                    Jika 404, komponen ini hidden otomatis.
-                                */}
-                                <AvatarImage src={user.avatar} alt={user.name} />
+                            {/* ✅ PERBAIKAN: Menggunakan Self-Closing Tag dengan Props */}
+                            <AvatarRingDemo
+                                className="h-8 w-8 rounded-lg bg-slate-100 border border-slate-200"
+                                src={user.avatar}
+                                alt={user.name}
+                                fallback={getInitials(user.name)}
+                            />
 
-                                {/* Fallback muncul saat gambar gagal load */}
-                                <AvatarFallback className="rounded-lg bg-[#14a2ba] text-white font-bold text-xs">
-                                    {getInitials(user.name)}
-                                </AvatarFallback>
-                            </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{user.name}</span>
                                 <span className="truncate text-xs">{user.email}</span>
@@ -86,12 +81,13 @@ export function NavUser({
                     >
                         <DropdownMenuLabel className="p-0 font-normal">
                             <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                <Avatar className="h-8 w-8 rounded-lg border border-slate-200">
-                                    <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="rounded-lg bg-[#14a2ba] text-white font-bold text-xs">
-                                        {getInitials(user.name)}
-                                    </AvatarFallback>
-                                </Avatar>
+                                {/* Di dalam dropdown juga gunakan AvatarRingDemo agar konsisten */}
+                                <AvatarRingDemo
+                                    className="h-8 w-8 rounded-lg border border-slate-200"
+                                    src={user.avatar}
+                                    alt={user.name}
+                                    fallback={getInitials(user.name)}
+                                />
                                 <div className="grid flex-1 text-left text-sm leading-tight">
                                     <span className="truncate font-medium">{user.name}</span>
                                     <span className="truncate text-xs">{user.email}</span>
