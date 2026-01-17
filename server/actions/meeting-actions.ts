@@ -235,7 +235,7 @@ export async function updateRakordirLiveAction(agendasData: any[]) {
             for (const item of agendasData) {
                 await tx.update(agendas)
                     .set({
-                        // Update Data Logistik
+                        // 1. Data Logistik
                         meetingNumber: item.meetingNumber,
                         meetingYear: item.meetingYear,
                         executionDate: item.executionDate || null,
@@ -243,29 +243,28 @@ export async function updateRakordirLiveAction(agendasData: any[]) {
                         endTime: item.endTime || "Selesai",
                         meetingLocation: item.meetingLocation || null,
 
-                        // ✅ PERBAIKAN 2: Simpan Data Kehadiran & Pimpinan dari 'item'
-                        pimpinanRapat: item.pimpinanRapat,       // Pastikan nama ini sesuai payload client
-                        attendanceData: item.attendanceData,     // Pastikan nama ini sesuai payload client
-                        guestParticipants: item.guestParticipants, // ✅ TAMBAHKAN INI (Sebelumnya hilang)
+                        // 2. ✅ Data Kehadiran & Pimpinan (KUNCI PERBAIKAN DI SINI)
+                        // Menggunakan data langsung dari 'item' (bukan argumen kedua meetingInfo)
+                        pimpinanRapat: item.pimpinanRapat,
+                        attendanceData: item.attendanceData,
+                        guestParticipants: item.guestParticipants,
 
-                        // Data Konten
+                        // 3. Data Konten
                         catatanRapat: item.catatanRapat,
                         executiveSummary: item.executiveSummary,
                         arahanDireksi: item.arahanDireksi,
 
-                        // Status
+                        // 4. Status
                         meetingStatus: "COMPLETED",
-                        status: "SELESAI", // Atau "RAPAT_SELESAI" sesuai konsistensi project Anda
+                        status: "RAPAT_SELESAI", // Konsisten dengan status 'RAPAT_SELESAI'
                         updatedAt: new Date(),
                     })
                     .where(eq(agendas.id, item.id));
             }
         });
 
-        // Revalidate path agar UI terupdate
         revalidatePath("/pelaksanaan-rapat/rakordir");
-        // Jika path live menggunakan query params, revalidate path induknya saja seringkali cukup,
-        // atau gunakan path spesifik jika perlu.
+        revalidatePath("/monev/rakordir");
 
         return { success: true, message: "Notulensi Rakordir berhasil disimpan." };
     } catch (error: any) {

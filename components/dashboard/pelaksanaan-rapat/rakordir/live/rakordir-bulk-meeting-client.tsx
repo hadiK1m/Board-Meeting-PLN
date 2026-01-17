@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
@@ -28,8 +27,10 @@ import { ExecutiveSummarySection } from "./sections/executive-summary-section"
 import { ArahanDireksiSection } from "./sections/arahan-direksi-section"
 
 // Logic & Types
-import { updateRakordirLiveAction } from "@/server/actions/rakordir-actions"
+// ✅ Pastikan import ini mengarah ke file di mana Anda mendefinisikan updateRakordirLiveAction (misal: meeting-actions)
+import { updateRakordirLiveAction } from "@/server/actions/meeting-actions"
 import { Agenda } from "@/db/schema/agendas"
+import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData" // ✅ WAJIB: Import Master Data
 
 interface RakordirBulkMeetingClientProps {
     agendas: Agenda[]
@@ -48,18 +49,38 @@ export default function RakordirBulkMeetingClient({
     const [activeAgendaId, setActiveAgendaId] = useState<string>(agendas[0]?.id || "")
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    // A. Global State: Data yang sama untuk semua agenda dalam satu sesi (Nomor Rapat sama)
-    const [globalDraft, setGlobalDraft] = useState({
-        number: passedNumber || "",
-        year: passedYear || new Date().getFullYear().toString(),
-        date: agendas[0]?.executionDate || new Date().toISOString().split('T')[0],
-        location: agendas[0]?.meetingLocation || "Gedung Kantor Pusat",
-        startTime: agendas[0]?.startTime || "09:00",
-        endTime: agendas[0]?.endTime || "Selesai",
+    // A. Global State: Data yang sama untuk semua agenda dalam satu sesi
+    const [globalDraft, setGlobalDraft] = useState(() => {
+        // 1. Ambil data kehadiran eksisting dari Database (Agenda Pertama)
+        const dbAttendance = (agendas[0]?.attendanceData as Record<string, any>) || {}
 
-        selectedPimpinan: (agendas[0]?.pimpinanRapat as unknown as MultiValue<Option>) || [],
-        attendance: (agendas[0]?.attendanceData as Record<string, any>) || {},
-        guests: (agendas[0]?.guestParticipants as any[]) || [],
+        // 2. MERGE dengan Default Master Data
+        // Ini memastikan saat refresh, data dari DB dipakai.
+        // Jika data DB kosong untuk direktur tertentu, gunakan default "Hadir".
+        const mergedAttendance: Record<string, any> = {}
+        DIREKTURE_PEMRAKARSA.forEach(name => {
+            if (dbAttendance[name]) {
+                // Gunakan data dari DB (Status Simpanan)
+                mergedAttendance[name] = dbAttendance[name]
+            } else {
+                // Default jika belum pernah disimpan
+                mergedAttendance[name] = { status: "Hadir", reason: "", proxy: [] }
+            }
+        })
+
+        return {
+            number: passedNumber || "",
+            year: passedYear || new Date().getFullYear().toString(),
+            date: agendas[0]?.executionDate || new Date().toISOString().split('T')[0],
+            location: agendas[0]?.meetingLocation || "Gedung Kantor Pusat",
+            startTime: agendas[0]?.startTime || "09:00",
+            endTime: agendas[0]?.endTime || "Selesai",
+
+            // ✅ Load Data dari DB saat inisialisasi (Refresh Proof)
+            selectedPimpinan: (agendas[0]?.pimpinanRapat as unknown as MultiValue<Option>) || [],
+            attendance: mergedAttendance, // Gunakan hasil merge di atas
+            guests: (agendas[0]?.guestParticipants as any[]) || [],
+        }
     })
 
     // B. Specific State: Data yang berbeda-beda tiap agenda (Ringkasan & Arahan)
@@ -91,11 +112,10 @@ export default function RakordirBulkMeetingClient({
 
     const checkIsCompleted = (id: string) => {
         const data = specificDrafts[id]
-        // Kriteria minimal: Ringkasan > 20 karakter dan ada minimal 1 arahan
         return data?.executiveSummary?.length > 20 && data?.arahanDireksi?.length > 0
     }
 
-    // Di rakordir-bulk-meeting-client.tsx - Bagian handleSave
+    // --- 4. HANDLE SAVE (DIPERBAIKI) ---
     const handleSave = async () => {
         if (!passedNumber) return toast.error("Nomor rapat tidak terdeteksi")
 
@@ -103,29 +123,29 @@ export default function RakordirBulkMeetingClient({
         try {
             const finalPayload = agendas.map(a => ({
                 id: a.id,
-                // Pastikan field ini dikirim jika server action membutuhkannya dari item
+                // Data Identitas & Logistik
                 meetingNumber: globalDraft.number,
                 meetingYear: globalDraft.year,
                 executionDate: globalDraft.date,
+                meetingLocation: globalDraft.location,
                 startTime: globalDraft.startTime,
                 endTime: globalDraft.endTime,
-                meetingLocation: globalDraft.location,
 
-                // ✅ PERBAIKAN 1: Mapping Nama Field agar sesuai Schema DB
-                attendanceData: globalDraft.attendance,       // Ganti 'attendance' -> 'attendanceData'
-                guestParticipants: globalDraft.guests,        // Ganti 'guests' -> 'guestParticipants'
-                pimpinanRapat: globalDraft.selectedPimpinan,  // Ganti 'selectedPimpinan' -> 'pimpinanRapat'
+                // ✅ MAPPING FIELD: Pastikan nama properti ini SAMA PERSIS dengan kolom Database
+                attendanceData: globalDraft.attendance,       // Client: attendance -> DB: attendanceData
+                guestParticipants: globalDraft.guests,        // Client: guests -> DB: guestParticipants
+                pimpinanRapat: globalDraft.selectedPimpinan,  // Client: selectedPimpinan -> DB: pimpinanRapat
 
                 catatanRapat: "",
                 ...specificDrafts[a.id],
             }))
 
-            // Kita kirim array ini sebagai satu-satunya argumen
+            // Panggil Server Action dengan 1 argumen array
             const result = await updateRakordirLiveAction(finalPayload)
 
             if (result.success) {
                 toast.success("Notulensi Rakordir berhasil disimpan.")
-                router.refresh()
+                router.refresh() // ✅ Refresh halaman untuk memuat data terbaru dari DB
             } else {
                 toast.error(result.error || "Gagal menyimpan")
             }
@@ -139,9 +159,7 @@ export default function RakordirBulkMeetingClient({
 
     return (
         <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-900">
-            {/* SIDEBAR NAVIGASI AGENDA 
-                Sesuai referensi: Fixed di kiri, scrollable sendiri.
-            */}
+            {/* SIDEBAR NAVIGASI AGENDA */}
             <aside className="hidden w-80 flex-col border-r bg-white md:flex overflow-hidden shadow-sm z-30">
                 <div className="p-6 border-b shrink-0 bg-slate-50/50">
                     <div className="flex items-center gap-3 mb-4">
@@ -193,9 +211,7 @@ export default function RakordirBulkMeetingClient({
                 </ScrollArea>
             </aside>
 
-            {/* MAIN CONTENT AREA 
-                Sesuai referensi: Header sticky, Content ScrollArea.
-            */}
+            {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col h-full bg-white overflow-hidden relative">
                 {/* STICKY HEADER */}
                 <header className="shrink-0 bg-white/80 backdrop-blur-md border-b h-16 flex items-center justify-between px-8 z-20">

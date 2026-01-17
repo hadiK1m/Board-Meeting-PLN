@@ -1,4 +1,4 @@
-// components/dashboard/pelaksanaan-rapat/rakordir/rakordir-list-view.tsx
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
@@ -41,7 +41,7 @@ import { id } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { exportRakordirToDocx } from "@/server/actions/export-actions"
-import { deleteFinalMinutesAction, getSignedFileUrl } from "@/server/actions/agenda-actions"
+import { getSignedFileUrl } from "@/server/actions/agenda-actions" // ✅ Hapus deleteFinalMinutesAction
 import { UploadNotulensiDialog } from "./upload-notulensi-dialog"
 import { deleteRisalahRakordirAction } from "@/server/actions/rakordir-actions"
 
@@ -103,8 +103,8 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
         }
     }
 
-
-    const handleDeleteFinal = async (agendaId: string, risalahPath: string) => {
+    // ✅ PERBAIKAN: Gunakan underscore (_) untuk parameter yang tidak digunakan
+    const handleDeleteFinal = async (agendaId: string, _risalahPath: string) => {
         const confirmDelete = window.confirm(
             "Apakah Anda yakin ingin menghapus Notulensi Final ini? File akan dihapus dari seluruh agenda di sesi ini."
         )
@@ -123,6 +123,7 @@ export function RakordirListView({ initialData, viewMode }: RakordirListViewProp
             toast.error(res.error || "Gagal menghapus", { id: toastId })
         }
     }
+
     if (viewMode === "grid") {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">

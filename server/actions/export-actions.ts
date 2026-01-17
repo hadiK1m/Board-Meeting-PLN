@@ -12,17 +12,6 @@ import { format } from "date-fns"
 import { id } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/server"
 
-// --- TIPE DATA ---
-interface AttendanceInfo {
-    status: "Hadir" | "Tidak Hadir" | "Kuasa"
-    reason?: string
-    proxy?: Array<{ value: string; label: string }>
-}
-
-interface AttendanceData {
-    [directorKey: string]: AttendanceInfo
-}
-
 // --- KAMUS DATA: PEMETAAN JABATAN KE NAMA ---
 const DIRECTOR_NAMES: Record<string, string> = {
     "DIREKTUR UTAMA (DIRUT)": "DARMAWAN PRASODJO",
@@ -38,28 +27,13 @@ const DIRECTOR_NAMES: Record<string, string> = {
     "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)": "EDWIN NUGRAHA PUTRA"
 }
 
-const DIRECTOR_ORDER = [
-    "DIREKTUR UTAMA (DIRUT)",
-    "DIREKTUR KEUANGAN (DIR KEU)",
-    "DIREKTUR LEGAL DAN MANAJEMEN HUMAN CAPITAL (DIR LHC)",
-    "DIREKTUR MANAJEMEN RISIKO (DIR MRO)",
-    "DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)",
-    "DIREKTUR TRANSMISI DAN PERENCANAAN SISTEM (DIR TRANS)",
-    "DIREKTUR MANAJEMEN PEMBANGKITAN (DIR MKIT)",
-    "DIREKTUR DISTRIBUSI (DIR DIST)",
-    "DIREKTUR RETAIL DAN NIAGA (DIR RETAIL)",
-    "DIREKTUR MANAJEMEN PROYEK DAN ENERGI BARU TERBARUKAN (DIR MPRO)",
-]
-
-// --- HELPER FUNCTIONS ---
-
-function terbilang(n: number): string {
-    if (n === 0) return "nol"
-    const ambil = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"]
-    if (n < 12) return ambil[n]
-    if (n < 20) return terbilang(n - 10) + " belas"
-    if (n < 100) return terbilang(Math.floor(n / 10)) + " puluh " + (n % 10 !== 0 ? terbilang(n % 10) : "")
-    return String(n)
+// --- HELPER: Angka Terbilang ---
+function terbilang(angka: number): string {
+    const dasar = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
+    if (angka < 12) return dasar[angka];
+    if (angka < 20) return terbilang(angka - 10) + " belas";
+    if (angka < 100) return terbilang(Math.floor(angka / 10)) + " puluh " + terbilang(angka % 10);
+    return String(angka);
 }
 
 function toRoman(num: number): string {
@@ -72,6 +46,18 @@ function toRoman(num: number): string {
         }
     }
     return roman
+}
+
+// --- HELPER: Format Tanggal Indonesia ---
+function formatTanggalIndo(dateString: string | null): string {
+    if (!dateString) return ".................";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    });
 }
 
 function cleanHtml(html: string | null | undefined): string {
@@ -233,68 +219,143 @@ export async function exportRisalahToDocx(
  */
 export async function exportRakordirToDocx(meetingNumber: string, meetingYear: string) {
     try {
-        await assertAuthenticated()
+        if (!meetingNumber || !meetingYear) {
+            throw new Error("Nomor dan Tahun rapat diperlukan.");
+        }
 
-        const dataAgendas = await db.query.agendas.findMany({
+        const sessionAgendas = await db.query.agendas.findMany({
             where: and(
                 eq(agendas.meetingNumber, meetingNumber),
                 eq(agendas.meetingYear, meetingYear),
                 eq(agendas.meetingType, "RAKORDIR")
-            ),
-        })
+            )
+        });
 
-        if (dataAgendas.length === 0) throw new Error("Data agenda Rakordir tidak ditemukan.")
-
-        const headerData = dataAgendas[0]
-        const executionDate = headerData.executionDate ? new Date(headerData.executionDate) : new Date()
-        const dayName = format(executionDate, "EEEE", { locale: id })
-        const dateFormatted = format(executionDate, "dd MMMM yyyy", { locale: id })
-
-        const attendanceData: AttendanceData = typeof headerData.attendanceData === "string" ? JSON.parse(headerData.attendanceData) : (headerData.attendanceData || {})
-        const hadirCount = Object.keys(attendanceData).filter((k) => attendanceData[k]?.status !== "Tidak Hadir").length
-
-        const directorsList = DIRECTOR_ORDER.map(role => {
-            const info = attendanceData[role]
-            const name = DIRECTOR_NAMES[role] || role
-            let statusText = "Hadir"
-            if (info?.status === "Tidak Hadir") statusText = info.reason ? `Ijin (${info.reason})` : "Ijin"
-            else if (info?.status === "Kuasa") statusText = `Diwakilkan kepada ${info.proxy?.[0]?.label || "N/A"}`
-            return { role: role.replace("DIREKTUR", "").replace(/\(.*\)/, "").trim(), name, status: statusText }
-        })
-
-        const guestList = Array.isArray(headerData.guestParticipants) ? headerData.guestParticipants.map((g: any, i: number) => ({ index: i + 1, name: g.name, position: g.position })) : []
-
-        const templateData = {
-            meetingNumber, meetingYear, dayName, date: dateFormatted,
-            startTime: headerData.startTime || "-", endTime: headerData.endTime || "Selesai",
-            location: headerData.meetingLocation || "Kantor Pusat PLN",
-            hadir_count_num: hadirCount, hadir_count_terbilang: terbilang(hadirCount),
-            pimpinanRapat: Array.isArray(headerData.pimpinanRapat) ? headerData.pimpinanRapat.map((p: any) => p.label).join(", ") : "-",
-            directors: directorsList, guests: guestList,
-            agendas: dataAgendas.map((a, index) => {
-                let fullPemrakarsa = ""
-                try {
-                    const parsedInit = JSON.parse(a.initiator || "[]")
-                    fullPemrakarsa = Array.isArray(parsedInit) ? parsedInit.map((p: any) => p.label || p).join(", ") : (a.initiator || "")
-                } catch { fullPemrakarsa = a.initiator || "" }
-
-                let arahanText = "-"
-                if (Array.isArray(a.arahanDireksi) && a.arahanDireksi.length > 0) {
-                    arahanText = a.arahanDireksi.map((d: any, i: number) => `${String.fromCharCode(97 + i)}. ${d.text || d.value}`).join("\n")
-                }
-                return { index: index + 1, title: a.title, pemrakarsa: fullPemrakarsa || "Direktur Terkait", executiveSummary: cleanHtml(a.executiveSummary), arahanDireksi: arahanText }
-            }),
+        if (sessionAgendas.length === 0) {
+            throw new Error("Data rapat tidak ditemukan.");
         }
 
-        const templatePath = path.resolve(process.cwd(), "public", "2. Template Notulensi Rakordir.docx")
-        if (!fs.existsSync(templatePath)) throw new Error("File template notulensi Rakordir tidak ditemukan.")
+        const masterData = sessionAgendas[0];
 
-        const content = fs.readFileSync(templatePath, "binary")
-        const zip = new PizZip(content)
-        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, parser: expressionParser })
-        doc.render(templateData)
-        const buf = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" })
+        // --- PARSING DATA ---
 
-        return { success: true, data: buf.toString("base64"), filename: `Notulensi_Rakordir_${meetingNumber.replace(/[^a-zA-Z0-9-]/g, "")}_${meetingYear}.docx` }
-    } catch (error: any) { return { success: false, error: error.message || "Gagal membuat dokumen notulensi." } }
+        // A. Pimpinan Rapat
+        let pimpinanText = "DIREKTUR UTAMA";
+        try {
+            const pimpinanArr = Array.isArray(masterData.pimpinanRapat)
+                ? masterData.pimpinanRapat
+                : JSON.parse(String(masterData.pimpinanRapat || "[]"));
+
+            if (pimpinanArr.length > 0) {
+                pimpinanText = pimpinanArr.map((p: any) => p.label).join(", ").toUpperCase();
+            }
+        } catch { /* Ignore error */ }
+
+        // B. Kehadiran Direksi
+        let attendanceData: Record<string, any> = {};
+        try {
+            attendanceData = typeof masterData.attendanceData === 'object'
+                ? masterData.attendanceData as Record<string, any>
+                : JSON.parse(String(masterData.attendanceData || "{}"));
+        } catch { /* Ignore */ }
+
+        const hadirCount = Object.values(attendanceData).filter((d: any) => d.status === "Hadir").length;
+
+        // C. Catatan Ketidakhadiran
+        const absenList = Object.entries(attendanceData)
+            // ✅ PERBAIKAN: Menggunakan `[, val]` untuk mengabaikan parameter pertama (nama/key)
+            .filter(([, val]: [string, any]) => val.status !== "Hadir")
+            .map(([name, val]: [string, any]) => {
+                const reason = val.reason ? ` (${val.reason})` : "";
+                return `- ${name}${reason}`;
+            });
+
+        const catatanKetidakhadiran = absenList.length > 0
+            ? "Direksi yang berhalangan hadir:\n" + absenList.join("\n")
+            : "Seluruh Direksi Hadir.";
+
+        // D. Tamu Undangan
+        const allGuests = new Set<string>();
+        sessionAgendas.forEach(agenda => {
+            try {
+                const guests = Array.isArray(agenda.guestParticipants)
+                    ? agenda.guestParticipants
+                    : JSON.parse(String(agenda.guestParticipants || "[]"));
+
+                guests.forEach((g: any) => {
+                    if (g.name) allGuests.add(`${g.name} (${g.position || "Tamu"})`);
+                });
+            } catch { /* Ignore */ }
+        });
+        const guestText = allGuests.size > 0
+            ? Array.from(allGuests).join(", ")
+            : "Tidak ada peserta tambahan";
+
+        // E. Daftar Agenda
+        const agendaSummaryList = sessionAgendas.map((agenda, index) => {
+            return `${index + 1}. ${agenda.title}`;
+        }).join("\n");
+
+        // F. Data Detail Per Agenda
+        const agendaDetails = sessionAgendas.map((agenda, index) => {
+            let arahanList = [];
+            try {
+                const rawArahan = Array.isArray(agenda.arahanDireksi)
+                    ? agenda.arahanDireksi
+                    : JSON.parse(String(agenda.arahanDireksi || "[]"));
+
+                arahanList = rawArahan.map((a: any, idx: number) => ({
+                    no: idx + 1,
+                    text: a.text || "-"
+                }));
+            } catch { arahanList = [] }
+
+            return {
+                no: index + 1,
+                judul_agenda: agenda.title || "Tanpa Judul",
+                pemrakarsa: agenda.initiator || "-",
+                executive_summary: (agenda.executiveSummary || "-").replace(/<[^>]*>?/gm, ''),
+                arahan_list: arahanList.length > 0 ? arahanList : [{ no: "-", text: "Tidak ada arahan khusus." }]
+            };
+        });
+
+        // 4. Siapkan Data untuk Template
+        const data = {
+            meetingNumber: meetingNumber,
+            meetingYear: meetingYear,
+            hari_tanggal: formatTanggalIndo(masterData.executionDate),
+            startTime: masterData.startTime ? masterData.startTime.substring(0, 5) : "09:00",
+            endTime: masterData.endTime ? masterData.endTime.substring(0, 5) : "Selesai",
+            meetingLocation: masterData.meetingLocation || "Tempat belum ditentukan",
+            agenda_summary_list: agendaSummaryList,
+            hadir_count_num: hadirCount,
+            hadir_count_terbilang: terbilang(hadirCount),
+            pimpinanRapat: pimpinanText,
+            catatan_ketidakhadiran: catatanKetidakhadiran,
+            guestParticipants: guestText,
+            agendas: agendaDetails,
+        };
+
+        const templatePath = path.resolve("./public/2. Template Notulensi Rakordir.docx");
+        const content = fs.readFileSync(templatePath, "binary");
+
+        const zip = new PizZip(content);
+        const doc = new Docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
+        });
+
+        doc.render(data);
+
+        const buf = doc.getZip().generate({ type: "nodebuffer" });
+        return {
+            success: true,
+            data: buf.toString("base64"),
+            filename: `Notulensi_Rakordir_${meetingNumber}_${meetingYear}.docx`
+        };
+
+    } catch (error: any) {
+        console.error("[EXPORT_ERROR]", error);
+        return { success: false, error: error.message || "Gagal melakukan export dokumen." };
+    }
 }
