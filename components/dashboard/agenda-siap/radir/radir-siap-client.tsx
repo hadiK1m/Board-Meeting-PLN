@@ -16,7 +16,8 @@ import {
     CalendarPlus,
     Trash2,
     AlertCircle,
-    FileSpreadsheet
+    FileSpreadsheet,
+    ArrowUpDown
 } from "lucide-react"
 
 import {
@@ -97,6 +98,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [date, setDate] = useState<DateRange | undefined>(undefined)
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
     // ✅ LOGIKA SELECT BULK
     const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -104,7 +106,7 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
     const [selectedDetail, setSelectedDetail] = useState<AgendaReady | null>(null)
 
     const filteredData = useMemo(() => {
-        return data
+        let result = data
             .filter(item => (item.status || "").toLowerCase() !== "draft")
             .filter((item) => {
                 const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -121,7 +123,16 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
 
                 return matchesSearch && matchesStatus && matchesDate
             })
-    }, [data, searchTerm, statusFilter, date])
+
+        // ✅ Tambahkan sorting berdasarkan deadline
+        result = result.sort((a, b) => {
+            const dateA = new Date(a.deadline).getTime()
+            const dateB = new Date(b.deadline).getTime()
+            return sortOrder === "asc" ? dateA - dateB : dateB - dateA
+        })
+
+        return result
+    }, [data, searchTerm, statusFilter, date, sortOrder]) // ✅ Tambahkan sortOrder ke dependency
 
     const selectedAgendas = useMemo(() => {
         return filteredData.filter(a => selectedIds.includes(a.id))
@@ -223,13 +234,24 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
         }
     };
 
+    const toggleSort = () => {
+        setSortOrder(prev => prev === "asc" ? "desc" : "asc")
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">
-                    <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
-                        Radir Siap
-                    </h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
+                            Radir Siap
+                        </h1>
+                        {sortOrder && (
+                            <Badge variant="outline" className="text-[9px] font-bold px-2 py-0.5">
+                                {sortOrder === "asc" ? "↑ Terlama" : "↓ Terbaru"}
+                            </Badge>
+                        )}
+                    </div>
                     <p className="text-slate-500 font-medium text-sm italic">Manajemen agenda rapat direksi yang telah divalidasi</p>
                 </div>
 
@@ -341,7 +363,19 @@ export function RadirSiapClient({ data }: RadirSiapClientProps) {
                                 <TableHead className="w-12 px-4 text-center">
                                     <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                <TableHead className="w-[35%] min-w-75 text-[#125d72] font-extrabold uppercase text-[11px] pl-2 tracking-wider">Agenda Rapat</TableHead>
+                                <TableHead className="w-[35%] min-w-75 text-[#125d72] font-extrabold uppercase text-[11px] pl-2 tracking-wider">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={toggleSort}
+                                        className="p-0 h-auto font-extrabold uppercase text-[11px] tracking-wider hover:bg-transparent hover:text-[#125d72]"
+                                    >
+                                        Judul Agenda Rapat
+                                        <ArrowUpDown className="ml-2 h-3 w-3" />
+                                        <span className="ml-1 text-[9px] text-slate-400 font-normal">
+                                            ({sortOrder === "asc" ? "Terlama" : "Terbaru"})
+                                        </span>
+                                    </Button>
+                                </TableHead>
                                 <TableHead className="w-[20%] text-[#125d72] font-extrabold uppercase text-[11px] tracking-wider">Narahubung (PIC)</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] text-center tracking-wider">Status</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] pl-6 tracking-wider">Catatan Pembatalan</TableHead>

@@ -248,7 +248,7 @@ export function RadirClient({ data = [] }: RadirClientProps) {
                 <div className="space-y-1">
                     <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">
                         <h1 className="text-2xl md:text-3xl font-black text-[#125d72] tracking-tight uppercase">
-                            Agenda Radir
+                            Judul Agenda Radir
                         </h1>
                         <p className="text-slate-500 font-medium italic text-sm">Manajemen Usulan Rapat Direksi</p>
                     </div>
