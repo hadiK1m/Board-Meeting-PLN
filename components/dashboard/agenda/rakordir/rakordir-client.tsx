@@ -243,6 +243,27 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
 
     if (!mounted) return null
 
+    const getStatusStyles = (status: string | null) => {
+        const s = status?.toUpperCase() || "DRAFT";
+
+        switch (s) {
+            case "DRAFT":
+                return "bg-slate-100 text-slate-500 border-slate-200";
+            case "DAPAT_DILANJUTKAN":
+                return "bg-blue-100 text-blue-700 border-blue-200";
+            case "DIJADWALKAN":
+                return "bg-emerald-100 text-emerald-700 border-emerald-200";
+            case "DITUNDA":
+                return "bg-amber-100 text-amber-700 border-amber-200";
+            case "DIBATALKAN":
+                return "bg-red-100 text-red-700 border-red-200";
+            case "RAPAT_SELESAI":
+                return "bg-green-600 text-white border-transparent";
+            default:
+                return "bg-[#125d72] text-white border-transparent";
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -431,19 +452,8 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
 
                                         <TableCell className="text-center">
                                             <Badge className={cn(
-                                                "text-[9px] font-bold px-3 py-0.5 rounded-full border-none shadow-none uppercase tracking-tighter",
-                                                // Logika Kondisional Warna
-                                                agenda.status === "DIBATALKAN"
-                                                    ? "bg-red-100 text-red-600"
-                                                    : agenda.status === "DITUNDA"
-                                                        ? "bg-amber-100 text-amber-600"
-                                                        : agenda.status === "DIJADWALKAN"
-                                                            ? "bg-blue-100 text-blue-600"
-                                                            : agenda.status === "SELESAI"
-                                                                ? "bg-emerald-100 text-emerald-600"
-                                                                : agenda.status === "DRAFT"
-                                                                    ? "bg-slate-100 text-slate-500"
-                                                                    : "bg-[#125d72] text-white" // Default: Dapat Dilanjutkan
+                                                "text-[9px] font-bold px-3 py-0.5 rounded-full border shadow-none uppercase tracking-tighter",
+                                                getStatusStyles(agenda.status)
                                             )}>
                                                 {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                             </Badge>
@@ -475,12 +485,10 @@ export function RakordirClient({ initialData }: RakordirClientProps) {
                                 </div>
                                 <div className="flex items-center justify-between mb-4 ml-6">
                                     <Badge className={cn(
-                                        "text-[10px] font-bold px-3 uppercase tracking-widest border-none",
-                                        agenda.status === "DIBATALKAN" ? "bg-red-600 text-white" :
-                                            agenda.status === "DITUNDA" ? "bg-amber-500 text-white" :
-                                                "bg-[#125d72] text-white"
+                                        "text-[10px] font-bold px-3 py-0.5 rounded-full border shadow-none uppercase tracking-widest",
+                                        getStatusStyles(agenda.status)
                                     )}>
-                                        {agenda.status || "DRAFT"}
+                                        {agenda.status?.replace(/_/g, " ") || "DRAFT"}
                                     </Badge>
                                 </div>
                                 <h3 className="font-bold text-[#125d72] text-sm uppercase leading-normal h-12 line-clamp-2 mb-6 tracking-tight italic">{agenda.title}</h3>
