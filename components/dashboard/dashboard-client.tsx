@@ -16,7 +16,8 @@ import {
     ArrowRight,
     Users,
     ListTodo,
-    Activity
+    Activity,
+    File // Icon untuk Draft
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
@@ -31,6 +32,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { getDashboardStats } from "@/server/actions/dashboard-actions"
 import { toast } from "sonner"
+import { DashboardAgendaTable, AgendaTableItem } from "./dashboard-agenda-table"
 
 export function DashboardClient() {
     const [date, setDate] = useState<DateRange | undefined>({
@@ -38,11 +40,13 @@ export function DashboardClient() {
         to: new Date(),
     })
 
+    // ✅ UPDATE 1: Tambahkan properti 'listData' pada state awal
     const [stats, setStats] = useState({
-        rakordir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
-        radir: { dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
+        rakordir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
+        radir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
         followUp: { radir: { inProgress: 0, done: 0 }, rakordir: { inProgress: 0, done: 0 } },
-        directorChartData: [] as any[]
+        directorChartData: [] as any[],
+        listData: [] as AgendaTableItem[] // ✅ Tambahkan ini di state
     })
     const [loading, setLoading] = useState(true)
 
@@ -98,14 +102,16 @@ export function DashboardClient() {
                         <p className="text-xs text-slate-300 font-medium uppercase tracking-wide">Rapat Koordinasi</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* ✅ UPDATE 2: Ubah Grid jadi 3 kolom agar muat Draft */}
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                            <StatBox label="Draft" value={stats.rakordir.draft} icon={File} color="bg-white/10 text-slate-300" isLoading={loading} />
                             <StatBox label="Dapat Dilanjut" value={stats.rakordir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/10 text-emerald-300" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.rakordir.dijadwalkan} icon={Clock} color="bg-white/10 text-blue-300" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.rakordir.selesai} icon={CheckCircle2} color="bg-white/10 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.rakordir.dibatalkan} icon={XCircle} color="bg-white/10 text-red-300" isLoading={loading} />
                         </div>
                         <div className="mt-5 pt-3 border-t border-white/10 flex justify-between items-center">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Total Agenda</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Total Agenda (Semua Status)</span>
                             <span className="text-xl font-black">{loading ? "-" : stats.rakordir.total}</span>
                         </div>
                     </CardContent>
@@ -119,20 +125,22 @@ export function DashboardClient() {
                         <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Rapat Keputusan</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* ✅ UPDATE 3: Ubah Grid jadi 3 kolom agar muat Draft */}
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                            <StatBox label="Draft" value={stats.radir.draft} icon={File} color="bg-white/20 text-blue-100" isLoading={loading} />
                             <StatBox label="Dapat Dilanjut" value={stats.radir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.radir.dijadwalkan} icon={Clock} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.radir.selesai} icon={CheckCircle2} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.radir.dibatalkan} icon={XCircle} color="bg-white/20 text-red-200" isLoading={loading} />
                         </div>
                         <div className="mt-5 pt-3 border-t border-white/20 flex justify-between items-center">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Total Agenda</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">Total Agenda (Semua Status)</span>
                             <span className="text-xl font-black">{loading ? "-" : stats.radir.total}</span>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* 3. TINDAK LANJUT CARD (NEW) */}
+                {/* 3. TINDAK LANJUT CARD */}
                 <Card className="border-none shadow-xl bg-linear-to-br from-slate-700 to-slate-800 text-white rounded-2xl overflow-hidden relative group">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-24 bg-purple-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/20 transition-all"></div>
                     <CardHeader className="pb-2 relative z-10">
@@ -193,7 +201,7 @@ export function DashboardClient() {
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
                                 data={stats.directorChartData}
-                                margin={{ top: 20, right: 30, left: 0, bottom: 60 }} // Bottom margin lebih besar untuk label miring
+                                margin={{ top: 20, right: 30, left: 0, bottom: 60 }}
                                 barSize={45}
                             >
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -203,7 +211,7 @@ export function DashboardClient() {
                                     tickLine={false}
                                     axisLine={false}
                                     interval={0}
-                                    angle={-25} // Miringkan label agar muat semua
+                                    angle={-25}
                                     textAnchor="end"
                                 />
                                 <YAxis
@@ -242,6 +250,29 @@ export function DashboardClient() {
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* ✅ TAMBAHKAN BAGIAN TABEL DI BAWAH SINI */}
+            <Card className="shadow-xl border border-slate-200 rounded-2xl bg-white overflow-hidden">
+                <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+                    <div className="space-y-1">
+                        <CardTitle className="text-lg font-black text-[#125d72] uppercase tracking-wide flex items-center gap-2">
+                            <ListTodo className="h-5 w-5" /> Daftar Seluruh Agenda
+                        </CardTitle>
+                        <CardDescription className="font-medium text-slate-500">
+                            Monitoring detail status rapat, monev, dan narahubung
+                        </CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-6">
+                    {loading ? (
+                        <div className="h-40 flex items-center justify-center text-slate-400 text-sm">
+                            Memuat data tabel...
+                        </div>
+                    ) : (
+                        <DashboardAgendaTable data={stats.listData || []} />
                     )}
                 </CardContent>
             </Card>
