@@ -25,7 +25,6 @@ async function assertAuthenticated() {
  */
 export async function getMonevRakordirList() {
     try {
-        // [SECURE] Tambahan Auth Guard
         await assertAuthenticated()
 
         const data = await db.query.agendas.findMany({
@@ -36,11 +35,51 @@ export async function getMonevRakordirList() {
             orderBy: [desc(agendas.executionDate), desc(agendas.createdAt)],
         })
 
-        return { success: true, data }
+        // ✅ Transform data dengan type yang benar
+        const enhancedData = data.map(agenda => {
+            // Parse arahanDireksi dengan type safety
+            let arahanDireksi: ArahanItem[] = []
+            try {
+                const arahanData = agenda.arahanDireksi
+                if (Array.isArray(arahanData)) {
+                    arahanDireksi = arahanData.map(item => ({
+                        id: item.id || String(Math.random()),
+                        text: item.text || '',
+                        targetOutput: item.targetOutput || undefined,
+                        currentProgress: item.currentProgress || undefined,
+                        evidencePath: item.evidencePath || undefined,
+                        status: (item.status === "DONE" ? "DONE" : "ON_PROGRESS") as "ON_PROGRESS" | "DONE",
+                        lastUpdated: item.lastUpdated || new Date().toISOString()
+                    }))
+                }
+            } catch (error) {
+                console.error('Error parsing arahanDireksi:', error)
+            }
+
+            return {
+                ...agenda,
+                arahanDireksi,
+                arahanCount: arahanDireksi.length,
+                completedArahanCount: arahanDireksi.filter(a => a.status === "DONE").length
+            }
+        })
+
+        return { success: true, data: enhancedData }
     } catch (error: any) {
         console.error("[GET_MONEV_RAKORDIR_ERROR]", error)
         return { success: false, error: "Gagal memuat data Monev Rakordir." }
     }
+}
+
+// ✅ Tambahkan interface ini di file yang sama atau di types file
+interface ArahanItem {
+    id: string
+    text: string
+    targetOutput?: string
+    currentProgress?: string
+    evidencePath?: string
+    status: "ON_PROGRESS" | "DONE"
+    lastUpdated?: string
 }
 
 /**
@@ -112,8 +151,9 @@ export async function createManualMonevRakordirAction(formData: FormData) {
 
 /**
  * 3. ACTION: Update Arahan Monev RAKORDIR (Support Hapus File)
+ * PERBAIKAN: Menggunakan arahanDireksi bukan meetingDecisions
  */
-export async function updateMonevArahanAction(agendaId: string, decisionId: string, formData: FormData) {
+export async function updateMonevArahanAction(agendaId: string, arahanId: string, formData: FormData) {
     try {
         // [SECURE] 1. Cek Login & Ambil Client Supabase
         const { supabase } = await assertAuthenticated()
@@ -130,38 +170,40 @@ export async function updateMonevArahanAction(agendaId: string, decisionId: stri
 
         if (!existingAgenda) throw new Error("Agenda tidak ditemukan")
 
-        // [ROBUST] Parse Decisions dengan aman
+        // ✅ PERBAIKAN UTAMA: Parse arahanDireksi, bukan meetingDecisions
         let arahans: any[] = []
         try {
-            arahans = Array.isArray(existingAgenda.meetingDecisions)
-                ? existingAgenda.meetingDecisions
-                : JSON.parse(String(existingAgenda.meetingDecisions || "[]"))
-        } catch { arahans = [] }
+            // Prioritaskan arahanDireksi, fallback ke meetingDecisions jika masih ada yang salah
+            const arahanData = existingAgenda.arahanDireksi || existingAgenda.meetingDecisions
+            arahans = Array.isArray(arahanData)
+                ? arahanData
+                : JSON.parse(String(arahanData || "[]"))
+        } catch {
+            arahans = []
+        }
 
-        const index = arahans.findIndex((d: any) => d.id === decisionId)
+        const index = arahans.findIndex((a: any) => a.id === arahanId)
         if (index === -1) throw new Error("Item arahan tidak ditemukan")
 
         let newEvidencePath = arahans[index].evidencePath
 
-        // [LOGIC PRESERVED] Logic Hapus File Lama
+        // Logic Hapus File Lama
         if (removeEvidence && newEvidencePath) {
             await supabase.storage.from('agenda-attachments').remove([newEvidencePath])
             newEvidencePath = null
         }
 
-        // [LOGIC PRESERVED] Logic Ganti File Baru
+        // Logic Ganti File Baru
         if (file && file.size > 0) {
-            // [SECURE] Validasi Size
             if (file.size > 10 * 1024 * 1024) throw new Error("Ukuran file maksimal 10MB")
 
-            // Hapus file lama jika ada (dan belum dihapus flag removeEvidence)
+            // Hapus file lama jika ada
             if (newEvidencePath) {
                 await supabase.storage.from('agenda-attachments').remove([newEvidencePath])
             }
 
             const fileExt = file.name.split('.').pop()
-            // [SECURE] Gunakan UUID untuk nama file
-            const fileName = `evidence/rakordir/${agendaId}/${decisionId}_${randomUUID()}.${fileExt}`
+            const fileName = `evidence/rakordir/${agendaId}/${arahanId}_${randomUUID()}.${fileExt}`
 
             const { error } = await supabase.storage.from("agenda-attachments").upload(fileName, file)
             if (error) throw new Error("Gagal upload evidence baru")
@@ -178,13 +220,14 @@ export async function updateMonevArahanAction(agendaId: string, decisionId: stri
             lastUpdated: new Date().toISOString()
         }
 
-        // [LOGIC PRESERVED] Auto-Update Global Status
-        const allDone = arahans.every((d: any) => d.status === "DONE")
+        // Auto-Update Global Status
+        const allDone = arahans.every((a: any) => a.status === "DONE")
         const newMonevStatus = allDone ? "DONE" : "ON_PROGRESS"
 
+        // ✅ PERBAIKAN: Update arahanDireksi, bukan meetingDecisions
         await db.update(agendas)
             .set({
-                meetingDecisions: arahans,
+                arahanDireksi: arahans, // ✅ Update ke arahanDireksi
                 monevStatus: newMonevStatus,
                 updatedAt: new Date()
             })

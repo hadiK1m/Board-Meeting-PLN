@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const dynamic = 'force-dynamic'
 import { Metadata } from "next"
 import { getMonevRakordirList } from "@/server/actions/monev-rakordir-actions"
@@ -20,11 +21,38 @@ export default async function MonevRakordirPage() {
         )
     }
 
+    // ✅ Transform data dari server ke format yang diharapkan client
+    const transformedData = data.map(item => ({
+        id: item.id,
+        title: item.title,
+        meetingNumber: item.meetingNumber,
+        meetingYear: item.meetingYear,
+        executionDate: item.executionDate,
+        initiator: item.initiator,
+        contactPerson: item.contactPerson,
+        position: item.position,
+        phone: item.phone,
+        risalahTtd: item.risalahTtd,
+        petikanRisalah: item.petikanRisalah,
+        monevStatus: item.monevStatus,
+        // Pastikan arahanDireksi bertipe ArahanItem[]
+        arahanDireksi: Array.isArray(item.arahanDireksi) ? item.arahanDireksi.map((arahan: any) => ({
+            id: arahan.id || '',
+            text: arahan.text || '',
+            targetOutput: arahan.targetOutput,
+            currentProgress: arahan.currentProgress,
+            evidencePath: arahan.evidencePath,
+            status: arahan.status === "DONE" ? "DONE" : "ON_PROGRESS" as "ON_PROGRESS" | "DONE",
+            lastUpdated: arahan.lastUpdated
+        })) : [],
+        // Untuk backward compatibility
+        meetingDecisions: Array.isArray(item.meetingDecisions) ? item.meetingDecisions : []
+    }))
+
     return (
         <div className="flex flex-col h-full">
-
             <div className="flex-1 p-6 space-y-6 overflow-auto">
-                <MonevRakordirClient initialData={data} />
+                <MonevRakordirClient initialData={transformedData} />
             </div>
         </div>
     )

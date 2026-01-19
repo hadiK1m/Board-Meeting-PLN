@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
@@ -28,15 +29,17 @@ import { MonevUpdateRakordirDialog } from "./monev-update-rakordir-dialog"
 import { getEvidenceUrlAction } from "@/server/actions/monev-rakordir-actions"
 import { getRisalahDownloadUrlAction } from "@/server/actions/radir-actions" // Reuse
 
-interface DecisionItem {
+interface ArahanItem {
     id: string
     text: string
     targetOutput?: string
     currentProgress?: string
     evidencePath?: string
     status: "ON_PROGRESS" | "DONE"
+    lastUpdated?: string
 }
 
+// Ganti interface MonevItem menjadi:
 interface MonevItem {
     id: string
     title: string
@@ -50,8 +53,18 @@ interface MonevItem {
     risalahTtd: string | null
     petikanRisalah: string | null
     monevStatus: string | null
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    meetingDecisions: DecisionItem[] | any
+    arahanDireksi?: any[] // ✅ Ubah dari ArahanItem[] menjadi any[]
+    meetingDecisions?: any[]
+
+    // Field tambahan dari server
+    arahanCount?: number
+    completedArahanCount?: number
+    status?: string
+    priority?: string | null
+    urgency?: string | null
+    deadline?: Date | null
+    director?: string | null
+    // ... tambahkan field lain jika diperlukan
 }
 
 interface MonevRakordirClientProps {
@@ -178,11 +191,23 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
 
                                 <div className="bg-slate-50 rounded-lg p-3 mb-4 space-y-2">
                                     {(() => {
-                                        const decision = Array.isArray(item.meetingDecisions) ? item.meetingDecisions[0] : null
-                                        return decision ? (
+                                        const arahans = Array.isArray(item.arahanDireksi) ? item.arahanDireksi :
+                                            Array.isArray(item.meetingDecisions) ? item.meetingDecisions : []
+                                        const firstArahan = arahans[0]
+                                        return firstArahan ? (
                                             <>
-                                                <div className="flex items-start gap-2 text-xs"><Target className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" /><span className="text-slate-600 font-medium line-clamp-1">{decision.targetOutput || "Output belum diisi"}</span></div>
-                                                <div className="flex items-start gap-2 text-xs"><ArrowRight className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" /><span className="text-slate-600 line-clamp-1">{decision.currentProgress || "Belum ada progress"}</span></div>
+                                                <div className="flex items-start gap-2 text-xs">
+                                                    <Target className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                                    <span className="text-slate-600 font-medium line-clamp-1">
+                                                        {firstArahan.targetOutput || "Target output belum diisi"}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-start gap-2 text-xs">
+                                                    <ArrowRight className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                                    <span className="text-slate-600 line-clamp-1">
+                                                        {firstArahan.currentProgress || "Belum ada progress"}
+                                                    </span>
+                                                </div>
                                             </>
                                         ) : <span className="text-xs text-slate-400 italic">Belum ada detail arahan</span>
                                     })()}
@@ -208,10 +233,12 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                         </TableHeader>
                         <TableBody>
                             {filteredData.map((item) => {
-                                const decisions = Array.isArray(item.meetingDecisions) ? (item.meetingDecisions as DecisionItem[]) : []
-                                const firstDecision = decisions[0]
-                                const doneCount = decisions.filter((d: DecisionItem) => d.status === "DONE").length
-                                const decisionCount = decisions.length
+                                // ✅ PERBAIKAN 1: Ganti "decisions" menjadi "arahans" dan gunakan arahanDireksi
+                                const arahans = Array.isArray(item.arahanDireksi) ? item.arahanDireksi :
+                                    Array.isArray(item.meetingDecisions) ? item.meetingDecisions : []
+                                const firstArahan = arahans[0]
+                                const doneCount = arahans.filter((a: any) => a.status === "DONE").length
+                                const arahanCount = arahans.length
 
                                 return (
                                     <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
@@ -259,18 +286,46 @@ export function MonevRakordirClient({ initialData }: MonevRakordirClientProps) {
                                         </TableCell>
 
                                         <TableCell className="align-top py-5">
-                                            {firstDecision ? (
+                                            {firstArahan ? (
                                                 <div className="space-y-3">
-                                                    <div><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><Target className="h-3 w-3" /> Output</div><p className="text-xs font-medium text-slate-800 leading-relaxed">{firstDecision.targetOutput || <span className="text-slate-400 italic">Belum diisi...</span>}</p></div>
-                                                    <div className="pl-2 border-l-2 border-slate-200"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1"><ArrowRight className="h-3 w-3" /> Progress Terkini</div><p className="text-xs text-slate-600">{firstDecision.currentProgress || <span className="text-slate-400 italic">Belum update...</span>}</p></div>
-                                                    {decisionCount > 1 && <div className="text-[10px] text-slate-400 italic pt-1">+{decisionCount - 1} butir arahan lainnya...</div>}
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                                            <Target className="h-3 w-3" /> Target Output
+                                                        </div>
+                                                        <p className="text-xs font-medium text-slate-800 leading-relaxed">
+                                                            {firstArahan.targetOutput || <span className="text-slate-400 italic">Belum diisi...</span>}
+                                                        </p>
+                                                    </div>
+                                                    <div className="pl-2 border-l-2 border-slate-200">
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                                            <ArrowRight className="h-3 w-3" /> Progress Terkini
+                                                        </div>
+                                                        <p className="text-xs text-slate-600">
+                                                            {firstArahan.currentProgress || <span className="text-slate-400 italic">Belum update...</span>}
+                                                        </p>
+                                                    </div>
+                                                    {arahanCount > 1 && (
+                                                        <div className="text-[10px] text-slate-400 italic pt-1">
+                                                            +{arahanCount - 1} arahan lainnya...
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ) : <span className="text-xs text-slate-400 italic">Data arahan kosong</span>}
+                                            ) : (
+                                                <span className="text-xs text-slate-400 italic">Data arahan kosong</span>
+                                            )}
                                         </TableCell>
 
                                         <TableCell className="align-top py-5 text-center">
                                             <MonevStatusBadge status={item.monevStatus} />
-                                            <div className="mt-2 text-[10px] text-slate-400 font-medium">{doneCount} / {decisionCount} Item Selesai</div>
+                                            <div className="mt-2 text-[10px] text-slate-400 font-medium">
+                                                {doneCount} / {arahanCount} Item Selesai
+                                            </div>
+                                        </TableCell>
+
+
+                                        <TableCell className="align-top py-5 text-center">
+                                            <MonevStatusBadge status={item.monevStatus} />
+                                            <div className="mt-2 text-[10px] text-slate-400 font-medium"> {doneCount} / {arahanCount} Item Selesai</div>
                                         </TableCell>
                                         <TableCell className="align-top py-5 text-right pr-6">
                                             <DropdownMenu>

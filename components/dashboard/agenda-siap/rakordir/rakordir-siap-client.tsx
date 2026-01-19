@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useState, useMemo } from "react"
 // 1. Import komponen baru - TAMBAHKAN di bagian import
+import { Clock } from "lucide-react"
 import { TundaRakordirSiapDialog } from "./tunda-rakordir-siap-dialog"
 import {
     Search,
@@ -17,9 +18,7 @@ import {
     FileSpreadsheet,
     Play,
     CheckSquare,
-    CalendarPlus,
-    Clock,
-    ArrowUpDown,
+    CalendarPlus
 } from "lucide-react"
 
 import {
@@ -93,8 +92,6 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
     const [statusFilter, setStatusFilter] = useState("all")
     const [tundaOpen, setTundaOpen] = useState(false)
     const [selectedForTunda, setSelectedForTunda] = useState<AgendaReady | null>(null)
-    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-
 
     const [selectedIds, setSelectedIds] = useState<string[]>([])
 
@@ -105,7 +102,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
     const [selectedForCancel, setSelectedForCancel] = useState<AgendaReady | null>(null)
 
     const filteredData = useMemo(() => {
-        let result = data
+        return data
             .filter(item => (item.status || "").toLowerCase() !== "draft")
             .filter((item) => {
                 const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -114,20 +111,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
 
                 return matchesSearch && matchesStatus
             })
-
-        // ✅ Tambahkan sorting berdasarkan deadline
-        result = result.sort((a, b) => {
-            const dateA = new Date(a.deadline).getTime()
-            const dateB = new Date(b.deadline).getTime()
-            return sortOrder === "asc" ? dateA - dateB : dateB - dateA
-        })
-
-        return result
-    }, [data, searchTerm, statusFilter, sortOrder])
-
-    const toggleSort = () => {
-        setSortOrder(prev => prev === "asc" ? "desc" : "asc")
-    }
+    }, [data, searchTerm, statusFilter])
 
     const selectedAgendas = useMemo(() => {
         return filteredData.filter(a => selectedIds.includes(a.id))
@@ -202,27 +186,6 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
         }
     };
 
-    const getStatusStyles = (status: string | null) => {
-        const s = status?.toUpperCase() || "DRAFT";
-
-        switch (s) {
-            case "DRAFT":
-                return "bg-slate-100 text-slate-500 border-slate-200";
-            case "DAPAT_DILANJUTKAN":
-                return "bg-blue-100 text-blue-700 border-blue-200";
-            case "DIJADWALKAN":
-                return "bg-emerald-100 text-emerald-700 border-emerald-200";
-            case "DITUNDA":
-                return "bg-amber-100 text-amber-700 border-amber-200";
-            case "DIBATALKAN":
-                return "bg-red-100 text-red-700 border-red-200";
-            case "RAPAT_SELESAI":
-                return "bg-green-600 text-white border-transparent";
-            default:
-                return "bg-[#125d72] text-white border-transparent";
-        }
-    };
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -286,19 +249,7 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                 <TableHead className="w-12 px-4 text-center">
                                     <Checkbox checked={selectedIds.length === filteredData.length && filteredData.length > 0} onCheckedChange={toggleSelectAll} />
                                 </TableHead>
-                                <TableHead className="w-[35%] min-w-75 text-[#125d72] font-extrabold uppercase text-[11px] pl-2 tracking-wider">
-                                    <Button
-                                        variant="ghost"
-                                        onClick={toggleSort}
-                                        className="p-0 h-auto font-extrabold uppercase text-[11px] tracking-wider hover:bg-transparent hover:text-[#125d72]"
-                                    >
-                                        Judul Agenda Rapat
-                                        <ArrowUpDown className="ml-2 h-3 w-3" />
-                                        <span className="ml-1 text-[9px] text-slate-400 font-normal">
-                                            ({sortOrder === "asc" ? "Terlama" : "Terbaru"})
-                                        </span>
-                                    </Button>
-                                </TableHead>
+                                <TableHead className="w-[35%] min-w-75 text-[#125d72] font-extrabold uppercase text-[11px] pl-2 tracking-wider">Agenda Rapat</TableHead>
                                 <TableHead className="w-[20%] text-[#125d72] font-extrabold uppercase text-[11px] tracking-wider">NARAHUBUNG (PIC)</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] text-center tracking-wider">Status</TableHead>
                                 <TableHead className="text-[#125d72] font-extrabold uppercase text-[11px] pl-6 tracking-wider">Catatan Pembatalan</TableHead>
@@ -330,10 +281,11 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-center align-top py-5">
-                                            <Badge className={cn(
-                                                "text-[10px] font-bold px-3 py-0.5 rounded-full border shadow-none uppercase tracking-tighter",
-                                                getStatusStyles(agenda.status)
-                                            )}>
+                                            <Badge className={cn("text-[10px] font-bold px-3 py-0.5 rounded-full uppercase shadow-none",
+                                                agenda.status === "DIBATALKAN" ? "bg-red-100 text-red-600" :
+                                                    agenda.status === "DITUNDA" ? "bg-amber-100 text-amber-600" : // ✅ TAMBAHKAN KONDISI DITUNDA
+                                                        agenda.status === "DIJADWALKAN" ? "bg-blue-100 text-blue-600" :
+                                                            "bg-[#125d72] text-white")}>
                                                 {agenda.status.replace(/_/g, ' ')}
                                             </Badge>
                                         </TableCell>
@@ -392,38 +344,23 @@ export function RakordirSiapClient({ data }: RakordirSiapClientProps) {
                 </div>
             ) : (
                 /* GRID VIEW */
-                /* GRID VIEW */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {filteredData.map((agenda) => (
                         <div key={agenda.id} className={cn("bg-white border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all border-slate-100 group relative", selectedIds.includes(agenda.id) && "border-[#14a2ba] ring-1 ring-[#14a2ba]/30")}>
-                            <div className="absolute top-4 left-4 z-10">
-                                <Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} />
-                            </div>
+                            <div className="absolute top-4 left-4 z-10"><Checkbox checked={selectedIds.includes(agenda.id)} onCheckedChange={() => toggleSelectOne(agenda.id)} /></div>
                             <div className="flex items-center justify-between mb-4 pl-6">
-                                <Badge className={cn(
-                                    "text-[10px] font-bold px-3 py-0.5 rounded-full border shadow-none uppercase tracking-tighter",
-                                    getStatusStyles(agenda.status)
-                                )}>
+                                <Badge className={cn("text-[10px] font-bold px-3 uppercase",
+                                    agenda.status === "DIBATALKAN" ? "bg-red-500 text-white" :
+                                        agenda.status === "DITUNDA" ? "bg-amber-500 text-white" : // ✅ TAMBAHKAN KONDISI DITUNDA
+                                            agenda.status === "DIJADWALKAN" ? "bg-blue-500 text-white" :
+                                                "bg-[#125d72] text-white")}>
                                     {agenda.status.replace(/_/g, ' ')}
                                 </Badge>
-                                <Button variant="ghost" size="sm" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="h-8 w-8 p-0 rounded-full hover:bg-slate-100">
-                                    <Eye className="h-4 w-4 text-[#14a2ba]" />
-                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => { setSelectedDetail(agenda); setDetailOpen(true); }} className="h-8 w-8 p-0 rounded-full hover:bg-slate-100"><Eye className="h-4 w-4 text-[#14a2ba]" /></Button>
                             </div>
                             <h3 className="font-bold text-[#125d72] text-sm uppercase line-clamp-2 mb-4 h-10 leading-snug">{agenda.title}</h3>
                             <div className="bg-slate-50 p-3 rounded-lg flex items-center justify-between mt-auto">
-                                <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Deadline Usulan</p>
-                                    <p className="text-xs font-bold text-[#125d72]">
-                                        {format(new Date(agenda.deadline), "dd MMM yyyy")}
-                                        {sortOrder === "asc" && (
-                                            <span className="ml-1 text-[9px] text-emerald-600">↑</span>
-                                        )}
-                                        {sortOrder === "desc" && (
-                                            <span className="ml-1 text-[9px] text-emerald-600">↓</span>
-                                        )}
-                                    </p>
-                                </div>
+                                <div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Deadline Usulan</p><p className="text-xs font-bold text-[#125d72]">{format(new Date(agenda.deadline), "dd MMM yyyy")}</p></div>
                                 <CalendarPlus className="h-5 w-5 text-[#14a2ba] opacity-40" />
                             </div>
                         </div>
