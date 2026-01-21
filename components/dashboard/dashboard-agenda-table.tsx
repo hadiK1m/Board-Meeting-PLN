@@ -20,7 +20,7 @@ import {
     Phone,
     SlidersHorizontal,
     FileText,
-    BarChart3
+    BarChart3,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -50,7 +50,7 @@ import {
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 
-// Tipe Data untuk Tabel
+// ── Tipe (bisa dipindah ke file terpisah nanti)
 export type AgendaTableItem = {
     id: string
     title: string
@@ -62,12 +62,16 @@ export type AgendaTableItem = {
     executionDate: string | null
 }
 
+export type TableFilter = {
+    meetingType?: "RAKORDIR" | "RADIR"
+    status?: string
+    clearLabel?: string // hanya untuk UI di parent, tidak dipakai di sini
+}
+
 // Helper WA Link
 const getWaLink = (phone: string) => {
     if (!phone) return "#"
-    // Bersihkan karakter non-angka
     let clean = phone.replace(/\D/g, "")
-    // Ganti 08 di depan dengan 628
     if (clean.startsWith("0")) {
         clean = "62" + clean.slice(1)
     }
@@ -77,18 +81,16 @@ const getWaLink = (phone: string) => {
 export const columns: ColumnDef<AgendaTableItem>[] = [
     {
         accessorKey: "title",
-        header: ({ column }) => {
-            return (
-                <Button
-                    variant="ghost"
-                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                    className="text-xs font-bold uppercase tracking-wider"
-                >
-                    Judul Agenda
-                    <ArrowUpDown className="ml-2 h-3 w-3" />
-                </Button>
-            )
-        },
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="text-xs font-bold uppercase tracking-wider"
+            >
+                Judul Agenda
+                <ArrowUpDown className="ml-2 h-3 w-3" />
+            </Button>
+        ),
         cell: ({ row }) => (
             <div className="flex flex-col max-w-75">
                 <span className="font-bold text-slate-700 truncate">{row.getValue("title")}</span>
@@ -106,7 +108,14 @@ export const columns: ColumnDef<AgendaTableItem>[] = [
         cell: ({ row }) => {
             const type = row.getValue("meetingType") as string
             return (
-                <Badge variant="outline" className={type === "RAKORDIR" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-blue-50 text-blue-700 border-blue-200"}>
+                <Badge
+                    variant="outline"
+                    className={
+                        type === "RAKORDIR"
+                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                    }
+                >
                     {type === "RAKORDIR" ? <FileText className="w-3 h-3 mr-1" /> : <BarChart3 className="w-3 h-3 mr-1" />}
                     {type}
                 </Badge>
@@ -117,10 +126,11 @@ export const columns: ColumnDef<AgendaTableItem>[] = [
         accessorKey: "status",
         header: "Status Meeting",
         cell: ({ row }) => {
-            const status = row.getValue("status") as string
+            const status = (row.getValue("status") as string) || ""
             let color = "bg-slate-100 text-slate-600"
-            if (status === "RAPAT_SELESAI" || status === "COMPLETED") color = "bg-emerald-100 text-emerald-700"
-            if (status === "DIJADWALKAN" || status === "SCHEDULED") color = "bg-blue-100 text-blue-700"
+
+            if (["RAPAT_SELESAI", "COMPLETED"].includes(status)) color = "bg-emerald-100 text-emerald-700"
+            if (["DIJADWALKAN", "SCHEDULED"].includes(status)) color = "bg-blue-100 text-blue-700"
             if (status === "DRAFT") color = "bg-slate-200 text-slate-600"
 
             return <Badge className={`border-none ${color}`}>{status.replace("_", " ")}</Badge>
@@ -132,10 +142,14 @@ export const columns: ColumnDef<AgendaTableItem>[] = [
         cell: ({ row }) => {
             const status = row.getValue("monevStatus") as string
             let color = "bg-slate-100 text-slate-500"
-            if (status === "Selesai" || status === "DONE") color = "bg-emerald-50 text-emerald-600 border border-emerald-200"
+            if (["Selesai", "DONE"].includes(status)) color = "bg-emerald-50 text-emerald-600 border border-emerald-200"
             if (status === "On Progress") color = "bg-amber-50 text-amber-600 border border-amber-200"
 
-            return <div className={`text-[10px] px-2 py-1 rounded-full font-bold text-center w-fit ${color}`}>{status}</div>
+            return (
+                <div className={`text-[10px] px-2 py-1 rounded-full font-bold text-center w-fit ${color}`}>
+                    {status}
+                </div>
+            )
         },
     },
     {
@@ -168,17 +182,53 @@ export const columns: ColumnDef<AgendaTableItem>[] = [
     },
 ]
 
-export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
+// ────────────────────────────────────────────────
+// Komponen Utama
+// ────────────────────────────────────────────────
+
+interface DashboardAgendaTableProps {
+    data: AgendaTableItem[]
+    initialFilters?: TableFilter
+}
+
+export function DashboardAgendaTable({ data, initialFilters = {} }: DashboardAgendaTableProps) {
     const [sorting, setSorting] = React.useState<SortingState>([])
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
     const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
     const [rowSelection, setRowSelection] = React.useState({})
 
-    // Pagination State
     const [pagination, setPagination] = React.useState({
         pageIndex: 0,
-        pageSize: 25, // Default 25
+        pageSize: 25,
     })
+
+    // ── Apply initial filters sekali saja saat mount atau ketika initialFilters berubah
+    React.useEffect(() => {
+        const newFilters: ColumnFiltersState = []
+
+        if (initialFilters.meetingType) {
+            newFilters.push({
+                id: "meetingType",
+                value: initialFilters.meetingType,
+            })
+        }
+
+        if (initialFilters.status) {
+            // Karena status punya mapping (COMPLETED = RAPAT_SELESAI, dll),
+            // kita pakai custom filter function di kolom status (lihat di bawah)
+            // Untuk sementara, kita set nilai mentah dulu → logic mapping ada di column filterFn
+            newFilters.push({
+                id: "status",
+                value: initialFilters.status,
+            })
+        }
+
+        if (newFilters.length > 0) {
+            setColumnFilters(newFilters)
+        }
+        // Reset ke halaman pertama saat filter berubah
+        setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    }, [initialFilters])
 
     const table = useReactTable({
         data,
@@ -199,29 +249,51 @@ export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
             rowSelection,
             pagination,
         },
+        // Optional: custom filter function untuk status (agar support alias)
+        filterFns: {
+            statusFilter: (row, columnId, filterValue: string) => {
+                const status = row.getValue(columnId) as string
+                if (!filterValue) return true
+
+                const equivalents: Record<string, string[]> = {
+                    RAPAT_SELESAI: ["RAPAT_SELESAI", "COMPLETED"],
+                    DIJADWALKAN: ["DIJADWALKAN", "SCHEDULED"],
+                    DIBATALKAN: ["DIBATALKAN", "CANCELLED"],
+                    DRAFT: ["DRAFT"],
+                    DAPAT_DILANJUTKAN: ["DAPAT_DILANJUTKAN"],
+                    DITUNDA: ["DITUNDA"],
+                }
+
+                const allowed = equivalents[filterValue] || [filterValue]
+                return allowed.includes(status)
+            },
+        },
     })
+
+    // ── Render ────────────────────────────────────────
 
     return (
         <div className="w-full space-y-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                {/* 1. Pencarian Global (Title) */}
+                {/* Pencarian Judul */}
                 <div className="flex items-center w-full md:w-auto relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Cari Judul Agenda..."
                         value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
-                        onChange={(event) =>
-                            table.getColumn("title")?.setFilterValue(event.target.value)
-                        }
+                        onChange={e => table.getColumn("title")?.setFilterValue(e.target.value)}
                         className="pl-8 h-9 w-full md:w-64"
                     />
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto">
-                    {/* 2. Filter Jenis Rapat */}
+                    {/* Filter Tipe Rapat (sync dengan initial jika ada) */}
                     <Select
-                        value={(table.getColumn("meetingType")?.getFilterValue() as string) ?? "ALL"}
-                        onValueChange={(value) =>
+                        value={
+                            (table.getColumn("meetingType")?.getFilterValue() as string) ||
+                            (initialFilters.meetingType ? initialFilters.meetingType : "ALL")
+                        }
+                        onValueChange={value =>
                             table.getColumn("meetingType")?.setFilterValue(value === "ALL" ? "" : value)
                         }
                     >
@@ -235,7 +307,7 @@ export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
                         </SelectContent>
                     </Select>
 
-                    {/* 3. Filter Kolom */}
+                    {/* Column Visibility */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm" className="ml-auto h-9">
@@ -246,23 +318,23 @@ export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
                         <DropdownMenuContent align="end">
                             {table
                                 .getAllColumns()
-                                .filter((column) => column.getCanHide())
-                                .map((column) => {
-                                    return (
-                                        <DropdownMenuCheckboxItem
-                                            key={column.id}
-                                            className="capitalize"
-                                            checked={column.getIsVisible()}
-                                            onCheckedChange={(value) =>
-                                                column.toggleVisibility(!!value)
-                                            }
-                                        >
-                                            {column.id === 'title' ? 'Judul' :
-                                                column.id === 'meetingType' ? 'Tipe' :
-                                                    column.id === 'contactPerson' ? 'Narahubung' : column.id}
-                                        </DropdownMenuCheckboxItem>
-                                    )
-                                })}
+                                .filter(col => col.getCanHide())
+                                .map(column => (
+                                    <DropdownMenuCheckboxItem
+                                        key={column.id}
+                                        className="capitalize"
+                                        checked={column.getIsVisible()}
+                                        onCheckedChange={value => column.toggleVisibility(!!value)}
+                                    >
+                                        {column.id === "title"
+                                            ? "Judul"
+                                            : column.id === "meetingType"
+                                                ? "Tipe"
+                                                : column.id === "contactPerson"
+                                                    ? "Narahubung"
+                                                    : column.id}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -271,47 +343,36 @@ export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
             <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
                 <Table>
                     <TableHeader className="bg-slate-50">
-                        {table.getHeaderGroups().map((headerGroup) => (
+                        {table.getHeaderGroups().map(headerGroup => (
                             <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                    header.column.columnDef.header,
-                                                    header.getContext()
-                                                )}
-                                        </TableHead>
-                                    )
-                                })}
+                                {headerGroup.headers.map(header => (
+                                    <TableHead key={header.id}>
+                                        {header.isPlaceholder
+                                            ? null
+                                            : flexRender(header.column.columnDef.header, header.getContext())}
+                                    </TableHead>
+                                ))}
                             </TableRow>
                         ))}
                     </TableHeader>
                     <TableBody>
                         {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
+                            table.getRowModel().rows.map(row => (
                                 <TableRow
                                     key={row.id}
                                     data-state={row.getIsSelected() && "selected"}
                                     className="hover:bg-slate-50/50"
                                 >
-                                    {row.getVisibleCells().map((cell) => (
+                                    {row.getVisibleCells().map(cell => (
                                         <TableCell key={cell.id} className="py-3">
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext()
-                                            )}
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                         </TableCell>
                                     ))}
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center text-slate-500 italic"
-                                >
+                                <TableCell colSpan={columns.length} className="h-24 text-center text-slate-500 italic">
                                     Tidak ada data agenda ditemukan.
                                 </TableCell>
                             </TableRow>
@@ -320,23 +381,21 @@ export function DashboardAgendaTable({ data }: { data: AgendaTableItem[] }) {
                 </Table>
             </div>
 
-            {/* 4. Pagination Controls */}
+            {/* Pagination */}
             <div className="flex items-center justify-between space-x-2 py-2">
                 <div className="flex items-center gap-2">
                     <p className="text-xs text-slate-500 font-medium">Baris per halaman:</p>
                     <Select
                         value={`${table.getState().pagination.pageSize}`}
-                        onValueChange={(value) => {
-                            table.setPageSize(Number(value))
-                        }}
+                        onValueChange={value => table.setPageSize(Number(value))}
                     >
                         <SelectTrigger className="h-8 w-17.5">
-                            <SelectValue placeholder={table.getState().pagination.pageSize} />
+                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent side="top">
-                            {[10, 25, 50, 100].map((pageSize) => (
-                                <SelectItem key={pageSize} value={`${pageSize}`}>
-                                    {pageSize}
+                            {[10, 25, 50, 100].map(size => (
+                                <SelectItem key={size} value={`${size}`}>
+                                    {size}
                                 </SelectItem>
                             ))}
                         </SelectContent>

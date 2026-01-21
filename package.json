@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:seed": "tsx db/seed.ts"
+    "db:seed": "tsx db/seed.ts",
+    "type-check": "tsc --noEmit",
+    "build": "npm run type-check && next build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
