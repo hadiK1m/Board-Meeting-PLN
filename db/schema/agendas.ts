@@ -81,7 +81,7 @@ export const agendas = pgTable("agendas", {
     risalahGroupId: uuid("risalah_group_id").defaultRandom(),
     risalahTtd: text("risalah_ttd"),
     petikanRisalah: text("petikan_risalah"),
-    monevStatus: text("monev_status").default("ON_PROGRESS"),
+    monevStatus: text("monev_status").default("IN_PROGRESS"),
 
     // Audit Trail
     createdById: uuid("created_by_id").references(() => users.id),

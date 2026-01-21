@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
@@ -24,10 +25,73 @@ const DIRECTORS_MAP: Record<string, string> = {
     "DIREKTUR PERENCANAAN KORPORAT DAN PENGEMBANGAN BISNIS (DIR RENBANG)": "DIR RENBANG",
 }
 
+// Helper function untuk parse data JSON
+const parseJsonData = (data: any): any[] => {
+    if (!data) return [];
+
+    try {
+        // Jika sudah array
+        if (Array.isArray(data)) {
+            return data;
+        }
+
+        // Jika string JSON
+        if (typeof data === 'string') {
+            let cleanString = data.trim();
+
+            // Handle kasus: '"[]"' (JSON string dalam string)
+            if (cleanString.startsWith('"') && cleanString.endsWith('"')) {
+                cleanString = cleanString.slice(1, -1);
+            }
+
+            // Handle escape characters
+            cleanString = cleanString.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+
+            const parsed = JSON.parse(cleanString);
+
+            if (Array.isArray(parsed)) {
+                return parsed;
+            } else if (parsed && typeof parsed === 'object') {
+                return Object.values(parsed);
+            }
+        }
+
+        // Jika object
+        if (typeof data === 'object' && data !== null) {
+            return Object.values(data);
+        }
+    } catch (e) {
+        // Silent error, return empty array
+    }
+
+    return [];
+}
+
+// Helper function untuk format monev status
+const formatMonevStatus = (status: string): string => {
+    if (!status || status === "null" || status === "undefined") return "Tidak Ada Arahan";
+
+    const statusMap: Record<string, string> = {
+        "DONE": "Selesai",
+        "ON_PROGRESS": "In Progress",
+        "IN_PROGRESS": "In Progress",
+        "PENDING": "Menunggu",
+        "NOT_STARTED": "Belum Mulai",
+        "CANCELLED": "Dibatalkan",
+        "SELESAI": "Selesai",
+        "PROGRESS": "In Progress",
+        "COMPLETED": "Selesai",
+        "-": "-"
+    };
+
+    const upperStatus = status.toUpperCase().trim();
+    return statusMap[upperStatus] || (status.charAt(0).toUpperCase() + status.slice(1).toLowerCase());
+}
+
 export async function getDashboardStats(filter: DashboardFilter) {
     try {
         // ------------------------------------------------------------------
-        // 1. SETUP DATE RANGE (Agar mencakup seluruh jam dalam hari tsb)
+        // 1. SETUP DATE RANGE
         // ------------------------------------------------------------------
         const fromDate = new Date(filter.from);
         fromDate.setHours(0, 0, 0, 0);
@@ -50,18 +114,17 @@ export async function getDashboardStats(filter: DashboardFilter) {
         // 3. INISIALISASI VARIABEL STATISTIK
         // ------------------------------------------------------------------
         const stats = {
-            rakordir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
-            radir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
+            rakordir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, ditunda: 0, selesai: 0, dibatalkan: 0, total: 0 },
+            radir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, ditunda: 0, selesai: 0, dibatalkan: 0, total: 0 },
             followUp: {
-                radir: { inProgress: 0, done: 0 },
-                rakordir: { inProgress: 0, done: 0 }
+                radir: { inProgress: 0, done: 0, total: 0 },
+                rakordir: { inProgress: 0, done: 0, total: 0 }
             },
             directorStats: {} as Record<string, { present: number, total: number, percentage: number }>,
-            // Array untuk Tabel Data
             listData: [] as any[]
         }
 
-        // Init Data Direksi (Agar urutan rapi & nilai awal 0)
+        // Init Data Direksi
         Object.values(DIRECTORS_MAP).forEach(shortName => {
             stats.directorStats[shortName] = { present: 0, total: 0, percentage: 0 }
         })
@@ -71,12 +134,22 @@ export async function getDashboardStats(filter: DashboardFilter) {
         // ------------------------------------------------------------------
         for (const item of data) {
             const type = item.meetingType === "RAKORDIR" ? "rakordir" : "radir"
+            const status = item.status || item.meetingStatus || "";
 
             // A. HITUNG STATUS RAPAT
-            if (item.meetingStatus === "CANCELLED") {
-                stats[type].dibatalkan++
+            if (status === "DRAFT") {
+                stats[type].draft++
             }
-            else if (item.status === "RAPAT_SELESAI" || item.meetingStatus === "COMPLETED") {
+            else if (status === "DAPAT_DILANJUTKAN") {
+                stats[type].dapatDilanjutkan++
+            }
+            else if (status === "DIJADWALKAN") {
+                stats[type].dijadwalkan++
+            }
+            else if (status === "DITUNDA") {
+                stats[type].ditunda++
+            }
+            else if (status === "RAPAT_SELESAI" || status === "COMPLETED") {
                 stats[type].selesai++
 
                 // B. HITUNG KEHADIRAN (Hanya jika Rapat Selesai & Tipe RADIR)
@@ -90,8 +163,6 @@ export async function getDashboardStats(filter: DashboardFilter) {
                             const record = (attendance as any)[longName]
                             const shortName = DIRECTORS_MAP[longName]
 
-                            // Logika: Hanya hitung jika statusnya Jelas (Hadir/Tidak/Kuasa).
-                            // Abaikan jika kosong/belum ditentukan.
                             if (record && record.status) {
                                 if (record.status === "Hadir") {
                                     stats.directorStats[shortName].present++
@@ -102,30 +173,70 @@ export async function getDashboardStats(filter: DashboardFilter) {
                                 }
                             }
                         })
-                    } catch (e) { console.error("Error parsing attendance:", e) }
+                    } catch (e) { /* Ignore error */ }
                 }
 
-                // C. HITUNG STATUS MONEV / TINDAK LANJUT (Hanya jika Rapat Selesai)
-                if (item.meetingDecisions) {
-                    try {
-                        const decisions = Array.isArray(item.meetingDecisions)
-                            ? item.meetingDecisions
-                            : JSON.parse(item.meetingDecisions as string)
+                // C. HITUNG STATUS MONEV / TINDAK LANJUT
+                // ------------------------------------------------------------------
+                // C. HITUNG STATUS MONEV / TINDAK LANJUT
+                // ------------------------------------------------------------------
+                let decisions: any[] = [];
 
-                        decisions.forEach((d: any) => {
-                            if (d.status === "DONE") stats.followUp[type].done++
-                            else stats.followUp[type].inProgress++
-                        })
-                    } catch (e) { console.error("Error parse decisions:", e) }
+                if (item.meetingType === "RADIR") {
+                    // RADIR: hanya dari meetingDecisions
+                    decisions = parseJsonData(item.meetingDecisions);
+                } else if (item.meetingType === "RAKORDIR") {
+                    // RAKORDIR: Coba dari berbagai sumber
+                    const sources = [
+                        parseJsonData(item.meetingDecisions),  // Sumber utama
+                        parseJsonData(item.arahanDireksi)      // Sumber alternatif
+                    ];
+
+                    // Gabungkan semua, filter yang valid
+                    decisions = sources.flat().filter(d =>
+                        d && d.status && (d.status.includes("PROGRESS") || d.status.includes("DONE"))
+                    );
+
+                    // Jika masih kosong, coba format lain
+                    if (decisions.length === 0 && item.arahanDireksi) {
+                        try {
+                            const arahan = parseJsonData(item.arahanDireksi);
+                            // Jika arahan punya text tapi tidak punya status, anggap sebagai IN_PROGRESS
+                            decisions = arahan.filter(d => d && d.text).map(d => ({
+                                ...d,
+                                status: d.status || "ON_PROGRESS"  // Default status
+                            }));
+                        } catch (e) {
+                            // Ignore error
+                        }
+                    }
+                }
+
+                // Hitung statistik (sama seperti sebelumnya)
+                if (decisions.length > 0) {
+                    const doneCount = decisions.filter((d: any) => {
+                        if (!d || !d.status) return false;
+                        const status = String(d.status).toUpperCase().trim();
+                        return status === "DONE" || status === "SELESAI" || status === "COMPLETED";
+                    }).length;
+
+                    const inProgressCount = decisions.filter((d: any) => {
+                        if (!d || !d.status) return false;
+                        const status = String(d.status).toUpperCase().trim();
+                        return status === "ON_PROGRESS" ||
+                            status === "IN_PROGRESS" ||
+                            status === "PROGRESS";
+                    }).length;
+
+                    stats.followUp[type].done += doneCount;
+                    stats.followUp[type].inProgress += inProgressCount;
+                    stats.followUp[type].total += decisions.length;
                 }
             }
-            else if (item.status === "DIJADWALKAN" || item.meetingStatus === "SCHEDULED") {
-                stats[type].dijadwalkan++
+            else if (status === "DIBATALKAN" || status === "CANCELLED") {
+                stats[type].dibatalkan++
             }
-            else if (item.status === "DAPAT_DILANJUTKAN") {
-                stats[type].dapatDilanjutkan++
-            }
-            else if (item.status === "DRAFT") {
+            else {
                 stats[type].draft++
             }
 
@@ -151,43 +262,68 @@ export async function getDashboardStats(filter: DashboardFilter) {
         // 6. FORMAT DATA UNTUK LIST TABEL
         // ------------------------------------------------------------------
         const listData = data.map(item => {
-            // Hitung Status Monev per Agenda untuk ditampilkan di tabel
-            let monevSummary = "N/A"
-            if (item.meetingDecisions) {
-                try {
-                    const decisions = typeof item.meetingDecisions === 'string'
-                        ? JSON.parse(item.meetingDecisions)
-                        : item.meetingDecisions
+            let decisions: any[] = [];
+            let monevSummary = "";
 
-                    if (Array.isArray(decisions) && decisions.length > 0) {
-                        const doneCount = decisions.filter((d: any) => d.status === "DONE").length
-                        const totalCount = decisions.length
+            if (item.meetingType === "RADIR") {
+                decisions = parseJsonData(item.meetingDecisions);
+            } else if (item.meetingType === "RAKORDIR") {
+                decisions = parseJsonData(item.arahanDireksi);
+            }
 
-                        if (doneCount === totalCount) monevSummary = "Selesai"
-                        else monevSummary = "On Progress"
+            if (decisions.length > 0) {
+                const doneCount = decisions.filter((d: any) => {
+                    if (!d || !d.status) return false;
+                    const status = String(d.status).toUpperCase().trim();
+                    return status === "DONE" || status === "SELESAI" || status === "COMPLETED";
+                }).length;
+                const totalCount = decisions.length;
+
+                if (doneCount === totalCount) {
+                    monevSummary = `Selesai (${doneCount}/${totalCount})`
+                } else if (doneCount === 0) {
+                    const hasInProgress = decisions.some((d: any) => {
+                        if (!d || !d.status) return false;
+                        const status = String(d.status).toUpperCase().trim();
+                        return status === "ON_PROGRESS" ||
+                            status === "IN_PROGRESS" ||
+                            status === "PROGRESS";
+                    });
+
+                    if (hasInProgress) {
+                        monevSummary = `In Progress (0/${totalCount})`
+                    } else {
+                        monevSummary = `Belum Dieksekusi (0/${totalCount})`
+                    }
+                } else {
+                    monevSummary = `In Progress (${doneCount}/${totalCount})`
+                }
+            } else {
+                const meetingStatus = item.status || item.meetingStatus || "";
+                const isMeetingCompleted = meetingStatus === "RAPAT_SELESAI" || meetingStatus === "COMPLETED";
+                const isMeetingDraft = meetingStatus === "DRAFT";
+                const isMeetingScheduled = meetingStatus === "DIJADWALKAN";
+                const isMeetingPostponed = meetingStatus === "DITUNDA";
+
+                if (isMeetingDraft || isMeetingScheduled || isMeetingPostponed) {
+                    monevSummary = "-"
+                } else if (isMeetingCompleted) {
+                    if (item.monevStatus) {
+                        monevSummary = formatMonevStatus(item.monevStatus);
                     } else {
                         monevSummary = "Tidak Ada Arahan"
                     }
-                } catch { monevSummary = "Error Data" }
-            } else {
-                // Jika draft/jadwal biasanya belum ada keputusan
-                if (item.status === "DRAFT" || item.status === "DIJADWALKAN") monevSummary = "-"
-                else monevSummary = "Tidak Ada Arahan"
+                } else {
+                    monevSummary = "Menunggu Rapat"
+                }
             }
 
-            // ✅ PASTIKAN BAGIAN INI ADA (Bukan monevStatus string biasa)
             return {
                 id: item.id,
                 title: item.title || "Tanpa Judul",
                 meetingType: item.meetingType,
                 status: item.status || item.meetingStatus,
-
-                // ✅ Mengembalikan objek monev, bukan string biasa
-                monev: {
-                    status: monevSummary,
-                    // Bisa ditambahkan properti lain jika diperlukan di masa depan
-                },
-
+                monevStatus: monevSummary,
                 contactPerson: item.contactPerson || "-",
                 contactPhone: item.phone || "",
                 executionDate: item.executionDate
@@ -199,7 +335,7 @@ export async function getDashboardStats(filter: DashboardFilter) {
             data: {
                 ...stats,
                 directorChartData,
-                listData // Return data tabel juga
+                listData
             }
         }
 

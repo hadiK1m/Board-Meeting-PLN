@@ -17,7 +17,8 @@ import {
     Users,
     ListTodo,
     Activity,
-    File // Icon untuk Draft
+    File,
+    PauseCircle
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
@@ -40,13 +41,12 @@ export function DashboardClient() {
         to: new Date(),
     })
 
-    // ✅ UPDATE 1: Tambahkan properti 'listData' pada state awal
     const [stats, setStats] = useState({
-        rakordir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
-        radir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, selesai: 0, dibatalkan: 0, total: 0 },
-        followUp: { radir: { inProgress: 0, done: 0 }, rakordir: { inProgress: 0, done: 0 } },
+        rakordir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, ditunda: 0, selesai: 0, dibatalkan: 0, total: 0 },
+        radir: { draft: 0, dapatDilanjutkan: 0, dijadwalkan: 0, ditunda: 0, selesai: 0, dibatalkan: 0, total: 0 },
+        followUp: { radir: { inProgress: 0, done: 0, total: 0 }, rakordir: { inProgress: 0, done: 0, total: 0 } },
         directorChartData: [] as any[],
-        listData: [] as AgendaTableItem[] // ✅ Tambahkan ini di state
+        listData: [] as AgendaTableItem[]
     })
     const [loading, setLoading] = useState(true)
 
@@ -91,7 +91,7 @@ export function DashboardClient() {
                 </div>
             </div>
 
-            {/* --- TOP ROW: 3 CARDS --- */}
+            {/* TOP ROW: 3 CARDS */}
             <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
 
                 {/* 1. RAKORDIR CARD */}
@@ -102,11 +102,11 @@ export function DashboardClient() {
                         <p className="text-xs text-slate-300 font-medium uppercase tracking-wide">Rapat Koordinasi</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        {/* ✅ UPDATE 2: Ubah Grid jadi 3 kolom agar muat Draft */}
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-3">
                             <StatBox label="Draft" value={stats.rakordir.draft} icon={File} color="bg-white/10 text-slate-300" isLoading={loading} />
                             <StatBox label="Dapat Dilanjut" value={stats.rakordir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/10 text-emerald-300" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.rakordir.dijadwalkan} icon={Clock} color="bg-white/10 text-blue-300" isLoading={loading} />
+                            <StatBox label="Ditunda" value={stats.rakordir.ditunda} icon={PauseCircle} color="bg-white/10 text-amber-300" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.rakordir.selesai} icon={CheckCircle2} color="bg-white/10 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.rakordir.dibatalkan} icon={XCircle} color="bg-white/10 text-red-300" isLoading={loading} />
                         </div>
@@ -125,11 +125,11 @@ export function DashboardClient() {
                         <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">Rapat Keputusan</p>
                     </CardHeader>
                     <CardContent className="pt-4 relative z-10">
-                        {/* ✅ UPDATE 3: Ubah Grid jadi 3 kolom agar muat Draft */}
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-3">
                             <StatBox label="Draft" value={stats.radir.draft} icon={File} color="bg-white/20 text-blue-100" isLoading={loading} />
                             <StatBox label="Dapat Dilanjut" value={stats.radir.dapatDilanjutkan} icon={ArrowRight} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dijadwalkan" value={stats.radir.dijadwalkan} icon={Clock} color="bg-white/20 text-white" isLoading={loading} />
+                            <StatBox label="Ditunda" value={stats.radir.ditunda} icon={PauseCircle} color="bg-white/20 text-amber-200" isLoading={loading} />
                             <StatBox label="Selesai" value={stats.radir.selesai} icon={CheckCircle2} color="bg-white/20 text-white" isLoading={loading} />
                             <StatBox label="Dibatalkan" value={stats.radir.dibatalkan} icon={XCircle} color="bg-white/20 text-red-200" isLoading={loading} />
                         </div>
@@ -156,8 +156,20 @@ export function DashboardClient() {
                                 <Activity className="h-3 w-3 text-slate-500" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <MonevStatBox label="In-Progress" value={stats.followUp.radir.inProgress} color="bg-amber-500/20 text-amber-300 border-amber-500/30" isLoading={loading} />
-                                <MonevStatBox label="Selesai" value={stats.followUp.radir.done} color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" isLoading={loading} />
+                                <MonevStatBox
+                                    label="In Progress"
+                                    value={stats.followUp.radir.inProgress}
+                                    total={stats.followUp.radir.total}
+                                    color="bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                    isLoading={loading}
+                                />
+                                <MonevStatBox
+                                    label="Selesai"
+                                    value={stats.followUp.radir.done}
+                                    total={stats.followUp.radir.total}
+                                    color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                    isLoading={loading}
+                                />
                             </div>
                         </div>
 
@@ -168,8 +180,32 @@ export function DashboardClient() {
                                 <Activity className="h-3 w-3 text-slate-500" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <MonevStatBox label="In-Progress" value={stats.followUp.rakordir.inProgress} color="bg-amber-500/20 text-amber-300 border-amber-500/30" isLoading={loading} />
-                                <MonevStatBox label="Selesai" value={stats.followUp.rakordir.done} color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" isLoading={loading} />
+                                <MonevStatBox
+                                    label="In Progress"
+                                    value={stats.followUp.rakordir.inProgress}
+                                    total={stats.followUp.rakordir.total}
+                                    color="bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                    isLoading={loading}
+                                />
+                                <MonevStatBox
+                                    label="Selesai"
+                                    value={stats.followUp.rakordir.done}
+                                    total={stats.followUp.rakordir.total}
+                                    color="bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                    isLoading={loading}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Total Tindak Lanjut */}
+                        <div className="pt-3 border-t border-white/10">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-400">Total Tindak Lanjut:</span>
+                                <span className="font-bold text-white">
+                                    {loading ? "-" :
+                                        (stats.followUp.radir.total + stats.followUp.rakordir.total)
+                                    }
+                                </span>
                             </div>
                         </div>
 
@@ -177,7 +213,7 @@ export function DashboardClient() {
                 </Card>
             </div>
 
-            {/* --- BOTTOM ROW: FULL WIDTH ATTENDANCE CHART --- */}
+            {/* CHART PERSENTASE KEHADIRAN */}
             <Card className="shadow-xl border border-slate-200 rounded-2xl bg-white overflow-hidden">
                 <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
                     <div className="flex items-center justify-between">
@@ -186,7 +222,7 @@ export function DashboardClient() {
                                 <Users className="h-5 w-5" /> Persentase Kehadiran Direksi
                             </CardTitle>
                             <CardDescription className="font-medium text-slate-500">
-                                Akumulasi kehadiran per direktur berdasarkan rapat yang telah selesai
+                                Akumulasi kehadiran per direktur berdasarkan rapat RADIR yang telah selesai
                             </CardDescription>
                         </div>
                     </div>
@@ -254,7 +290,7 @@ export function DashboardClient() {
                 </CardContent>
             </Card>
 
-            {/* ✅ TAMBAHKAN BAGIAN TABEL DI BAWAH SINI */}
+            {/* TABEL DAFTAR SELURUH AGENDA */}
             <Card className="shadow-xl border border-slate-200 rounded-2xl bg-white overflow-hidden">
                 <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
                     <div className="space-y-1">
@@ -292,11 +328,25 @@ function StatBox({ label, value, icon: Icon, color, isLoading }: any) {
     )
 }
 
-function MonevStatBox({ label, value, color, isLoading }: any) {
+function MonevStatBox({ label, value, total, color, isLoading }: any) {
+    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+
     return (
-        <div className={cn("px-3 py-2 rounded-lg flex items-center justify-between border h-10 transition-all hover:brightness-110 cursor-default", color)}>
-            <span className="text-[10px] font-bold uppercase opacity-90">{label}</span>
-            {isLoading ? <div className="h-4 w-6 bg-current opacity-20 rounded animate-pulse"></div> : <span className="text-sm font-black">{value}</span>}
+        <div className={cn("px-3 py-2 rounded-lg flex flex-col border h-14 transition-all hover:brightness-110 cursor-default", color)}>
+            <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase opacity-90">{label}</span>
+                {isLoading ? (
+                    <div className="h-4 w-6 bg-current opacity-20 rounded animate-pulse"></div>
+                ) : (
+                    <span className="text-sm font-black">{value}</span>
+                )}
+            </div>
+            {!isLoading && total > 0 && (
+                <div className="mt-1 flex items-center justify-between">
+                    <span className="text-[9px] opacity-70">dari {total}</span>
+                    <span className="text-[9px] font-bold">{percentage}%</span>
+                </div>
+            )}
         </div>
     )
 }
