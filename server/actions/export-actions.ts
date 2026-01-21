@@ -68,7 +68,7 @@ function cleanHtml(html: string | null | undefined): string {
     text = text.replace(/<li>/gi, "\n- ")
     text = text.replace(/<\/li>/gi, "")
     text = text.replace(/<\/(ul|ol)>/gi, "\n")
-    text = text.replace(/<[^>]+>/g, "")
+    text = text.replace(/<[^>]+>/g, "") // Hapus semua tag HTML sisa
     text = text.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     return text.trim()
 }
@@ -215,7 +215,7 @@ export async function exportRisalahToDocx(
 }
 
 /**
- * 2. EXPORT NOTULENSI RAKORDIR (NAMA DISESUAIKAN DENGAN UI)
+ * 2. EXPORT NOTULENSI RAKORDIR (DIPERBAIKI)
  */
 export async function exportRakordirToDocx(meetingNumber: string, meetingYear: string) {
     try {
@@ -237,7 +237,7 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
 
         const masterData = sessionAgendas[0];
 
-        // --- PARSING DATA ---
+        // --- PARSING DATA UMUM ---
 
         // A. Pimpinan Rapat
         let pimpinanText = "DIREKTUR UTAMA";
@@ -263,7 +263,6 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
 
         // C. Catatan Ketidakhadiran
         const absenList = Object.entries(attendanceData)
-            // ✅ PERBAIKAN: Menggunakan `[, val]` untuk mengabaikan parameter pertama (nama/key)
             .filter(([, val]: [string, any]) => val.status !== "Hadir")
             .map(([name, val]: [string, any]) => {
                 const reason = val.reason ? ` (${val.reason})` : "";
@@ -291,31 +290,40 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
             ? Array.from(allGuests).join(", ")
             : "Tidak ada peserta tambahan";
 
-        // E. Daftar Agenda
+        // E. Daftar Agenda (Untuk Header/Cover jika ada)
         const agendaSummaryList = sessionAgendas.map((agenda, index) => {
             return `${index + 1}. ${agenda.title}`;
         }).join("\n");
 
-        // F. Data Detail Per Agenda
+        // F. Data Detail Per Agenda (BAGIAN INI YANG DIPERBAIKI)
         const agendaDetails = sessionAgendas.map((agenda, index) => {
-            let arahanList = [];
+            let arahanString = "Tidak ada arahan khusus.";
             try {
                 const rawArahan = Array.isArray(agenda.arahanDireksi)
                     ? agenda.arahanDireksi
                     : JSON.parse(String(agenda.arahanDireksi || "[]"));
 
-                arahanList = rawArahan.map((a: any, idx: number) => ({
-                    no: idx + 1,
-                    text: a.text || "-"
-                }));
-            } catch { arahanList = [] }
+                // Gabungkan array arahan menjadi satu text panjang dengan enter (\n)
+                if (rawArahan && rawArahan.length > 0) {
+                    arahanString = rawArahan.map((a: any, idx: number) => {
+                        return `${idx + 1}. ${a.text || "-"}`;
+                    }).join("\n");
+                }
+            } catch {
+                // Jika parsing gagal, mungkin datanya sudah string?
+                if (typeof agenda.arahanDireksi === 'string') {
+                    arahanString = agenda.arahanDireksi;
+                }
+            }
 
             return {
-                no: index + 1,
-                judul_agenda: agenda.title || "Tanpa Judul",
+                // ✅ DISESUAIKAN DENGAN TEMPLATE: {index}, {title}, {executiveSummary}, {arahanDireksi}
+                index: index + 1,
+                title: agenda.title || "Tanpa Judul",
                 pemrakarsa: agenda.initiator || "-",
-                executive_summary: (agenda.executiveSummary || "-").replace(/<[^>]*>?/gm, ''),
-                arahan_list: arahanList.length > 0 ? arahanList : [{ no: "-", text: "Tidak ada arahan khusus." }]
+                // Gunakan cleanHtml untuk menghapus tag HTML dari editor text
+                executiveSummary: cleanHtml(agenda.executiveSummary || "-"),
+                arahanDireksi: arahanString
             };
         });
 
@@ -333,16 +341,22 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
             pimpinanRapat: pimpinanText,
             catatan_ketidakhadiran: catatanKetidakhadiran,
             guestParticipants: guestText,
-            agendas: agendaDetails,
+            agendas: agendaDetails, // <--- Data yang sudah diperbaiki
         };
 
         const templatePath = path.resolve("./public/2. Template Notulensi Rakordir.docx");
+
+        if (!fs.existsSync(templatePath)) {
+            throw new Error("File template tidak ditemukan di: " + templatePath);
+        }
+
         const content = fs.readFileSync(templatePath, "binary");
 
         const zip = new PizZip(content);
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
+            nullGetter: () => "" // Agar jika ada undefined lain, diganti string kosong
         });
 
         doc.render(data);
