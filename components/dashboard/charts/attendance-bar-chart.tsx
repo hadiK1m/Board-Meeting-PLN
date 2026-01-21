@@ -196,32 +196,6 @@ export function AttendanceBarChart({ data, loading }: AttendanceBarChartProps) {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-6">
-                                <div className="text-center min-w-20">
-                                    <div className="text-2xl font-black text-[#125d72]">
-                                        {data.reduce((sum, dir) => sum + dir.attendance, 0)}
-                                    </div>
-                                    <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-                                        Total Kehadiran
-                                    </div>
-                                </div>
-                                <div className="text-center min-w-20">
-                                    <div className="text-2xl font-black text-slate-800">
-                                        {data.reduce((sum, dir) => sum + dir.total, 0)}
-                                    </div>
-                                    <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-                                        Total Rapat
-                                    </div>
-                                </div>
-                                <div className="text-center min-w-20">
-                                    <div className="text-2xl font-black text-emerald-600">
-                                        {data.length}
-                                    </div>
-                                    <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-                                        Direktur
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 )}

@@ -96,16 +96,14 @@ export function DashboardClient() {
         }
 
         if (tableFilter.status) {
-            const filterStatus = tableFilter.status  // TypeScript tahu ini string
-
-            // ── DEFINISIKAN statusMap DI SINI ──
+            const filterStatus = tableFilter.status
             const statusMap: Record<string, string[]> = {
-                "RAPAT_SELESAI": ["RAPAT_SELESAI", "COMPLETED"],
-                "DIJADWALKAN": ["DIJADWALKAN", "SCHEDULED"],
-                "DIBATALKAN": ["DIBATALKAN", "CANCELLED"],
-                "DRAFT": ["DRAFT"],
-                "DAPAT_DILANJUTKAN": ["DAPAT_DILANJUTKAN"],
-                "DITUNDA": ["DITUNDA"]
+                RAPAT_SELESAI: ["RAPAT_SELESAI", "COMPLETED"],
+                DIJADWALKAN: ["DIJADWALKAN", "SCHEDULED"],
+                DIBATALKAN: ["DIBATALKAN", "CANCELLED"],
+                DRAFT: ["DRAFT"],
+                DAPAT_DILANJUTKAN: ["DAPAT_DILANJUTKAN"],
+                DITUNDA: ["DITUNDA"]
             }
 
             filtered = filtered.filter(item => {
@@ -139,7 +137,21 @@ export function DashboardClient() {
 
     const clearFilter = () => {
         setTableFilter({})
-        setFilteredTableData(stats.listData)
+
+        // Pastikan data asli sudah ada sebelum di-set
+        if (stats.listData?.length) {
+            setFilteredTableData([...stats.listData])  // copy array baru agar trigger re-render
+        } else {
+            setFilteredTableData([])
+        }
+
+        // Optional: scroll ke atas tabel jika perlu
+        setTimeout(() => {
+            document.getElementById("agenda-table-section")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            })
+        }, 100)
     }
 
     return (
