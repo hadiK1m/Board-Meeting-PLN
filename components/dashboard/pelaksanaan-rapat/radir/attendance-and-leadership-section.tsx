@@ -6,8 +6,8 @@ import {
     UserCheck,
     ShieldCheck,
     Users2,
-    UserCircle,
     Trash2,
+    Plus,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -196,57 +196,61 @@ export function AttendanceAndLeadershipSection({
                 </div>
 
                 {/* 3. PESERTA TAMBAHAN */}
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4 border-t border-slate-100">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Users2 className="h-4 w-4 text-[#125d72]" />
-                            <h4 className="text-sm font-bold text-[#125d72]">Peserta Tambahan</h4>
+                        <div className="flex items-center gap-2 text-[#125d72]">
+                            <Users2 className="h-4 w-4" />
+                            <h4 className="text-[11px] font-black uppercase tracking-wider">
+                                Peserta Tambahan / Tamu
+                            </h4>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={addGuest}
-                            className="text-xs"
-                        >
-                            Tambah Undangan
-                        </Button>
                     </div>
 
-                    {guests.length === 0 ? (
-                        <div className="text-center py-6 bg-slate-50 rounded-lg border border-dashed">
-                            <p className="text-xs text-slate-500">Belum ada peserta tambahan</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {guests.map((guest) => (
-                                <div key={guest.id} className="flex items-center gap-3 p-3 bg-white border rounded-lg">
-                                    <UserCircle className="h-8 w-8 text-slate-400" />
-                                    <div className="flex-1">
-                                        <Input
-                                            placeholder="Nama lengkap"
-                                            value={guest.name}
-                                            onChange={(e) => updateGuest(guest.id, "name", e.target.value)}
-                                            className="h-8 text-sm"
-                                        />
-                                        <Input
-                                            placeholder="Jabatan / Instansi"
-                                            value={guest.position}
-                                            onChange={(e) => updateGuest(guest.id, "position", e.target.value)}
-                                            className="mt-2 h-8 text-sm"
-                                        />
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => removeGuest(guest.id)}
-                                        className="text-red-500 hover:text-red-700"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                    {/* LIST PESERTA */}
+                    <div className="space-y-3">
+                        {guests.map((guest) => (
+                            <div
+                                key={guest.id}
+                                className="flex items-center gap-3 p-3 bg-slate-50/50 border border-slate-200 rounded-xl group animate-in fade-in slide-in-from-top-1 duration-200"
+                            >
+                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <Input
+                                        placeholder="Nama Lengkap"
+                                        value={guest.name}
+                                        onChange={(e) => updateGuest(guest.id, "name", e.target.value)}
+                                        className="h-8 text-[10px] font-bold bg-white focus-visible:ring-[#125d72] focus-visible:border-[#125d72]"
+                                    />
+                                    <Input
+                                        placeholder="Jabatan / Instansi"
+                                        value={guest.position}
+                                        onChange={(e) => updateGuest(guest.id, "position", e.target.value)}
+                                        className="h-8 text-[10px] font-bold bg-white focus-visible:ring-[#125d72] focus-visible:border-[#125d72]"
+                                    />
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => removeGuest(guest.id)}
+                                    className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Tombol Tambah – dipindah ke bawah seperti rakordir */}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addGuest}
+                        className="w-full border-dashed border-2 border-slate-200 hover:border-[#125d72] hover:bg-[#125d72]/5 text-slate-400 hover:text-[#125d72] h-12 rounded-xl transition-all group"
+                    >
+                        <Plus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                            Tambah Peserta / Undangan Baru
+                        </span>
+                    </Button>
                 </div>
             </CardContent>
 

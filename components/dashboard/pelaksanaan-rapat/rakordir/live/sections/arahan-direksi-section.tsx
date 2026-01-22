@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React from "react"
@@ -42,9 +41,6 @@ interface ArahanDireksiSectionProps {
     setArahan: (items: ArahanItem[] | ((prev: ArahanItem[]) => ArahanItem[])) => void
 }
 
-/**
- * Komponen Item yang bisa di-sort (Sortable)
- */
 const SortableArahanItem = ({
     id,
     text,
@@ -64,7 +60,7 @@ const SortableArahanItem = ({
         setNodeRef,
         transform,
         transition,
-        isDragging
+        isDragging,
     } = useSortable({ id })
 
     const style = {
@@ -77,23 +73,23 @@ const SortableArahanItem = ({
         <div
             ref={setNodeRef}
             style={style}
-            className={cn(
-                "flex items-center gap-4 bg-white border rounded-2xl p-4 transition-all group relative",
-                isDragging ? "shadow-2xl border-[#14a2ba] scale-[1.02]" : "border-slate-200 hover:border-[#14a2ba]/50 shadow-sm"
-            )}
+            className={`flex items-center gap-4 bg-white border rounded-xl p-4 transition-all group relative ${isDragging
+                ? "shadow-2xl border-[#125d72] scale-[1.02]"
+                : "border-slate-200 hover:border-[#125d72]/50 shadow-sm"
+                }`}
         >
             {/* Handle Drag */}
             <button
                 {...attributes}
                 {...listeners}
-                className="cursor-grab active:cursor-grabbing p-1 hover:bg-slate-100 rounded-lg text-slate-300 hover:text-[#14a2ba] transition-colors"
+                className="cursor-grab active:cursor-grabbing p-1 hover:bg-slate-100 rounded-lg text-slate-300 hover:text-[#125d72] transition-colors"
             >
                 <GripVertical className="h-5 w-5" />
             </button>
 
             {/* Nomor Urut Bulat */}
-            <div className="h-7 w-7 rounded-full bg-[#125d72] text-white text-[10px] font-black flex items-center justify-center shrink-0 shadow-md shadow-[#125d72]/20">
-                {(index + 1).toString().padStart(2, '0')}
+            <div className="h-8 w-8 rounded-full bg-[#125d72] text-white text-xs font-black flex items-center justify-center shrink-0 shadow-md shadow-[#125d72]/20">
+                {(index + 1).toString().padStart(2, "0")}
             </div>
 
             {/* Input Arahan */}
@@ -101,7 +97,7 @@ const SortableArahanItem = ({
                 value={text}
                 onChange={(e) => onUpdate(e.target.value)}
                 placeholder="Tuliskan poin arahan direksi di sini..."
-                className="border-none focus-visible:ring-0 text-xs font-bold text-slate-700 bg-transparent placeholder:text-slate-300"
+                className="flex-1 border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm font-medium bg-transparent placeholder:text-slate-400"
             />
 
             {/* Tombol Hapus */}
@@ -109,7 +105,7 @@ const SortableArahanItem = ({
                 variant="ghost"
                 size="icon"
                 onClick={onDelete}
-                className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+                className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
             >
                 <Trash2 className="h-4 w-4" />
             </Button>
@@ -117,9 +113,6 @@ const SortableArahanItem = ({
     )
 }
 
-/**
- * Komponen Utama Seksi Arahan Direksi
- */
 export function ArahanDireksiSection({
     arahan,
     setArahan,
@@ -148,7 +141,9 @@ export function ArahanDireksiSection({
     }
 
     const updateArahan = (id: string, text: string) => {
-        setArahan((prev) => prev.map((item) => (item.id === id ? { ...item, text } : item)))
+        setArahan((prev) =>
+            prev.map((item) => (item.id === id ? { ...item, text } : item))
+        )
     }
 
     const deleteArahan = (id: string) => {
@@ -157,9 +152,9 @@ export function ArahanDireksiSection({
 
     return (
         <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden bg-white">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4 px-6 flex flex-row items-center justify-between">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4 px-6">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-[#14a2ba] rounded-xl shadow-lg shadow-[#14a2ba]/20">
+                    <div className="p-2 bg-[#125d72] rounded-xl shadow-lg shadow-[#125d72]/20">
                         <ListChecks className="h-4 w-4 text-white" />
                     </div>
                     <div>
@@ -171,17 +166,9 @@ export function ArahanDireksiSection({
                         </p>
                     </div>
                 </div>
-                <Button
-                    onClick={addArahan}
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-xl border-[#14a2ba] text-[#14a2ba] font-black text-[9px] uppercase tracking-widest hover:bg-[#14a2ba]/10"
-                >
-                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Tambah Poin
-                </Button>
             </CardHeader>
 
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-6">
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
@@ -191,12 +178,13 @@ export function ArahanDireksiSection({
                         items={arahan.map((i) => i.id)}
                         strategy={verticalListSortingStrategy}
                     >
-                        <div className="space-y-3">
+                        <div className="space-y-3 min-h-35">
                             {arahan.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-100 rounded-[32px] bg-slate-50/30">
+                                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30">
                                     <AlertCircle className="h-10 w-10 text-slate-200 mb-3" />
-                                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic text-center">
-                                        Belum ada butir arahan.<br />Klik tombol &quot;Tambah Poin&quot; untuk memulai.
+                                    <p className="text-sm text-slate-400 font-bold uppercase tracking-widest italic text-center">
+                                        Belum ada butir arahan.<br />
+                                        Tambahkan poin baru di bawah.
                                     </p>
                                 </div>
                             ) : (
@@ -214,11 +202,27 @@ export function ArahanDireksiSection({
                         </div>
                     </SortableContext>
                 </DndContext>
+
+                {/* Tombol Tambah Poin – dipindah ke bawah, style sama seperti section lain */}
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addArahan}
+                    className="w-full border-dashed border-2 border-slate-200 hover:border-[#125d72] hover:bg-[#125d72]/5 text-slate-400 hover:text-[#125d72] h-12 rounded-xl transition-all group mt-2"
+                >
+                    <Plus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                        Tambah Poin Arahan Baru
+                    </span>
+                </Button>
             </CardContent>
 
             {/* FOOTER INFO */}
-            <div className="bg-slate-50/50 p-4 px-6 border-t border-slate-100 flex items-center justify-between">
-                <Badge variant="outline" className="bg-white border-slate-200 text-[#125d72] font-black text-[9px] px-3">
+            <div className="bg-slate-50/50 p-4 px-6 border-t border-slate-100 flex items-center justify-between text-xs">
+                <Badge
+                    variant="outline"
+                    className="bg-white border-slate-200 text-[#125d72] font-black text-[9px] px-3"
+                >
                     TOTAL: {arahan.length} ARAHAN
                 </Badge>
                 <div className="flex items-center gap-1.5">
@@ -230,9 +234,4 @@ export function ArahanDireksiSection({
             </div>
         </Card>
     )
-}
-
-// Utility untuk menggabungkan class (cn) jika belum ada di project Anda
-function cn(...inputs: any[]) {
-    return inputs.filter(Boolean).join(" ");
 }
