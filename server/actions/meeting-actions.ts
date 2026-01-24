@@ -320,3 +320,51 @@ export async function finishMeetingAction(meetingNumber: string, meetingYear: st
         return { success: false, error: error.message }
     }
 }
+
+/**
+ * 9. Hapus agenda dari sesi rapat (detach + reset risalah)
+ */
+export async function removeAgendaFromSessionAction(agendaId: string) {
+    try {
+        await assertAuthenticated() // [SECURE] – tetap pakai auth guard
+
+        // Reset semua field risalah & detach dari sesi
+        await db.update(agendas).set({
+            // Detach grouping
+            meetingNumber: null,
+            meetingYear: null,
+            risalahGroupId: null,
+
+            // Reset logistik
+            startTime: null,
+            endTime: "Selesai",
+            meetingLocation: null,
+
+            // Reset kehadiran & pimpinan
+            pimpinanRapat: [],
+            attendanceData: {}, // akan diisi default hadir saat dibuka lagi
+            guestParticipants: [],
+
+            // Reset konten risalah
+            executiveSummary: null,
+            considerations: null,
+            risalahBody: null,
+            meetingDecisions: [],
+            dissentingOpinion: null,
+
+            // Reset status
+            meetingStatus: "PENDING",
+            status: "DIJADWALKAN", // kembali ke ready agendas
+
+            updatedAt: new Date(),
+        }).where(eq(agendas.id, agendaId))
+
+        // Revalidate halaman yang relevan
+        revalidatePath("/pelaksanaan-rapat/radir")
+        revalidatePath("/agenda-siap/radir") // agar muncul lagi di ready
+
+        return { success: true, message: "Agenda berhasil dikeluarkan dari sesi rapat" }
+    } catch (error: any) {
+        return { success: false, error: error.message || "Gagal menghapus agenda dari sesi" }
+    }
+}

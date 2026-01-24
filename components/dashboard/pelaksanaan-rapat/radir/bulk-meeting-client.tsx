@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import React, { useState } from "react"
@@ -12,6 +13,8 @@ import {
     CheckCircle2,
     ArrowLeft,
     Download,
+    Trash2,
+    AlertCircle,
 } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 
@@ -29,11 +32,23 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { DIREKTURE_PEMRAKARSA } from "@/lib/MasterData"
-import { saveMeetingRisalahAction, finishMeetingAction } from "@/server/actions/meeting-actions"
+import { saveMeetingRisalahAction, finishMeetingAction, removeAgendaFromSessionAction } from "@/server/actions/meeting-actions"
 import { exportRisalahToDocx } from "@/server/actions/export-actions"
 import { Agenda } from "@/db/schema/agendas"
 import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface Option { label: string; value: string }
 interface DecisionItem { id: string; text: string }
@@ -74,7 +89,44 @@ export function BulkMeetingClient({
     const [activeAgendaId, setActiveAgendaId] = useState<string>(agendas[0]?.id || "")
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const activeAgenda = agendas.find((a) => a.id === activeAgendaId) || agendas[0]
+    // State lokal untuk agendas (mutable)
+    const [localAgendas, setLocalAgendas] = useState<Agenda[]>(agendas)
+    const activeAgenda = localAgendas.find((a) => a.id === activeAgendaId) || localAgendas[0]
+
+    // Handler hapus agenda dari sesi
+    const handleRemoveAgenda = async (agendaId: string) => {
+        setIsSubmitting(true)
+        try {
+            const result = await removeAgendaFromSessionAction(agendaId)
+            if (result.success) {
+                toast.success(result.message)
+
+                // Update state lokal
+                const newAgendas = localAgendas.filter(a => a.id !== agendaId)
+                setLocalAgendas(newAgendas)
+
+                // Jika tidak ada agenda lagi → kembali ke monitoring
+                if (newAgendas.length === 0) {
+                    toast.info("Sesi rapat kosong, kembali ke daftar.")
+                    router.push("/pelaksanaan-rapat/radir")
+                    return
+                }
+
+                // Pindah ke agenda lain (next atau first)
+                const currentIndex = localAgendas.findIndex(a => a.id === activeAgendaId)
+                const nextIndex = currentIndex >= newAgendas.length ? newAgendas.length - 1 : currentIndex
+                if (nextIndex >= 0) {
+                    setActiveAgendaId(newAgendas[nextIndex].id)
+                }
+            } else {
+                toast.error(result.error || "Gagal menghapus agenda")
+            }
+        } catch (err) {
+            toast.error("Kesalahan sistem")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
 
     // ── PERBAIKAN GLOBAL STATE: DEFAULT HADIR ──
     const [globalDraft, setGlobalDraft] = useState<GlobalDraft>(() => {
@@ -186,8 +238,8 @@ export function BulkMeetingClient({
                 localStorage.setItem("lastRisalahGroupId", groupId)
             }
 
-            // 1. Simpan Konten Risalah per Agenda
-            const savePromises = agendas.map((agenda) => {
+            // 1. Simpan Konten Risalah per Agenda (hanya agenda yang masih ada di localAgendas)
+            const savePromises = localAgendas.map((agenda) => {
                 const draft = specificDrafts[agenda.id];
                 const considerationsString = draft.considerations
                     .map((item) => item.text.trim())
@@ -313,21 +365,90 @@ export function BulkMeetingClient({
             <div className="px-4 py-4 shrink-0">
                 <h3 className="text-[11px] font-black text-[#125d72] uppercase tracking-widest flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-[#125d72] animate-pulse" />
-                    Urutan Agenda ({agendas.length})
+                    Urutan Agenda ({localAgendas.length})
                 </h3>
             </div>
             <ScrollArea className="flex-1 min-h-0 px-2 pb-4">
                 <div className="space-y-1.5">
-                    {agendas.map((item, index) => (
-                        <button key={item.id} className={cn("w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group", activeAgendaId === item.id ? "bg-white shadow-md border border-[#125d72]/20" : "hover:bg-slate-200/50 text-slate-500 border border-transparent")} onClick={() => setActiveAgendaId(item.id)}>
-                            <div className={cn("flex items-center justify-center min-w-7 h-7 rounded-lg text-[11px] font-black", activeAgendaId === item.id ? "bg-[#125d72] text-white" : "bg-slate-200")}>
+                    {localAgendas.map((item, index) => (
+                        <div
+                            key={item.id}
+                            className={cn(
+                                "w-full flex items-center gap-3 p-4 pr-12 rounded-xl transition-all text-left group relative cursor-pointer", // <-- UBAH: p-4 + pr-12 (padding kanan ekstra untuk tombol delete)
+                                activeAgendaId === item.id
+                                    ? "bg-white shadow-md border border-[#125d72]/20"
+                                    : "hover:bg-slate-200/50 text-slate-500 border border-transparent"
+                            )}
+                            onClick={() => setActiveAgendaId(item.id)}
+                        >
+                            <div className={cn(
+                                "flex items-center justify-center min-w-7 h-7 rounded-lg text-[11px] font-black",
+                                activeAgendaId === item.id ? "bg-[#125d72] text-white" : "bg-slate-200"
+                            )}>
                                 {index + 1}
                             </div>
-                            <div className="overflow-hidden">
-                                <p className={cn("text-[11px] font-bold truncate", activeAgendaId === item.id ? "text-[#125d72]" : "text-slate-700")}>{item.title}</p>
+                            <div className="overflow-hidden flex-1 min-w-0"> {/* <-- TAMBAH min-w-0 agar truncate/line-clamp bekerja baik */}
+                                <p className={cn(
+                                    "text-[11px] font-bold line-clamp-2 leading-tight", // <-- UBAH: ganti truncate → line-clamp-2 (wrap maks 2 baris)
+                                    activeAgendaId === item.id ? "text-[#125d72]" : "text-slate-700"
+                                )}>
+                                    {item.title}
+                                </p>
                                 <p className="text-[9px] uppercase font-bold opacity-50 truncate mt-1">{item.director}</p>
                             </div>
-                        </button>
+
+                            {/* TOMBOL DELETE */}
+                            {localAgendas.length > 1 && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 absolute right-3 top-1/2 -translate-y-1/2 transition-all" // <-- UBAH: h-9 w-9 (sedikit lebih besar) + right-3
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+
+                                    {/* Dialog tetap sama seperti sebelumnya */}
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle className="flex items-center gap-3 text-lg">
+                                                <AlertCircle className="h-8 w-8 text-red-600" />
+                                                Peringatan: Keluarkan Agenda?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription className="text-base space-y-2">
+                                                <p>Anda akan <span className="font-bold text-red-600">mengeluarkan agenda ini</span> dari sesi rapat:</p>
+                                                <p className="font-black text-[#125d72] bg-slate-100 px-3 py-2 rounded-lg">
+                                                    {item.title}
+                                                </p>
+                                                <p className="mt-3">
+                                                    <strong>Konsekuensi:</strong><br />
+                                                    • Semua data risalah <strong>(ringkasan, pertimbangan, keputusan, dissenting)</strong> pada agenda ini akan direset.<br />
+                                                    • Data global (waktu, lokasi, kehadiran) dan risalah agenda lain <strong>tetap aman 100%</strong>.<br />
+                                                    • Agenda ini akan kembali ke daftar &quot;Siap Dibahas&quot;.
+                                                </p>
+                                                <p className="mt-3 text-sm italic text-slate-500">
+                                                    Tindakan ini tidak bisa dibatalkan secara otomatis.
+                                                </p>
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Batal</AlertDialogCancel>
+                                            <AlertDialogAction
+                                                className="bg-red-600 hover:bg-red-700"
+                                                onClick={() => handleRemoveAgenda(item.id)}
+                                                disabled={isSubmitting}
+                                            >
+                                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                                                Ya, Keluarkan Agenda
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
+                        </div>
                     ))}
                 </div>
             </ScrollArea>
@@ -355,9 +476,23 @@ export function BulkMeetingClient({
                             <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu className="h-5 w-5" /></Button></SheetTrigger>
                             <SheetContent side="left" className="w-72 p-0 h-full overflow-hidden"><AgendaSidebarList /></SheetContent>
                         </Sheet>
-                        <div className="flex flex-col">
-                            <Badge className="bg-[#125d72] text-[9px] font-bold h-4 w-fit">AGENDA SEDANG DIBAHAS</Badge>
-                            <h2 className="text-sm font-black text-slate-800 uppercase truncate max-w-xl">{activeAgenda.title}</h2>
+                        <div className="flex flex-col min-w-0 flex-1"> {/* tambah min-w-0 & flex-1 agar truncate bekerja baik */}
+                            <Badge className="bg-[#125d72] text-[9px] font-bold h-4 w-fit">
+                                AGENDA SEDANG DIBAHAS
+                            </Badge>
+
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <h2 className="text-sm font-black text-slate-800 uppercase line-clamp-2 mt-1 leading-tight">
+                                            {activeAgenda.title}
+                                        </h2>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="max-w-md bg-slate-800 text-white">
+                                        <p className="text-xs font-medium">{activeAgenda.title}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -373,7 +508,7 @@ export function BulkMeetingClient({
 
                 <ScrollArea className="flex-1 min-h-0 bg-slate-50/30">
                     <div className="w-full p-6 space-y-8 pb-32">
-                        <MeetingLogisticsSection startTime={globalDraft.startTime} setStartTime={(val) => updateGlobal("startTime", val)} endTime={globalDraft.endTime} setEndTime={(val) => updateGlobal("endTime", val)} location={globalDraft.meetingLocation} setLocation={(val) => updateGlobal("meetingLocation", val)} executionDate={activeAgenda.executionDate || undefined} />
+                        <MeetingLogisticsSection startTime={globalDraft.startTime} setStartTime={(val) => updateGlobal("startTime", val)} endTime={globalDraft.endTime} setEndTime={(val) => updateGlobal("endTime", val)} location={globalDraft.meetingLocation} setLocation={(val) => updateGlobal("meetingLocation", val)} executionDate={activeAgenda?.executionDate || undefined} />
                         <AttendanceAndLeadershipSection attendance={globalDraft.attendanceData} setAttendance={(val) => updateGlobal("attendanceData", val)} guests={globalDraft.guestParticipants} setGuests={(val) => updateGlobal("guestParticipants", val)} selectedPimpinan={globalDraft.pimpinanRapat} setSelectedPimpinan={(val) => updateGlobal("pimpinanRapat", val)} />
                         <ExecutiveSummarySection value={currentSpecific.executiveSummary} onChange={(val) => updateSpecific("executiveSummary", val)} />
                         <ConsiderationsSection considerations={currentSpecific.considerations} setConsiderations={(val) => updateSpecific("considerations", val)} />
@@ -382,8 +517,8 @@ export function BulkMeetingClient({
 
                         <div className="flex justify-center pt-8">
                             {(() => {
-                                const currentIndex = agendas.findIndex(a => a.id === activeAgendaId)
-                                const nextAgenda = agendas[currentIndex + 1]
+                                const currentIndex = localAgendas.findIndex(a => a.id === activeAgendaId)
+                                const nextAgenda = localAgendas[currentIndex + 1]
                                 if (nextAgenda) return <Button size="lg" className="w-full max-w-md h-14 bg-[#125d72] text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl gap-3 transition-transform active:scale-95" onClick={() => setActiveAgendaId(nextAgenda.id)}>BAHAS AGENDA BERIKUTNYA <ChevronRight className="h-5 w-5" /></Button>
                                 return (
                                     <div className="p-8 bg-green-50 border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center text-center w-full max-w-md space-y-4">
