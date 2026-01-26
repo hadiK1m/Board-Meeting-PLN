@@ -7,7 +7,7 @@ type Step = {
     title: string;
     content: string;
     placement?: "top" | "bottom" | "left" | "right";
-    textFallbacks?: string[]; // fallback untuk mencari elemen berdasarkan teks
+    textFallbacks?: string[];
 };
 
 const STEPS: Step[] = [
@@ -18,34 +18,33 @@ const STEPS: Step[] = [
         placement: "bottom",
     },
     {
-        // kolom pencarian (cari input dengan placeholder atau class pl-10)
         selector: "input[placeholder], input.pl-10, input[class*='pl-10']",
         title: "Kolom Pencarian",
         content: "Gunakan kolom pencarian untuk menemukan usulan berdasarkan judul atau pemrakarsa.",
         placement: "bottom",
     },
     {
-        // filter/status select — fallback mencari teks "Status" atau "Jenis Rapat"
-        selector: "select, .w-44.h-11, .select-trigger, [role='combobox']",
+        selector: "select, .w-48.h-11, .select-trigger, [role='combobox']",
         title: "Filter / Pilihan",
         content: "Gunakan filter untuk menyaring jenis atau status usulan.",
         placement: "bottom",
-        textFallbacks: ["Status", "Jenis Rapat", "Filter Tanggal"],
+        textFallbacks: ["Status", "Filter Tanggal", "Jenis Rapat"],
     },
     {
-        // tombol tambah — cari tombol yang mengandung kata 'Tambah' atau modal trigger AddKepdir
+        selector: 'button[class*="bg-[#14a2ba]"], button[class*="bg-\\[\\#14a2ba\\]"]',
         title: "Tambah Usulan",
         content: "Klik tombol ini untuk menambah usulan Kepdir Sirkuler baru.",
         placement: "left",
-        textFallbacks: ["Tambah", "Tambah Usulan", "Buat Usulan", "Tambah Kepdir", "Form Usulan"],
+        textFallbacks: ["Tambah Usulan Kepdir", "Tambah Usulan", "Tambah"],
     },
     {
-        // daftar: fallback ke elemen table atau container daftar
-        selector: "table, #agenda-table-section, .bg-white.rounded-xl, .grid",
+        // Selector yang lebih spesifik untuk container tabel daftar usulan
+        selector:
+            'div[class*="bg-white"][class*="rounded-xl"][class*="overflow-hidden"] > table, div[class*="bg-white"][class*="rounded-xl"][class*="overflow-hidden"]',
         title: "Daftar Usulan",
         content: "Daftar usulan ditampilkan di sini. Klik item untuk melihat detail.",
         placement: "top",
-        textFallbacks: ["Daftar", "Judul", "Pemrakarsa"],
+        textFallbacks: ["Agenda Kepdir", "Agenda", "Daftar Usulan"],
     },
 ];
 
@@ -53,8 +52,11 @@ const STORAGE_KEY = "bm:onboard:kepdir-sirkuler:done";
 
 function findByTextFallback(texts: string[]) {
     if (!texts || texts.length === 0) return null;
-    // search buttons first (and elements that often act as triggers)
-    const candidates = Array.from(document.querySelectorAll("button, a, [role='button'], [role='combobox'], select, input, div"));
+    const candidates = Array.from(
+        document.querySelectorAll(
+            "button, a, [role='button'], [role='combobox'], select, input, div, h1, h2, p, span, label, table"
+        )
+    );
     for (const t of texts) {
         const lower = t.toLowerCase();
         const el = candidates.find((el) => {
@@ -67,16 +69,19 @@ function findByTextFallback(texts: string[]) {
 }
 
 function resolveElement(step: Step) {
-    // 1) try selector
+    // 1) try selector directly
     if (step.selector) {
         try {
             const el = document.querySelector(step.selector) as HTMLElement | null;
             if (el) return el;
-            // if selector looks like a group, try more permissive queries
-            const parts = step.selector.split(",").map(s => s.trim());
+            const parts = step.selector.split(",").map((s) => s.trim());
             for (const p of parts) {
-                const found = document.querySelector(p) as HTMLElement | null;
-                if (found) return found;
+                try {
+                    const found = document.querySelector(p) as HTMLElement | null;
+                    if (found) return found;
+                } catch {
+                    // ignore invalid sub-selector
+                }
             }
         } catch {
             // ignore
@@ -86,10 +91,36 @@ function resolveElement(step: Step) {
     // 2) try text fallbacks
     if (step.textFallbacks && step.textFallbacks.length) {
         const byText = findByTextFallback(step.textFallbacks);
-        if (byText) return byText;
+        if (byText) {
+            // If this is the "Daftar Usulan" step, prefer the surrounding table container
+            const preferredTableContainer = byText.closest(
+                'div[class*="bg-white"][class*="rounded-xl"][class*="overflow-hidden"], section, main, article'
+            );
+            if (preferredTableContainer) {
+                // prefer the container that likely wraps the table
+                const innerTable = preferredTableContainer.querySelector("table");
+                return (innerTable || preferredTableContainer) as HTMLElement;
+            }
+            return byText as HTMLElement;
+        }
     }
 
-    // 3) try generic fallbacks: table, main content, first large card/list
+    // 3) try header text 'Agenda Kepdir' to find nearest table container
+    const headerByText = findByTextFallback(["Agenda Kepdir", "Agenda"]);
+    if (headerByText) {
+        const container =
+            headerByText.closest('div[class*="bg-white"][class*="rounded-xl"][class*="overflow-hidden"]') ||
+            headerByText.closest("section") ||
+            headerByText.closest("main");
+        if (container) {
+            const table = container.querySelector("table");
+            return (table || (container as HTMLElement)) as HTMLElement;
+        }
+        // fallback to header itself
+        return headerByText as HTMLElement;
+    }
+
+    // 4) generic fallbacks
     const table = document.querySelector("table");
     if (table) return table as HTMLElement;
 
@@ -127,7 +158,6 @@ export default function KepdirSirkulerTour() {
         };
     }, []);
 
-    // allow external trigger from header button
     useEffect(() => {
         const handler = () => {
             setStepIndex(0);
@@ -150,7 +180,6 @@ export default function KepdirSirkulerTour() {
         const el = resolveElement(step);
 
         if (el) {
-            // scroll into view and measure after short delay
             try {
                 el.scrollIntoView({ behavior: "smooth", block: "center" });
             } catch { }
@@ -163,7 +192,6 @@ export default function KepdirSirkulerTour() {
                 }
             }, 300);
         } else {
-            // fallback: center screen
             timerRef.current = window.setTimeout(() => {
                 setTargetRect(null);
                 window.scrollTo({ top: 0, behavior: "smooth" });
@@ -236,16 +264,15 @@ export default function KepdirSirkulerTour() {
                 <div
                     style={{
                         position: "fixed",
-                        left: Math.max(0, targetRect.left - 4),
-                        top: Math.max(0, targetRect.top - 4),
-                        width: Math.min(window.innerWidth - (targetRect.left - 4), targetRect.width + 8),
-                        height: Math.min(window.innerHeight - (targetRect.top - 4), targetRect.height + 8),
+                        left: targetRect.left - 8,
+                        top: targetRect.top - 8,
+                        width: targetRect.width + 16,
+                        height: targetRect.height + 16,
                         borderRadius: 8,
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.08) inset",
-                        border: "2px solid rgba(255,255,255,0.92)",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.6), 0 0 0 3px rgba(255,255,255,0.06) inset",
+                        border: "2px solid rgba(255,255,255,0.85)",
                         zIndex: 99995,
                         pointerEvents: "none",
-                        transition: "all 0.18s cubic-bezier(.4,2,.6,1)",
                     }}
                 />
             )}
