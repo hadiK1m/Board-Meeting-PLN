@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
@@ -51,8 +52,8 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Import sheet/detail component (pastikan path ini sesuai di repo Anda)
-// benar:
-import { DetailRadirSheet } from "@/components/dashboard/agenda/radir/detail-radir-sheet"
+// named export component + exported type
+import { DetailRadirSheet, AgendaDetail } from "@/components/dashboard/agenda/radir/detail-radir-sheet"
 
 interface Option { label: string; value: string }
 interface DecisionItem { id: string; text: string }
@@ -359,6 +360,75 @@ export function BulkMeetingClient({
         }
     }
 
+    // --- helper: normalisasi Agenda untuk DetailRadirSheet ---
+    function normalizeAgendaForDetail(a: Agenda | null): AgendaDetail | null {
+        if (!a) return null
+
+        // Ambil nilai dari berbagai nama kemungkinan field
+        const rawSupporting = (a as any).supportingDocuments ?? (a as any).supporting_documents ?? null
+
+        // Normalisasi supportingDocuments => string | string[] | null
+        let supportingDocuments: string | string[] | null = null
+        try {
+            if (rawSupporting == null) supportingDocuments = null
+            else if (Array.isArray(rawSupporting)) supportingDocuments = rawSupporting.map(String)
+            else if (typeof rawSupporting === "string") {
+                const trimmed = rawSupporting.trim()
+                if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+                    try {
+                        const parsed = JSON.parse(trimmed)
+                        supportingDocuments = Array.isArray(parsed) ? parsed.map(String) : String(rawSupporting)
+                    } catch {
+                        supportingDocuments = String(rawSupporting)
+                    }
+                } else {
+                    supportingDocuments = String(rawSupporting)
+                }
+            } else {
+                supportingDocuments = JSON.stringify(rawSupporting)
+            }
+        } catch {
+            supportingDocuments = null
+        }
+
+        const agendaDetail: AgendaDetail = {
+            id: a.id,
+            title: a.title ?? "",
+            urgency: (a as any).urgency ?? null,
+            priority: (a as any).priority ?? null,
+            deadline: (a as any).deadline ?? null,
+            director: (a as any).director ?? null,
+            initiator: (a as any).initiator ?? null,
+            support: (a as any).support ?? null,
+            contact_person: (a as any).contact_person ?? (a as any).contactPerson ?? null,
+            contactPerson: (a as any).contactPerson ?? (a as any).contact_person ?? null,
+            position: (a as any).position ?? null,
+            phone: (a as any).phone ?? null,
+            legal_review: (a as any).legal_review ?? (a as any).legalReview ?? null,
+            legalReview: (a as any).legalReview ?? (a as any).legal_review ?? null,
+            risk_review: (a as any).risk_review ?? (a as any).riskReview ?? null,
+            riskReview: (a as any).riskReview ?? (a as any).risk_review ?? null,
+            compliance_review: (a as any).compliance_review ?? (a as any).complianceReview ?? null,
+            complianceReview: (a as any).complianceReview ?? (a as any).compliance_review ?? null,
+            regulation_review: (a as any).regulation_review ?? (a as any).regulationReview ?? null,
+            regulationReview: (a as any).regulationReview ?? (a as any).regulation_review ?? null,
+            recommendation_note: (a as any).recommendation_note ?? (a as any).recommendationNote ?? null,
+            recommendationNote: (a as any).recommendationNote ?? (a as any).recommendation_note ?? null,
+            proposal_note: (a as any).proposal_note ?? (a as any).proposalNote ?? null,
+            proposalNote: (a as any).proposalNote ?? (a as any).proposal_note ?? null,
+            presentation_material: (a as any).presentation_material ?? (a as any).presentationMaterial ?? null,
+            presentationMaterial: (a as any).presentationMaterial ?? (a as any).presentation_material ?? null,
+            supporting_documents: Array.isArray(supportingDocuments) ? supportingDocuments : (supportingDocuments ? supportingDocuments : null),
+            supportingDocuments: supportingDocuments,
+            status: (a as any).status ?? null,
+            notRequiredFiles: (a as any).notRequiredFiles ?? null,
+            createdAt: (a as any).createdAt ?? (a as any).created_at ?? null,
+            updatedAt: (a as any).updatedAt ?? (a as any).updated_at ?? null,
+        }
+
+        return agendaDetail
+    }
+
     const AgendaSidebarList = () => (
         <div className="flex flex-col h-full min-h-0">
             <div className="px-4 py-4 shrink-0">
@@ -560,7 +630,7 @@ export function BulkMeetingClient({
 
             {/* DETAIL SHEET - tampilkan file & data agenda */}
             <DetailRadirSheet
-                agenda={selectedDetail}
+                agenda={normalizeAgendaForDetail(selectedDetail)}
                 open={detailOpen}
                 onOpenChange={setDetailOpen}
             />

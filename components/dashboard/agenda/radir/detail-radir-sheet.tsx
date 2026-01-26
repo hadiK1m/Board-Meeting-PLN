@@ -1,6 +1,4 @@
 "use client"
-
-import { useState } from "react"
 import {
     Sheet,
     SheetContent,
@@ -21,7 +19,6 @@ import {
     Info,
     X,
     Paperclip,
-    Loader2,
 } from "lucide-react"
 import { getSignedFileUrl } from "@/server/actions/agenda-actions"
 import { format } from "date-fns"
@@ -29,7 +26,7 @@ import { id } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
-interface AgendaDetail {
+export interface AgendaDetail {
     id?: string
     title: string
     urgency: string | null
@@ -60,6 +57,8 @@ interface AgendaDetail {
     supportingDocuments?: string | null | string[]
     status?: string | null
     notRequiredFiles?: string[] | string | null
+    createdAt?: string | Date | null
+    updatedAt?: string | Date | null
 }
 
 interface DetailAgendaSheetProps {
@@ -69,7 +68,6 @@ interface DetailAgendaSheetProps {
 }
 
 export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaSheetProps) {
-    const [loadingFile, setLoadingFile] = useState<string | null>(null)
 
     const extraDocs: string[] = (() => {
         const raw = agenda?.supporting_documents ?? agenda?.supportingDocuments
@@ -86,10 +84,8 @@ export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaShe
 
     if (!agenda) return null
 
-    const handleSecureView = async (path: string, label: string) => {
+    const handleSecureView = async (path: string, label?: string) => {
         if (!path) return
-
-        setLoadingFile(path)
 
         try {
             const result = await getSignedFileUrl(path)
@@ -100,9 +96,8 @@ export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaShe
             window.open(result.url, "_blank", "noopener,noreferrer")
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Gagal membuka file"
-            toast.error(`Gagal membuka ${label}: ${message}`)
-        } finally {
-            setLoadingFile(null)
+            const fallbackLabel = label || "dokumen"
+            toast.error(`Gagal membuka ${fallbackLabel}: ${message}`)
         }
     }
 
@@ -296,43 +291,36 @@ export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaShe
                                     label="Kajian Hukum"
                                     path={docs.legal}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Kajian Risiko"
                                     path={docs.risk}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Kajian Kepatuhan"
                                     path={docs.compliance}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Kajian Regulasi"
                                     path={docs.regulation}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Nota Analisa"
                                     path={docs.recommendation}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Proposal Note"
                                     path={docs.proposal}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
                                 <FileLink
                                     label="Materi Presentasi"
                                     path={docs.presentation}
                                     onOpen={handleSecureView}
-                                    loadingPath={loadingFile}
                                 />
 
                                 {extraDocs.map((docPath, index) => (
@@ -342,7 +330,6 @@ export function DetailRadirSheet({ agenda, open, onOpenChange }: DetailAgendaShe
                                         path={docPath}
                                         onOpen={handleSecureView}
                                         isExtra
-                                        loadingPath={loadingFile}
                                     />
                                 ))}
 
@@ -373,51 +360,38 @@ function FileLink({
     label,
     path,
     onOpen,
-    isExtra = false,
-    loadingPath,
+    isExtra
 }: {
     label: string
     path: string | null | undefined
-    onOpen: (path: string, label: string) => Promise<void>
+    onOpen: (path: string, label?: string) => Promise<void>
     isExtra?: boolean
-    loadingPath: string | null
 }) {
-    if (!path || path === "null" || path === "" || path === "[]") return null
-
-    const isLoading = loadingPath === path
+    if (!path) return null
 
     return (
         <button
             type="button"
             onClick={() => onOpen(path, label)}
-            disabled={isLoading}
             className={cn(
                 "w-full flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all group shadow-sm active:scale-[0.98]",
-                isExtra ? "bg-slate-50 border-slate-200 hover:bg-slate-100" : "bg-white hover:bg-[#e7f6f9] hover:border-[#14a2ba]",
-                isLoading && "opacity-70 cursor-wait"
+                isExtra ? "bg-slate-50 border-slate-200 hover:bg-slate-100" : "bg-white hover:bg-[#e7f6f9] hover:border-[#14a2ba]"
             )}
         >
             <div className="flex items-center gap-3 truncate">
-                {isExtra ? (
-                    <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
-                ) : (
-                    <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-                )}
-                <span
-                    className={cn(
-                        "text-[11px] md:text-xs font-bold truncate",
-                        isExtra ? "text-slate-600" : "text-[#125d72]"
-                    )}
-                >
-                    {label}
-                </span>
+                <div className={cn("p-2 rounded-lg", isExtra ? "bg-slate-200 text-slate-500" : "bg-[#14a2ba]/10 text-[#14a2ba]")}>
+                    {isExtra ? <Paperclip className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                </div>
+                <div className="flex flex-col items-start truncate text-left">
+                    <span className={cn("text-[11px] md:text-xs font-bold truncate uppercase tracking-tight", isExtra ? "text-slate-600" : "text-[#125d72]")}>
+                        {label}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-medium">Klik untuk melihat dokumen</span>
+                </div>
             </div>
-
-            {isLoading ? (
-                <Loader2 className="h-4 w-4 text-[#14a2ba] animate-spin shrink-0" />
-            ) : (
-                <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />
-            )}
+            <div className="bg-slate-50 group-hover:bg-white p-1.5 rounded-full border border-transparent group-hover:border-slate-100 transition-all">
+                <ExternalLink className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#14a2ba]" />
+            </div>
         </button>
     )
 }
