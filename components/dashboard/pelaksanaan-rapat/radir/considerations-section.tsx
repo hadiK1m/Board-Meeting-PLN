@@ -27,7 +27,7 @@ function ConsiderationToolbar({ editor, proseMirrorRef }: ConsiderationToolbarPr
     // Semua preset yang ada di CSS
     const stylePresets = [
         { key: 'multidecimal', label: '1.1.1', title: 'Multilevel Decimal (1.1.1)' },
-        { key: 'parenthesis', label: '1) a) i)', title: 'Parenthesis (1) a) i))' },
+        { key: 'parenthesis', label: '1) a) i)', title: 'Parenthesis (1) a) i)' },
         { key: 'mixed-simple', label: '1. a. i.', title: 'Standard Mixed (1. a. i.)' },
         { key: 'lower-alpha', label: 'a.b.c', title: 'Lower Alpha (a.b.c)' },
         { key: 'lower-roman', label: 'i.ii.iii', title: 'Lower Roman (i.ii.iii)' },
