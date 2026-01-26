@@ -8,7 +8,6 @@ import { toast } from "sonner"
 import {
     Save,
     Loader2,
-    ChevronRight,
     Menu,
     FileText,
     CheckCircle2,
@@ -16,6 +15,7 @@ import {
     Download,
     Trash2,
     AlertCircle,
+    ChevronRight,
 } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 
@@ -51,15 +51,18 @@ import { Agenda } from "@/db/schema/agendas"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-// Import sheet/detail component (pastikan path ini sesuai di repo Anda)
-// named export component + exported type
+// Import sheet/detail component
 import { DetailRadirSheet, AgendaDetail } from "@/components/dashboard/agenda/radir/detail-radir-sheet"
+
+// FIX: Ensure MultiValue is imported correctly for type compatibility if needed
+import { MultiValue } from "react-select"
 
 interface Option { label: string; value: string }
 interface DecisionItem { id: string; text: string }
 interface Guest { id: number; name: string; position: string }
 interface AttendanceRecord { status: string; reason?: string; proxy?: readonly Option[] }
-interface ConsiderationItem { id: string; text: string }
+// FIX: Interface ConsiderationItem disamakan dengan child component
+interface ConsiderationItem { id: string; text: string; level: number }
 
 interface GlobalDraft {
     startTime: string
@@ -67,12 +70,12 @@ interface GlobalDraft {
     meetingLocation: string
     attendanceData: Record<string, AttendanceRecord>
     guestParticipants: Guest[]
-    pimpinanRapat: readonly Option[]
+    pimpinanRapat: readonly Option[] // This type matches MultiValue<Option> essentially
 }
 
 interface AgendaSpecificDraft {
     executiveSummary: string
-    considerations: ConsiderationItem[]
+    considerations: string // HTML string for Tiptap
     meetingDecisions: DecisionItem[]
     dissentingOpinion: string
 }
@@ -137,12 +140,10 @@ export function BulkMeetingClient({
         }
     }
 
-    // ── PERBAIKAN GLOBAL STATE: DEFAULT HADIR ──
+    // ── PERBAIKAN GLOBAL STATE ──
     const [globalDraft, setGlobalDraft] = useState<GlobalDraft>(() => {
-        // Cek apakah data dari database sudah ada
         const existingAttendance = agendas[0]?.attendanceData as Record<string, AttendanceRecord> | undefined
 
-        // Jika data attendance di DB kosong/null, buat default HADIR untuk SEMUA direktur
         const defaultAttendance = DIREKTURE_PEMRAKARSA.reduce((acc, name) => ({
             ...acc,
             [name]: { status: "Hadir", reason: "", proxy: [] }
@@ -166,22 +167,25 @@ export function BulkMeetingClient({
     const [specificDrafts, setSpecificDrafts] = useState<Record<string, AgendaSpecificDraft>>(() => {
         const initial: Record<string, AgendaSpecificDraft> = {}
         agendas.forEach((a) => {
-            let considerationsArray: ConsiderationItem[] = []
+            let considerationsHtml = ""
+            // Jika sudah HTML string, pakai langsung
             if (typeof a.considerations === "string" && a.considerations.trim()) {
-                considerationsArray = a.considerations
-                    .split(/[\n;]/)
-                    .filter(Boolean)
-                    .map((text, idx) => ({ id: `init-${idx}-${Date.now()}`, text: text.trim() }))
-            } else if (Array.isArray(a.considerations)) {
-                considerationsArray = (a.considerations as ConsiderationItem[]).map((item) => ({
-                    id: item.id || Math.random().toString(36).slice(2),
-                    text: item.text || "",
-                }))
+                // Jika string JSON array lama, convert ke HTML (optional: bisa diimprove)
+                try {
+                    const parsed = JSON.parse(a.considerations)
+                    if (Array.isArray(parsed)) {
+                        // Gabungkan jadi <ol> (legacy support)
+                        considerationsHtml = `<ol>${parsed.map((p: any) => `<li>${p.text || ""}</li>`).join("")}</ol>`
+                    } else {
+                        considerationsHtml = a.considerations
+                    }
+                } catch {
+                    considerationsHtml = a.considerations
+                }
             }
-
             initial[a.id] = {
                 executiveSummary: a.executiveSummary || "",
-                considerations: considerationsArray,
+                considerations: considerationsHtml,
                 meetingDecisions: (a.meetingDecisions as DecisionItem[]) || [{ id: Date.now().toString(), text: "" }],
                 dissentingOpinion: a.dissentingOpinion || "",
             }
@@ -191,7 +195,7 @@ export function BulkMeetingClient({
 
     const currentSpecific = specificDrafts[activeAgendaId] || {
         executiveSummary: "",
-        considerations: [],
+        considerations: "",
         meetingDecisions: [],
         dissentingOpinion: "",
     }
@@ -247,14 +251,11 @@ export function BulkMeetingClient({
                 localStorage.setItem("lastRisalahGroupId", groupId)
             }
 
-            // 1. Simpan Konten Risalah per Agenda (hanya agenda yang masih ada di localAgendas)
+            // 1. Simpan Konten Risalah per Agenda
             const savePromises = localAgendas.map((agenda) => {
                 const draft = specificDrafts[agenda.id];
-                const considerationsString = draft.considerations
-                    .map((item) => item.text.trim())
-                    .filter(Boolean)
-                    .join("\n");
-
+                // Simpan Considerations sebagai HTML string
+                const considerationsHtml = draft.considerations || ""
                 return saveMeetingRisalahAction({
                     agendaId: agenda.id,
                     startTime: globalDraft.startTime,
@@ -266,7 +267,7 @@ export function BulkMeetingClient({
                     attendanceData: globalDraft.attendanceData,
                     guestParticipants: globalDraft.guestParticipants,
                     executiveSummary: draft.executiveSummary,
-                    considerations: considerationsString,
+                    considerations: considerationsHtml, // Save as HTML
                     risalahBody: draft.executiveSummary,
                     meetingDecisions: draft.meetingDecisions,
                     dissentingOpinion: draft.dissentingOpinion,
@@ -276,22 +277,18 @@ export function BulkMeetingClient({
 
             const results = await Promise.all(savePromises);
 
-            // 2. Jika Berhasil Disimpan, Ubah Status Menjadi RAPAT_SELESAI
             if (results.every(res => res.success)) {
-
                 if (initialMeetingNumber && initialMeetingYear) {
                     const finishRes = await finishMeetingAction(initialMeetingNumber, initialMeetingYear)
-
                     if (finishRes.success) {
                         toast.success("Risalah disimpan & Status Rapat Selesai")
-                        router.push("/monev/radir") // Opsional: Redirect langsung ke Monev
+                        router.push("/monev/radir")
                     } else {
                         toast.error("Risalah tersimpan, tapi gagal update status selesai")
                     }
                 } else {
                     toast.success("Progress Berhasil Disimpan (Tanpa Finish)")
                 }
-
                 router.refresh()
             } else {
                 toast.error("Gagal menyimpan beberapa agenda.");
@@ -309,7 +306,6 @@ export function BulkMeetingClient({
             toast.error("Nomor referensi rapat tidak ditemukan.")
             return
         }
-
         const confirm = window.confirm("Apakah Anda yakin ingin menyelesaikan rapat ini? Status akan berubah menjadi RAPAT_SELESAI dan masuk ke tahap Monev.")
         if (!confirm) return
 
@@ -363,11 +359,7 @@ export function BulkMeetingClient({
     // --- helper: normalisasi Agenda untuk DetailRadirSheet ---
     function normalizeAgendaForDetail(a: Agenda | null): AgendaDetail | null {
         if (!a) return null
-
-        // Ambil nilai dari berbagai nama kemungkinan field
         const rawSupporting = (a as any).supportingDocuments ?? (a as any).supporting_documents ?? null
-
-        // Normalisasi supportingDocuments => string | string[] | null
         let supportingDocuments: string | string[] | null = null
         try {
             if (rawSupporting == null) supportingDocuments = null
@@ -463,39 +455,35 @@ export function BulkMeetingClient({
                                 {index + 1}
                             </div>
                             <div className="overflow-hidden flex-1 min-w-0">
-                                {/* TITEL SEKARANG BISA DIKLIK untuk membuka detail */}
                                 <button
                                     type="button"
                                     onClick={(e) => {
-                                        e.stopPropagation(); // jangan ubah activeAgendaId saat buka detail
+                                        e.stopPropagation();
                                         setSelectedDetail(item);
                                         setDetailOpen(true);
                                     }}
                                     className={cn(
-                                        "text-[11px] font-bold line-clamp-2 leading-tight text-left w-full",
+                                        "text-[11px] font-bold line-clamp-2 leading-tight text-left w-full hover:underline",
                                         activeAgendaId === item.id ? "text-[#125d72]" : "text-slate-700"
                                     )}
                                 >
                                     {item.title}
                                 </button>
-
                                 <p className="text-[9px] uppercase font-bold opacity-50 truncate mt-1">{item.director}</p>
                             </div>
 
-                            {/* TOMBOL DELETE */}
                             {localAgendas.length > 1 && (
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 absolute right-3 top-1/2 -translate-y-1/2 transition-all"
+                                            className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 absolute right-3 top-1/2 -translate-y-1/2 transition-all opacity-0 group-hover:opacity-100"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
-
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
                                             <AlertDialogTitle className="flex items-center gap-3 text-lg">
@@ -509,12 +497,7 @@ export function BulkMeetingClient({
                                                 </p>
                                                 <p className="mt-3">
                                                     <strong>Konsekuensi:</strong><br />
-                                                    • Semua data risalah <strong>(ringkasan, pertimbangan, keputusan, dissenting)</strong> pada agenda ini akan direset.<br />
-                                                    • Data global (waktu, lokasi, kehadiran) dan risalah agenda lain <strong>tetap aman 100%</strong>.<br />
                                                     • Agenda ini akan kembali ke daftar &quot;Siap Dibahas&quot;.
-                                                </p>
-                                                <p className="mt-3 text-sm italic text-slate-500">
-                                                    Tindakan ini tidak bisa dibatalkan secara otomatis.
                                                 </p>
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
@@ -564,7 +547,6 @@ export function BulkMeetingClient({
                             <Badge className="bg-[#125d72] text-[9px] font-bold h-4 w-fit">
                                 AGENDA SEDANG DIBAHAS
                             </Badge>
-
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -592,39 +574,44 @@ export function BulkMeetingClient({
 
                 <ScrollArea className="flex-1 min-h-0 bg-slate-50/30">
                     <div className="w-full p-6 space-y-8 pb-32">
-                        <MeetingLogisticsSection startTime={globalDraft.startTime} setStartTime={(val) => updateGlobal("startTime", val)} endTime={globalDraft.endTime} setEndTime={(val) => updateGlobal("endTime", val)} location={globalDraft.meetingLocation} setLocation={(val) => updateGlobal("meetingLocation", val)} executionDate={activeAgenda?.executionDate || undefined} />
-                        <AttendanceAndLeadershipSection attendance={globalDraft.attendanceData} setAttendance={(val) => updateGlobal("attendanceData", val)} guests={globalDraft.guestParticipants} setGuests={(val) => updateGlobal("guestParticipants", val)} selectedPimpinan={globalDraft.pimpinanRapat} setSelectedPimpinan={(val) => updateGlobal("pimpinanRapat", val)} />
+                        <MeetingLogisticsSection
+                            startTime={globalDraft.startTime}
+                            setStartTime={(val) => updateGlobal("startTime", val)}
+                            endTime={globalDraft.endTime}
+                            setEndTime={(val) => updateGlobal("endTime", val)}
+                            // FIX: Corrected prop names 'location' and 'setLocation'
+                            location={globalDraft.meetingLocation}
+                            setLocation={(val) => updateGlobal("meetingLocation", val)}
+                        />
+
+                        <AttendanceAndLeadershipSection
+                            attendance={globalDraft.attendanceData}
+                            setAttendance={(val) => updateGlobal("attendanceData", val)}
+                            guests={globalDraft.guestParticipants}
+                            setGuests={(val) => updateGlobal("guestParticipants", val)}
+                            // FIX: Corrected prop names 'selectedPimpinan' and 'setSelectedPimpinan'
+                            // AND used type assertion 'as any' to bypass complex MultiValue<Option> generic mismatches if they occur
+                            selectedPimpinan={globalDraft.pimpinanRapat as any}
+                            setSelectedPimpinan={(val) => updateGlobal("pimpinanRapat", val as any)}
+                        />
+
                         <ExecutiveSummarySection value={currentSpecific.executiveSummary} onChange={(val) => updateSpecific("executiveSummary", val)} />
+
                         <ConsiderationsSection
-                            // FIX 1: Map data agar 'level' selalu ada (default 0)
-                            considerations={(activeAgenda.considerations || []).map((c: any) => ({
-                                ...c,
-                                level: c.level ?? 0
-                            }))}
-
-                            // FIX 2: Handle update state
-                            setConsiderations={(newItems) => {
-                                // Jika newItems berupa function (prev => ...), kita harus handle itu atau simplifikasi
-                                // Karena logic parent biasanya mengharapkan value langsung, kita asumsikan newItems adalah array hasil
-                                // Namun component ConsiderationsSection mengirim items[] | func.
-
-                                // Kita paksa ambil valuenya dengan casting aman jika perlu
-                                const itemsToSave = typeof newItems === 'function'
-                                    ? newItems(activeAgenda.considerations as any[])
-                                    : newItems;
-
-                                updateAgendaState(activeAgenda.id, { considerations: itemsToSave })
-                            }}
+                            value={currentSpecific.considerations || ""}
+                            setValue={(val) => updateSpecific("considerations", val)}
                             activeAgendaTitle={activeAgenda.title}
                         />
+
                         <MeetingDecisionsSection decisions={currentSpecific.meetingDecisions} setDecisions={(val) => updateSpecific("meetingDecisions", val)} />
+
                         <DissentingOpinionSection value={currentSpecific.dissentingOpinion} onChange={(val) => updateSpecific("dissentingOpinion", val)} />
 
                         <div className="flex justify-center pt-8">
                             {(() => {
                                 const currentIndex = localAgendas.findIndex(a => a.id === activeAgendaId)
                                 const nextAgenda = localAgendas[currentIndex + 1]
-                                if (nextAgenda) return <Button size="lg" className="w-full max-w-md h-14 bg-[#125d72] text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl gap-3 transition-transform active:scale-95" onClick={() => setActiveAgendaId(nextAgenda.id)}>BAHAS AGENDA BERIKUTNYA <ChevronRight className="h-5 w-5" /></Button>
+                                if (nextAgenda) return <Button size="lg" className="w-full max-w-md h-14 bg-[#125d72] text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl gap-3 hover:scale-105 transition-all" onClick={() => setActiveAgendaId(nextAgenda.id)}>LANJUT KE AGENDA BERIKUTNYA <ChevronRight className="h-4 w-4" /></Button>
                                 return (
                                     <div className="p-8 bg-green-50 border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center text-center w-full max-w-md space-y-4">
                                         <div>
@@ -649,7 +636,6 @@ export function BulkMeetingClient({
                 </ScrollArea>
             </main>
 
-            {/* DETAIL SHEET - tampilkan file & data agenda */}
             <DetailRadirSheet
                 agenda={normalizeAgendaForDetail(selectedDetail)}
                 open={detailOpen}
