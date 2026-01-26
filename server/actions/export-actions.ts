@@ -194,8 +194,7 @@ export async function exportRisalahToDocx(
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
-                considerations: formatConsiderationsSmart(a.considerations as any[]),
-                considerations: Array.isArray(a.considerations) ? a.considerations.map((c: any, idx: number) => `${idx + 1}. ${c.text}`).join("\n") : cleanHtml(String(a.considerations || "")),
+                considerations: formatConsiderationsSmart(a.considerations),
                 meetingDecisions: Array.isArray(a.meetingDecisions) ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n") : cleanHtml(String(a.meetingDecisions || "")),
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
             })),
@@ -376,31 +375,42 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
 }
 
 // Helper Function untuk memformat nomor bertingkat saat export
-function formatConsiderationsSmart(considerations: any[]) {
-    if (!Array.isArray(considerations) || considerations.length === 0) return "-";
+function formatConsiderationsSmart(considerations: any): string {
+    let items: any[] = [];
 
-    // Jika data lama (string), kembalikan langsung
-    if (typeof considerations[0] === 'string') return considerations.join("\n");
+    // Parse data dengan aman
+    if (Array.isArray(considerations)) {
+        items = considerations;
+    } else if (typeof considerations === "string") {
+        try {
+            // Coba parse JSON, jika gagal anggap string biasa
+            const parsed = JSON.parse(considerations);
+            if (Array.isArray(parsed)) items = parsed;
+            else return considerations; // Return as plain text if not array
+        } catch {
+            return considerations; // Return original string if parse fails
+        }
+    } else {
+        return "-";
+    }
 
-    return considerations.map((item, index) => {
+    if (items.length === 0) return "-";
+
+    return items.map((item, index) => {
         const text = item.text || "";
         const level = item.level ?? 0;
 
-        // Logika Smart Numbering (Sama persis dengan frontend)
         let count = 0;
         for (let i = index; i >= 0; i--) {
-            const prev = considerations[i];
+            const prev = items[i];
             const prevLevel = prev.level ?? 0;
-            if (prevLevel === level) {
-                count++;
-            } else if (prevLevel < level) {
-                break;
-            }
+            if (prevLevel === level) count++;
+            else if (prevLevel < level) break;
         }
 
         let label = "";
         if (level === 0) label = `${count}.`;
-        else if (level === 1) label = `${String.fromCharCode(96 + count)}.`; // a, b, c
+        else if (level === 1) label = `${String.fromCharCode(96 + count)}.`;
         else if (level === 2) {
             const roman = ["i", "ii", "iii", "iv", "v", "vi"];
             label = `${roman[(count - 1) % roman.length] || count}.`;
@@ -408,10 +418,8 @@ function formatConsiderationsSmart(considerations: any[]) {
             label = "-";
         }
 
-        // Simulasi Indentasi dengan Spasi (karena ini teks biasa di dalam placeholder DOCX)
-        // 4 spasi per level
+        // Indentasi visual untuk text file
         const indent = "    ".repeat(level);
-
         return `${indent}${label} ${text}`;
     }).join("\n");
 }

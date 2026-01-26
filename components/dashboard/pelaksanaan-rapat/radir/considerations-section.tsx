@@ -6,11 +6,8 @@ import {
     Indent,
     Outdent,
     Trash2,
-    Plus,
     ArrowUp,
     ArrowDown,
-    Undo2,
-    Redo2
 } from "lucide-react"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -59,7 +56,7 @@ export function ConsiderationsSection({
         inputRefs.current = {}
     })
 
-    // --- Logika Penomoran Cerdas (Sama seperti sebelumnya) ---
+    // --- Logika Penomoran Cerdas ---
     const getLabel = (index: number) => {
         const currentItem = considerations[index]
         if (!currentItem) return ""
@@ -182,76 +179,11 @@ export function ConsiderationsSection({
         }
     }, [considerations, setConsiderations])
 
-    // --- Toolbar Component ---
-    const EditorToolbar = () => {
-        const disabled = focusedIndex === null
-        const currentLevel = focusedIndex !== null ? considerations[focusedIndex]?.level : 0
-
-        return (
-            <div className="flex items-center gap-1 bg-white border rounded-md p-1 shadow-sm mx-4">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7"
-                                onClick={() => focusedIndex !== null && changeLevel(focusedIndex, "outdent")}
-                                disabled={disabled || currentLevel === 0}>
-                                <Outdent className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Geser Kiri (Outdent)</TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7"
-                                onClick={() => focusedIndex !== null && changeLevel(focusedIndex, "indent")}
-                                disabled={disabled || currentLevel >= 2}>
-                                <Indent className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Geser Kanan (Indent)</TooltipContent>
-                    </Tooltip>
-
-                    <Separator orientation="vertical" className="h-4 mx-1" />
-
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7"
-                                onClick={() => focusedIndex !== null && moveItem(focusedIndex, "up")}
-                                disabled={disabled || focusedIndex === 0}>
-                                <ArrowUp className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Pindah ke Atas</TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7"
-                                onClick={() => focusedIndex !== null && moveItem(focusedIndex, "down")}
-                                disabled={disabled || focusedIndex === considerations.length - 1}>
-                                <ArrowDown className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Pindah ke Bawah</TooltipContent>
-                    </Tooltip>
-
-                    <Separator orientation="vertical" className="h-4 mx-1" />
-
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50 hover:text-red-600"
-                                onClick={() => focusedIndex !== null && removeItem(focusedIndex)}
-                                disabled={disabled}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Hapus Baris</TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            </div>
-        )
-    }
+    // Helper variables untuk toolbar state
+    const toolbarDisabled = focusedIndex === null
+    const currentLevel = focusedIndex !== null ? considerations[focusedIndex]?.level ?? 0 : 0
+    const isFirstItem = focusedIndex === 0
+    const isLastItem = focusedIndex === (considerations?.length || 0) - 1
 
     return (
         <Card className="border-none shadow-none bg-transparent flex flex-col h-full">
@@ -269,7 +201,7 @@ export function ConsiderationsSection({
                                         PENYUSUNAN PERTIMBANGAN
                                     </CardTitle>
                                     {activeAgendaTitle && (
-                                        <p className="text-xs text-slate-500 truncate max-w-[300px]">
+                                        <p className="text-xs text-slate-500 truncate max-w-75">
                                             Agenda: {activeAgendaTitle}
                                         </p>
                                     )}
@@ -286,7 +218,69 @@ export function ConsiderationsSection({
 
                     {/* TOOLBAR AREA */}
                     <div className="px-6 pb-3 flex items-center justify-between">
-                        <EditorToolbar />
+                        <div className="flex items-center gap-1 bg-white border rounded-md p-1 shadow-sm">
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                            onClick={() => focusedIndex !== null && changeLevel(focusedIndex, "outdent")}
+                                            disabled={toolbarDisabled || currentLevel === 0}>
+                                            <Outdent className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Geser Kiri (Outdent)</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                            onClick={() => focusedIndex !== null && changeLevel(focusedIndex, "indent")}
+                                            disabled={toolbarDisabled || currentLevel >= 2}>
+                                            <Indent className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Geser Kanan (Indent)</TooltipContent>
+                                </Tooltip>
+
+                                <Separator orientation="vertical" className="h-4 mx-1" />
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                            onClick={() => focusedIndex !== null && moveItem(focusedIndex, "up")}
+                                            disabled={toolbarDisabled || isFirstItem}>
+                                            <ArrowUp className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Pindah ke Atas</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                            onClick={() => focusedIndex !== null && moveItem(focusedIndex, "down")}
+                                            disabled={toolbarDisabled || isLastItem}>
+                                            <ArrowDown className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Pindah ke Bawah</TooltipContent>
+                                </Tooltip>
+
+                                <Separator orientation="vertical" className="h-4 mx-1" />
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50 hover:text-red-600"
+                                            onClick={() => focusedIndex !== null && removeItem(focusedIndex)}
+                                            disabled={toolbarDisabled}>
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Hapus Baris</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
+
                         <div className="text-[10px] text-slate-400 italic hidden md:block">
                             Shortcut: Enter (Baris Baru) • Tab (Indent) • Shift+Tab (Outdent)
                         </div>
@@ -303,7 +297,7 @@ export function ConsiderationsSection({
 
                 {/* --- THE PAPER --- */}
                 <div
-                    className="bg-white w-full max-w-[850px] min-h-[1056px] shadow-sm border border-[#e1e3e6] relative transition-all duration-300 px-12 py-16 md:px-24 md:py-24"
+                    className="bg-white w-full max-w-212.5 min-h-264 shadow-sm border border-[#e1e3e6] relative transition-all duration-300 px-12 py-16 md:px-24 md:py-24"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="space-y-0.5">

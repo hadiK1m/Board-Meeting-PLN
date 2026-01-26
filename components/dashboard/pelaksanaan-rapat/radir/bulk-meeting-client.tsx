@@ -595,7 +595,28 @@ export function BulkMeetingClient({
                         <MeetingLogisticsSection startTime={globalDraft.startTime} setStartTime={(val) => updateGlobal("startTime", val)} endTime={globalDraft.endTime} setEndTime={(val) => updateGlobal("endTime", val)} location={globalDraft.meetingLocation} setLocation={(val) => updateGlobal("meetingLocation", val)} executionDate={activeAgenda?.executionDate || undefined} />
                         <AttendanceAndLeadershipSection attendance={globalDraft.attendanceData} setAttendance={(val) => updateGlobal("attendanceData", val)} guests={globalDraft.guestParticipants} setGuests={(val) => updateGlobal("guestParticipants", val)} selectedPimpinan={globalDraft.pimpinanRapat} setSelectedPimpinan={(val) => updateGlobal("pimpinanRapat", val)} />
                         <ExecutiveSummarySection value={currentSpecific.executiveSummary} onChange={(val) => updateSpecific("executiveSummary", val)} />
-                        <ConsiderationsSection considerations={currentSpecific.considerations} setConsiderations={(val) => updateSpecific("considerations", val)} />
+                        <ConsiderationsSection
+                            // FIX 1: Map data agar 'level' selalu ada (default 0)
+                            considerations={(activeAgenda.considerations || []).map((c: any) => ({
+                                ...c,
+                                level: c.level ?? 0
+                            }))}
+
+                            // FIX 2: Handle update state
+                            setConsiderations={(newItems) => {
+                                // Jika newItems berupa function (prev => ...), kita harus handle itu atau simplifikasi
+                                // Karena logic parent biasanya mengharapkan value langsung, kita asumsikan newItems adalah array hasil
+                                // Namun component ConsiderationsSection mengirim items[] | func.
+
+                                // Kita paksa ambil valuenya dengan casting aman jika perlu
+                                const itemsToSave = typeof newItems === 'function'
+                                    ? newItems(activeAgenda.considerations as any[])
+                                    : newItems;
+
+                                updateAgendaState(activeAgenda.id, { considerations: itemsToSave })
+                            }}
+                            activeAgendaTitle={activeAgenda.title}
+                        />
                         <MeetingDecisionsSection decisions={currentSpecific.meetingDecisions} setDecisions={(val) => updateSpecific("meetingDecisions", val)} />
                         <DissentingOpinionSection value={currentSpecific.dissentingOpinion} onChange={(val) => updateSpecific("dissentingOpinion", val)} />
 
