@@ -194,6 +194,7 @@ export async function exportRisalahToDocx(
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
+                considerations: formatConsiderationsSmart(a.considerations as any[]),
                 considerations: Array.isArray(a.considerations) ? a.considerations.map((c: any, idx: number) => `${idx + 1}. ${c.text}`).join("\n") : cleanHtml(String(a.considerations || "")),
                 meetingDecisions: Array.isArray(a.meetingDecisions) ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n") : cleanHtml(String(a.meetingDecisions || "")),
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
@@ -372,4 +373,45 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
         console.error("[EXPORT_ERROR]", error);
         return { success: false, error: error.message || "Gagal melakukan export dokumen." };
     }
+}
+
+// Helper Function untuk memformat nomor bertingkat saat export
+function formatConsiderationsSmart(considerations: any[]) {
+    if (!Array.isArray(considerations) || considerations.length === 0) return "-";
+
+    // Jika data lama (string), kembalikan langsung
+    if (typeof considerations[0] === 'string') return considerations.join("\n");
+
+    return considerations.map((item, index) => {
+        const text = item.text || "";
+        const level = item.level ?? 0;
+
+        // Logika Smart Numbering (Sama persis dengan frontend)
+        let count = 0;
+        for (let i = index; i >= 0; i--) {
+            const prev = considerations[i];
+            const prevLevel = prev.level ?? 0;
+            if (prevLevel === level) {
+                count++;
+            } else if (prevLevel < level) {
+                break;
+            }
+        }
+
+        let label = "";
+        if (level === 0) label = `${count}.`;
+        else if (level === 1) label = `${String.fromCharCode(96 + count)}.`; // a, b, c
+        else if (level === 2) {
+            const roman = ["i", "ii", "iii", "iv", "v", "vi"];
+            label = `${roman[(count - 1) % roman.length] || count}.`;
+        } else {
+            label = "-";
+        }
+
+        // Simulasi Indentasi dengan Spasi (karena ini teks biasa di dalam placeholder DOCX)
+        // 4 spasi per level
+        const indent = "    ".repeat(level);
+
+        return `${indent}${label} ${text}`;
+    }).join("\n");
 }
