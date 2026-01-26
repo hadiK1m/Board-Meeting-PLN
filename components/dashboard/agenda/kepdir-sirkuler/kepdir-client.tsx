@@ -52,6 +52,7 @@ import { DetailKepdirSheet } from "./detail-kepdir-sheet"
 import { EditKepdirModal } from "./edit-kepdir-modal"
 import { AddKepdirModal } from "./add-kepdir-modal"
 import { Checkbox } from "@/components/ui/checkbox"
+import KepdirSirkulerTour from "./kepdir-sirkuler-tour"
 
 // ✅ Type safety tanpa 'any'
 interface KepdirClientProps {
@@ -182,6 +183,7 @@ export function KepdirClient({ initialData = [] }: KepdirClientProps) {
 
     return (
         <div className="space-y-6">
+            <KepdirSirkulerTour />
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="space-y-1">
                     <div className="flex flex-col gap-1 border-l-4 border-[#14a2ba] pl-4">

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { type AgendaReady } from "./jadwal-rapat-client"
 
-// ✅ Pindahkan logic dynamic import ke sini
+// Dynamic import client component
 const JadwalRapatClient = dynamic(
     () => import("./jadwal-rapat-client").then(mod => mod.JadwalRapatClient),
     {
@@ -19,6 +19,15 @@ const JadwalRapatClient = dynamic(
     }
 )
 
+// Tambahkan tour khusus jadwal-rapat
+import JadwalRapatTour from "./jadwal-rapat-tour"
+
 export function JadwalRapatWrapper({ data }: { data: AgendaReady[] }) {
-    return <JadwalRapatClient data={data} />
+    return (
+        <>
+            {/* Non-invasive: tour hanya UI overlay, tidak mengubah data/logika */}
+            <JadwalRapatTour />
+            <JadwalRapatClient data={data} />
+        </>
+    )
 }

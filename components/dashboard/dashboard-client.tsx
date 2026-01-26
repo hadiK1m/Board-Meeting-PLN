@@ -18,6 +18,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Filter, ListTodo } from "lucide-react"
 import { Button } from "../ui/button"
 
+// TAMBAHKAN: komponen onboarding tour
+import OnboardingTour from "@/components/dashboard/onboarding-tour"
+
 export function DashboardClient() {
     const [date, setDate] = useState<DateRange | undefined>({
         from: new Date(new Date().getFullYear(), 0, 1),
@@ -156,6 +159,9 @@ export function DashboardClient() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-10">
+            {/* TAMBAHKAN: Tour helper (non-invasive) */}
+            <OnboardingTour />
+
             {/* HEADER & FILTER */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>

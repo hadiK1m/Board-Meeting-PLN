@@ -50,6 +50,10 @@ import { Agenda } from "@/db/schema/agendas"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+// Import sheet/detail component (pastikan path ini sesuai di repo Anda)
+// benar:
+import { DetailRadirSheet } from "@/components/dashboard/agenda/radir/detail-radir-sheet"
+
 interface Option { label: string; value: string }
 interface DecisionItem { id: string; text: string }
 interface Guest { id: number; name: string; position: string }
@@ -92,6 +96,10 @@ export function BulkMeetingClient({
     // State lokal untuk agendas (mutable)
     const [localAgendas, setLocalAgendas] = useState<Agenda[]>(agendas)
     const activeAgenda = localAgendas.find((a) => a.id === activeAgendaId) || localAgendas[0]
+
+    // NEW: State untuk Detail Sheet
+    const [detailOpen, setDetailOpen] = useState(false)
+    const [selectedDetail, setSelectedDetail] = useState<Agenda | null>(null)
 
     // Handler hapus agenda dari sesi
     const handleRemoveAgenda = async (agendaId: string) => {
@@ -270,7 +278,6 @@ export function BulkMeetingClient({
             // 2. Jika Berhasil Disimpan, Ubah Status Menjadi RAPAT_SELESAI
             if (results.every(res => res.success)) {
 
-                // --- KODE BARU DIMULAI DARI SINI ---
                 if (initialMeetingNumber && initialMeetingYear) {
                     const finishRes = await finishMeetingAction(initialMeetingNumber, initialMeetingYear)
 
@@ -283,7 +290,6 @@ export function BulkMeetingClient({
                 } else {
                     toast.success("Progress Berhasil Disimpan (Tanpa Finish)")
                 }
-                // --- KODE BARU SELESAI ---
 
                 router.refresh()
             } else {
@@ -311,7 +317,6 @@ export function BulkMeetingClient({
             const result = await finishMeetingAction(initialMeetingNumber, initialMeetingYear)
             if (result.success) {
                 toast.success("Rapat berhasil diselesaikan!")
-                // Redirect ke halaman Monev atau kembali ke dashboard
                 router.push("/monev/radir")
             } else {
                 toast.error(result.error || "Gagal menyelesaikan rapat.")
@@ -347,7 +352,7 @@ export function BulkMeetingClient({
                 toast.error(result.error || "Gagal export.");
             }
         } catch (err: unknown) {
-            console.error(err)
+            console.error(err);
             toast.error("Kesalahan sistem saat export.");
         } finally {
             setIsSubmitting(false);
@@ -374,7 +379,7 @@ export function BulkMeetingClient({
                         <div
                             key={item.id}
                             className={cn(
-                                "w-full flex items-center gap-3 p-4 pr-12 rounded-xl transition-all text-left group relative cursor-pointer", // <-- UBAH: p-4 + pr-12 (padding kanan ekstra untuk tombol delete)
+                                "w-full flex items-center gap-3 p-4 pr-12 rounded-xl transition-all text-left group relative cursor-pointer",
                                 activeAgendaId === item.id
                                     ? "bg-white shadow-md border border-[#125d72]/20"
                                     : "hover:bg-slate-200/50 text-slate-500 border border-transparent"
@@ -387,13 +392,23 @@ export function BulkMeetingClient({
                             )}>
                                 {index + 1}
                             </div>
-                            <div className="overflow-hidden flex-1 min-w-0"> {/* <-- TAMBAH min-w-0 agar truncate/line-clamp bekerja baik */}
-                                <p className={cn(
-                                    "text-[11px] font-bold line-clamp-2 leading-tight", // <-- UBAH: ganti truncate → line-clamp-2 (wrap maks 2 baris)
-                                    activeAgendaId === item.id ? "text-[#125d72]" : "text-slate-700"
-                                )}>
+                            <div className="overflow-hidden flex-1 min-w-0">
+                                {/* TITEL SEKARANG BISA DIKLIK untuk membuka detail */}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // jangan ubah activeAgendaId saat buka detail
+                                        setSelectedDetail(item);
+                                        setDetailOpen(true);
+                                    }}
+                                    className={cn(
+                                        "text-[11px] font-bold line-clamp-2 leading-tight text-left w-full",
+                                        activeAgendaId === item.id ? "text-[#125d72]" : "text-slate-700"
+                                    )}
+                                >
                                     {item.title}
-                                </p>
+                                </button>
+
                                 <p className="text-[9px] uppercase font-bold opacity-50 truncate mt-1">{item.director}</p>
                             </div>
 
@@ -404,14 +419,13 @@ export function BulkMeetingClient({
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 absolute right-3 top-1/2 -translate-y-1/2 transition-all" // <-- UBAH: h-9 w-9 (sedikit lebih besar) + right-3
+                                            className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 absolute right-3 top-1/2 -translate-y-1/2 transition-all"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
 
-                                    {/* Dialog tetap sama seperti sebelumnya */}
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
                                             <AlertDialogTitle className="flex items-center gap-3 text-lg">
@@ -476,7 +490,7 @@ export function BulkMeetingClient({
                             <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu className="h-5 w-5" /></Button></SheetTrigger>
                             <SheetContent side="left" className="w-72 p-0 h-full overflow-hidden"><AgendaSidebarList /></SheetContent>
                         </Sheet>
-                        <div className="flex flex-col min-w-0 flex-1"> {/* tambah min-w-0 & flex-1 agar truncate bekerja baik */}
+                        <div className="flex flex-col min-w-0 flex-1">
                             <Badge className="bg-[#125d72] text-[9px] font-bold h-4 w-fit">
                                 AGENDA SEDANG DIBAHAS
                             </Badge>
@@ -528,7 +542,6 @@ export function BulkMeetingClient({
                                             <p className="text-[10px] text-green-600/70 font-bold mt-1">Seluruh agenda dalam sesi ini telah dibahas.</p>
                                         </div>
 
-                                        {/* --- TOMBOL PENYELESAIAN --- */}
                                         <Button
                                             onClick={handleFinishMeeting}
                                             disabled={isSubmitting}
@@ -544,6 +557,13 @@ export function BulkMeetingClient({
                     </div>
                 </ScrollArea>
             </main>
+
+            {/* DETAIL SHEET - tampilkan file & data agenda */}
+            <DetailRadirSheet
+                agenda={selectedDetail}
+                open={detailOpen}
+                onOpenChange={setDetailOpen}
+            />
         </div>
     )
 }

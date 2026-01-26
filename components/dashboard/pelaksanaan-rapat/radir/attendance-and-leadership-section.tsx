@@ -117,7 +117,7 @@ export function AttendanceAndLeadershipSection({
                 <div className="space-y-3">
                     <div className="flex items-center gap-2">
                         <UserCheck className="h-4 w-4 text-[#125d72]" />
-                        <h4 className="text-sm font-bold text-[#125d72]">Pimpinan Risalah</h4>
+                        <h4 className="text-sm font-bold text-[#125d72]">Pimpinan Rapat</h4>
                     </div>
                     <Select
                         isMulti

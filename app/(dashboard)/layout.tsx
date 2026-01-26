@@ -1,11 +1,14 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
-import { HeaderBreadcrumb } from "@/components/dashboard/header-breadcrumb" // <--- Import komponen baru
+import { HeaderBreadcrumb } from "@/components/dashboard/header-breadcrumb"
 import {
     SidebarInset,
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+
+// TAMBAHKAN: tombol pemicu tour (client component)
+import TourTriggerButton from "@/components/dashboard/tour-trigger-button"
 
 export default function DashboardLayout({
     children,
@@ -23,7 +26,11 @@ export default function DashboardLayout({
 
                         {/* Implementasi Breadcrumb Dinamis */}
                         <HeaderBreadcrumb />
+                    </div>
 
+                    {/* Tombol di pojok kanan header */}
+                    <div className="ml-auto flex items-center gap-2">
+                        <TourTriggerButton />
                     </div>
                 </header>
                 <div className="flex flex-1 flex-col gap-4 p-4 pt-0 bg-slate-50/50">
