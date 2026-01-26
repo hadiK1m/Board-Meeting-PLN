@@ -379,3 +379,67 @@
 .ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li > ol > li::before {
   content: counter(dec1, decimal) "." counter(alpha2, lower-alpha) "." counter(dec3, decimal) ". ";
 }
+
+/* 6. PARENTHESIS MULTILEVEL: 1) a) i) */
+.ProseMirror.list-parenthesis ol {
+  list-style: none;
+}
+.ProseMirror.list-parenthesis > ol {
+  counter-reset: p1;
+}
+.ProseMirror.list-parenthesis > ol > li {
+  counter-increment: p1;
+}
+.ProseMirror.list-parenthesis > ol > li::before {
+  content: counter(p1, decimal) ") ";
+}
+.ProseMirror.list-parenthesis > ol > li > ol {
+  counter-reset: p2;
+}
+.ProseMirror.list-parenthesis > ol > li > ol > li {
+  counter-increment: p2;
+}
+.ProseMirror.list-parenthesis > ol > li > ol > li::before {
+  content: counter(p2, lower-alpha) ") ";
+}
+.ProseMirror.list-parenthesis > ol > li > ol > li > ol {
+  counter-reset: p3;
+}
+.ProseMirror.list-parenthesis > ol > li > ol > li > ol > li {
+  counter-increment: p3;
+}
+.ProseMirror.list-parenthesis > ol > li > ol > li > ol > li::before {
+  content: counter(p3, lower-roman) ") ";
+}
+
+/* 7. MIXED SIMPLE: 1. a. i. */
+.ProseMirror.list-mixed-simple ol {
+  list-style: none;
+}
+.ProseMirror.list-mixed-simple > ol {
+  counter-reset: m1;
+}
+.ProseMirror.list-mixed-simple > ol > li {
+  counter-increment: m1;
+}
+.ProseMirror.list-mixed-simple > ol > li::before {
+  content: counter(m1, decimal) ". ";
+}
+.ProseMirror.list-mixed-simple > ol > li > ol {
+  counter-reset: m2;
+}
+.ProseMirror.list-mixed-simple > ol > li > ol > li {
+  counter-increment: m2;
+}
+.ProseMirror.list-mixed-simple > ol > li > ol > li::before {
+  content: counter(m2, lower-alpha) ". ";
+}
+.ProseMirror.list-mixed-simple > ol > li > ol > li > ol {
+  counter-reset: m3;
+}
+.ProseMirror.list-mixed-simple > ol > li > ol > li > ol > li {
+  counter-increment: m3;
+}
+.ProseMirror.list-mixed-simple > ol > li > ol > li > ol > li::before {
+  content: counter(m3, lower-roman) ". ";
+}
