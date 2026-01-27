@@ -23,9 +23,8 @@ const ConsiderationEditor = dynamic(() => import("./ConsiderationEditor"), {
     )
 })
 
-// Minimal fallback toolbar (ganti dengan import asli jika file tersedia)
+// ToolbarProps tanpa judul agenda
 type ToolbarProps = {
-    activeAgendaTitle?: string
     onSetListStyle: (style: string) => void
     currentListStyle: string
     onToggleOrderedList: () => void
@@ -42,7 +41,6 @@ type ToolbarProps = {
 }
 function ConsiderationToolbarFallback(props: ToolbarProps) {
     const {
-        activeAgendaTitle,
         onToggleOrderedList,
         onToggleBulletList,
         onIndent,
@@ -51,7 +49,6 @@ function ConsiderationToolbarFallback(props: ToolbarProps) {
 
     return (
         <div className="flex items-center gap-2 p-2 border-b">
-            <div className="text-sm font-medium">{activeAgendaTitle ?? "Considerations"}</div>
             <div className="ml-auto flex gap-1">
                 <button onClick={onToggleOrderedList} type="button" className="btn">OL</button>
                 <button onClick={onToggleBulletList} type="button" className="btn">UL</button>
@@ -153,9 +150,8 @@ export function ConsiderationsSection({ value, setValue, activeAgendaTitle }: Co
                 </div>
             </CardHeader>
 
-            {/* Toolbar (fallback) */}
+            {/* Toolbar (fallback) tanpa judul agenda */}
             <ConsiderationToolbarFallback
-                activeAgendaTitle={activeAgendaTitle}
                 onSetListStyle={handleSetListStyle}
                 currentListStyle={listStyle.replace("list-", "")}
                 onToggleOrderedList={handleToggleOrderedList}
