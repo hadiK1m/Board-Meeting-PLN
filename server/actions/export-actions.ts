@@ -194,16 +194,7 @@ export async function exportRisalahToDocx(
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
-                considerations: Array.isArray(a.considerations)
-                    ? a.considerations
-                    : (() => {
-                        try {
-                            const arr = JSON.parse(a.considerations || "[]");
-                            return Array.isArray(arr) ? arr : [a.considerations];
-                        } catch {
-                            return [a.considerations];
-                        }
-                    })(),
+                considerations: htmlToDocxText(a.considerations || ""),
                 meetingDecisions: Array.isArray(a.meetingDecisions) ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n") : cleanHtml(String(a.meetingDecisions || "")),
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
             })),
@@ -387,47 +378,26 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
 function htmlToDocxText(html: string): string {
     if (!html) return "-";
     let text = html;
-
-    // 1. List: Gabungkan nomor dan paragraf dalam satu baris
-    // Tangani <ol><li><p>...</p></li></ol>
-    text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (m, list) => {
+    // Bold
+    text = text.replace(/<(b|strong)>(.*?)<\/\1>/gi, '**$2**');
+    // Ordered List
+    text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (m: string, list: string) => {
         let i = 1;
-        // Gabungkan isi <li> dan <p> dalam satu baris
-        return list.replace(/<li[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/li>/gi, (_, item) => `${i++}. ${item}\n`);
+        return list.replace(/<li>(.*?)<\/li>/gi, (_: string, item: string) => `${i++}. ${item}\n`);
     });
-    // Tangani <ul><li><p>...</p></li></ul>
-    text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (m, list) => {
-        return list.replace(/<li[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/li>/gi, (_, item) => `- ${item}\n`);
+    // Unordered List
+    text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (m: string, list: string) => {
+        return list.replace(/<li>(.*?)<\/li>/gi, (_: string, item: string) => `- ${item}\n`);
     });
-
-    // 2. List tanpa <p>
-    text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (m, list) => {
-        let i = 1;
-        return list.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, item) => `${i++}. ${item}\n`);
-    });
-    text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (m, list) => {
-        return list.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, item) => `- ${item}\n`);
-    });
-
-    // 3. Bold: Ubah <b> dan <strong> jadi huruf besar (simulasi bold)
-    text = text.replace(/<(b|strong)>(.*?)<\/\1>/gi, (_, __, val) => val.toUpperCase());
-
-    // 4. Italic: Hilangkan tag <em>
-    text = text.replace(/<em>(.*?)<\/em>/gi, '$1');
-
-    // 5. Paragraph
-    text = text.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n');
-
-    // 6. Line breaks
+    // Paragraph
+    text = text.replace(/<p>(.*?)<\/p>/gi, '\n$1\n');
+    // Line breaks
     text = text.replace(/<br\s*\/?>/gi, '\n');
-
-    // 7. Remove other tags
+    // Remove other tags
     text = text.replace(/<[^>]+>/g, '');
-
-    // 8. Decode HTML entities
+    // Decode HTML entities
     text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-
-    // 9. Clean up multiple newlines
+    // Clean up multiple newlines
     text = text.replace(/\n{2,}/g, '\n\n');
     return text.trim();
 }

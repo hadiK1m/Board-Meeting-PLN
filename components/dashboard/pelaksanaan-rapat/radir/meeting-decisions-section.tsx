@@ -2,7 +2,7 @@
 // components/dashboard/pelaksanaan-rapat/radir/meeting-decisions-section.tsx
 "use client"
 
-import React from "react"
+import React, { useRef } from "react"
 import {
     Gavel,
     Plus,
@@ -11,7 +11,6 @@ import {
     CheckCircle2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -59,6 +58,23 @@ const SortableDecisionItem = ({
         transition,
     }
 
+    // Ref dan handler untuk auto-resize
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onUpdate(e.target.value)
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
+        }
+    }
+
+    React.useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
+        }
+    }, [text])
+
     return (
         <div
             ref={setNodeRef}
@@ -75,11 +91,14 @@ const SortableDecisionItem = ({
             </div>
 
             {/* Input Keputusan */}
-            <Input
+            <textarea
+                ref={textareaRef}
                 value={text}
-                onChange={(e) => onUpdate(e.target.value)}
-                className="flex-1 border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm font-medium"
+                onChange={handleInput}
+                className="flex-1 border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm font-medium resize-y max-h-75 bg-transparent"
                 placeholder="Tuliskan butir keputusan secara lugas dan jelas..."
+                rows={1}
+                style={{ overflow: 'auto' }}
             />
 
             {/* Tombol Hapus */}
