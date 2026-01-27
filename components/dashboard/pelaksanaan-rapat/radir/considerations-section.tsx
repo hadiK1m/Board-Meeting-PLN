@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import dynamic from "next/dynamic"
 import { FileText } from "lucide-react"
 import type { ConsiderationEditorHandle } from "./ConsiderationEditor"
+import ConsiderationToolbar from "./consideration-toolbar"
 
 interface ConsiderationsSectionProps {
     value: string
@@ -23,104 +24,44 @@ const ConsiderationEditor = dynamic(() => import("./ConsiderationEditor"), {
     )
 })
 
-// ToolbarProps tanpa judul agenda
-type ToolbarProps = {
-    onSetListStyle: (style: string) => void
-    currentListStyle: string
-    onToggleOrderedList: () => void
-    onToggleBulletList: () => void
-    isOrderedListActive: boolean
-    onIndent: () => void
-    onOutdent: () => void
-    focusedIndex: number
-    currentLevel: number
-    totalItems: number
-    onMoveUp: () => void
-    onMoveDown: () => void
-    onDelete: () => void
-}
-function ConsiderationToolbarFallback(props: ToolbarProps) {
-    const {
-        onToggleOrderedList,
-        onToggleBulletList,
-        onIndent,
-        onOutdent,
-    } = props
-
-    return (
-        <div className="flex items-center gap-2 p-2 border-b">
-            <div className="ml-auto flex gap-1">
-                <button onClick={onToggleOrderedList} type="button" className="btn">OL</button>
-                <button onClick={onToggleBulletList} type="button" className="btn">UL</button>
-                <button onClick={onIndent} type="button" className="btn">→</button>
-                <button onClick={onOutdent} type="button" className="btn">←</button>
-            </div>
-        </div>
-    )
-}
-
 export function ConsiderationsSection({ value, setValue, activeAgendaTitle }: ConsiderationsSectionProps) {
-    // ref yang hanya untuk mendapatkan handle editor dari component child
-    const editorRef = useRef<ConsiderationEditorHandle | null>(null);
-    const [listStyle, setListStyle] = useState("list-decimal");
-    const [isOrderedListActive, setIsOrderedListActive] = useState(false);
+    const editorRef = useRef<ConsiderationEditorHandle | null>(null)
+    const [listStyle, setListStyle] = useState("list-decimal")
+    const [isOrderedListActive, setIsOrderedListActive] = useState(false)
 
     const getEditor = (): any | null => {
-        return editorRef.current?.editor ?? null;
-    };
+        return editorRef.current?.editor ?? null
+    }
 
-    // Handler untuk toggle ordered list
-    const handleToggleOrderedList = () => {
-        const editor = getEditor();
-        if (editor) {
-            (editor as any).chain().focus().toggleOrderedList().run();
-        }
-    };
 
-    // Handler untuk toggle bullet list
-    const handleToggleBulletList = () => {
-        const editor = getEditor();
-        if (editor) {
-            (editor as any).chain().focus().toggleBulletList().run();
-        }
-    };
-
-    // Handler untuk mengubah list style
     const handleSetListStyle = (style: string) => {
-        const fullStyle = style.startsWith('list-') ? style : `list-${style}`;
-        setListStyle(fullStyle);
-    };
-
-    // Handler indent/outdent
-    const handleIndent = () => {
-        const editor = getEditor();
-        if (editor) {
-            (editor as any).chain().focus().sinkListItem('listItem').run();
+        const fullStyle = style.startsWith("list-") ? style : `list-${style}`
+        setListStyle(fullStyle)
+        // update DOM class on editor if available
+        const editor = getEditor()
+        if (editor && (editor as any).view?.dom) {
+            const dom = (editor as any).view.dom as HTMLElement
+            ["list-decimal", "list-outline", "list-multidecimal", "list-upper-alpha", "list-bullet"].forEach(s => dom.classList.remove(s))
+            dom.classList.add(fullStyle)
         }
-    };
+    }
 
-    const handleOutdent = () => {
-        const editor = getEditor();
-        if (editor) {
-            (editor as any).chain().focus().liftListItem('listItem').run();
-        }
-    };
 
-    // Update state dari editor
+
     useEffect(() => {
         const checkEditorState = () => {
-            const editor = getEditor();
+            const editor = getEditor()
             try {
-                const active = editor && typeof editor.isActive === "function" ? editor.isActive('orderedList') : false;
-                setIsOrderedListActive(active);
+                const active = editor && typeof editor.isActive === "function" ? editor.isActive("orderedList") : false
+                setIsOrderedListActive(active)
             } catch {
-                setIsOrderedListActive(false);
+                setIsOrderedListActive(false)
             }
-        };
+        }
 
-        const interval = setInterval(checkEditorState, 300);
-        return () => clearInterval(interval);
-    }, []);
+        const interval = setInterval(checkEditorState, 300)
+        return () => clearInterval(interval)
+    }, [])
 
     return (
         <Card className="border-none shadow-sm overflow-hidden bg-white ring-1 ring-slate-200">
@@ -132,7 +73,7 @@ export function ConsiderationsSection({ value, setValue, activeAgendaTitle }: Co
                         </div>
                         <div>
                             <CardTitle className="text-base font-black uppercase tracking-widest text-[#125d72]">
-                                Penyusunan Risalah / Ringkasan Eksekutif
+                                DASAR PERTIMBANGAN
                             </CardTitle>
                             {activeAgendaTitle && (
                                 <p className="text-xs text-slate-500 mt-1 italic">
@@ -150,27 +91,21 @@ export function ConsiderationsSection({ value, setValue, activeAgendaTitle }: Co
                 </div>
             </CardHeader>
 
-            {/* Toolbar (fallback) tanpa judul agenda */}
-            <ConsiderationToolbarFallback
-                onSetListStyle={handleSetListStyle}
+            <ConsiderationToolbar
+                editorRef={editorRef}
                 currentListStyle={listStyle.replace("list-", "")}
-                onToggleOrderedList={handleToggleOrderedList}
-                onToggleBulletList={handleToggleBulletList}
+                onSetListStyle={handleSetListStyle}
                 isOrderedListActive={isOrderedListActive}
-                onIndent={handleIndent}
-                onOutdent={handleOutdent}
-                focusedIndex={0}
-                currentLevel={0}
-                totalItems={1}
                 onMoveUp={() => { }}
                 onMoveDown={() => { }}
                 onDelete={() => { }}
             />
 
             <div>
-                {/* pasangkan ref ke komponen editor, bukan ke div DOM */}
                 <ConsiderationEditor value={value} onChange={setValue} ref={editorRef} />
             </div>
         </Card>
     )
 }
+
+export default ConsiderationsSection
