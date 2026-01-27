@@ -58,6 +58,8 @@ export function ConsiderationsSection({ value, setValue, activeAgendaTitle }: Co
         onUpdate: ({ editor }: { editor: Editor }) => {
             setValue(editor.getHTML())
         },
+        // FIX: Prevent SSR hydration mismatch by not rendering immediately
+        immediatelyRender: false,
     })
 
     // Sinkronisasi value eksternal
