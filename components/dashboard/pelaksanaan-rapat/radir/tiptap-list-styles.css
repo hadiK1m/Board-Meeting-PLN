@@ -1,212 +1,389 @@
 /* =========================================================
-   Base ProseMirror Styles
+   RESET DASAR - HANYA HAPUS DEFAULT TIPTAP
    ========================================================= */
-
+/* Reset hanya untuk editor kita */
 .ProseMirror {
-  padding: 1rem;
+  outline: none !important;
+  padding: 40px !important;
+  line-height: 1.6;
+  font-size: 14px;
+  min-height: 300px;
 }
 
-/* =========================================================
-   ORDERED LIST – BASE (disable native markers)
-   ========================================================= */
-
-.ProseMirror ol {
-  list-style: none;
-  padding-left: 2.5rem;
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-/* Reset counter only at top level */
-.ProseMirror > ol {
-  counter-reset: item;
-}
-
-.ProseMirror ol li {
-  position: relative;
-  padding-left: 0.25rem;
-}
-
-/* Default counter increment */
-.ProseMirror ol li::before {
-  counter-increment: item;
-  position: absolute;
-  left: -2.2rem;
-  width: 2rem;
-  text-align: right;
-  color: #222;
-  font-weight: normal;
-}
-
-/* Nested list spacing */
-.ProseMirror ol ol {
-  margin-top: 0.25rem;
-  margin-bottom: 0.25rem;
-  padding-left: 2rem;
-}
-
-/* =========================================================
-   DECIMAL (1.1.1)
-   ========================================================= */
-
-.ProseMirror.list-decimal ol li::before {
-  content: counters(item, ".") ". ";
-}
-
-/* =========================================================
-   LOWER ALPHA (a.b.c)
-   ========================================================= */
-
-.ProseMirror.list-lower-alpha ol li::before {
-  content: counters(item, ".", lower-alpha) ". ";
-}
-
-/* =========================================================
-   LOWER ROMAN (i.ii.iii)
-   ========================================================= */
-
-.ProseMirror.list-lower-roman ol li::before {
-  content: counters(item, ".", lower-roman) ". ";
-}
-
-/* =========================================================
-   UPPER ROMAN (I.II.III)
-   ========================================================= */
-
-.ProseMirror.list-upper-roman ol li::before {
-  content: counters(item, ".", upper-roman) ". ";
-}
-
-/* =========================================================
-   UPPER ALPHA (A.B.C)
-   ========================================================= */
-
-.ProseMirror.list-upper-alpha ol li::before {
-  content: counters(item, ".", upper-alpha) ". ";
-}
-
-/* =========================================================
-   OUTLINE STYLE (I. A. 1. a.)
-   ========================================================= */
-
-.ProseMirror.list-outline ol {
-  list-style: none;
-}
-
-.ProseMirror.list-outline > ol {
-  counter-reset: level1;
-}
-
-.ProseMirror.list-outline > ol > li {
-  counter-increment: level1;
-}
-
-.ProseMirror.list-outline > ol > li::before {
-  content: counter(level1, upper-roman) ". ";
-}
-
-.ProseMirror.list-outline > ol > li > ol {
-  counter-reset: level2;
-}
-
-.ProseMirror.list-outline > ol > li > ol > li {
-  counter-increment: level2;
-}
-
-.ProseMirror.list-outline > ol > li > ol > li::before {
-  content: counter(level2, upper-alpha) ". ";
-}
-
-.ProseMirror.list-outline > ol > li > ol > li > ol {
-  counter-reset: level3;
-}
-
-.ProseMirror.list-outline > ol > li > ol > li > ol > li {
-  counter-increment: level3;
-}
-
-.ProseMirror.list-outline > ol > li > ol > li > ol > li::before {
-  content: counter(level3, decimal) ". ";
-}
-
-.ProseMirror.list-outline
-  > ol
-  > li
-  > ol
-  > li
-  > ol
-  > li
-  > ol {
-  counter-reset: level4;
-}
-
-.ProseMirror.list-outline
-  > ol
-  > li
-  > ol
-  > li
-  > ol
-  > li
-  > ol
-  > li {
-  counter-increment: level4;
-}
-
-.ProseMirror.list-outline
-  > ol
-  > li
-  > ol
-  > li
-  > ol
-  > li
-  > ol
-  > li::before {
-  content: counter(level4, lower-alpha) ". ";
-}
-
-/* =========================================================
-   BULLET LIST
-   ========================================================= */
-
+/* Reset list di dalam .ProseMirror */
+.ProseMirror ol,
 .ProseMirror ul {
-  list-style: none;
+  list-style: none !important;
   padding-left: 1.5rem;
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.ProseMirror ul li {
-  position: relative;
-  margin-bottom: 0.25rem;
-}
-
-.ProseMirror ul li::before {
-  content: "•";
-  position: absolute;
-  left: -1rem;
-}
-
-.ProseMirror ul ul li::before {
-  content: "◦";
-}
-
-.ProseMirror ul ul ul li::before {
-  content: "▪";
-}
-
-/* =========================================================
-   LIST ITEM CONTENT SAFETY
-   ========================================================= */
-
-.ProseMirror li > p {
   margin: 0;
 }
 
+.ProseMirror li {
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+
+/* Pastikan content kosong dulu */
+.ProseMirror li::before {
+  content: none;
+}
+
+/* List item content */
+.ProseMirror li > p {
+  margin: 0;
+  padding-left: 0;
+  display: block;
+}
 
 /* =========================================================
-   SPACING FIX FOR MIXED LISTS
+   HAPUS SEMUA DEFAULT STYLING DARI TIPTAP
    ========================================================= */
+/* Target spesifik untuk default Tiptap styling */
+.ProseMirror ol[data-type="orderedList"] {
+  list-style: none !important;
+  padding-left: 1.5rem !important;
+}
 
+.ProseMirror ol[data-type="orderedList"] > li {
+  list-style: none !important;
+}
+
+.ProseMirror ul[data-type="bulletList"] {
+  list-style: none !important;
+  padding-left: 1.5rem !important;
+}
+
+.ProseMirror ul[data-type="bulletList"] > li {
+  list-style: none !important;
+}
+
+/* =========================================================
+   PRESET 1: STANDARD (1. a. i.) - DEFAULT
+   ========================================================= */
+/* Level 1 (1. 2. 3.) */
+.list-decimal .ProseMirror ol {
+  counter-reset: lvl1;
+  padding-left: 1.5rem;
+}
+
+.list-decimal .ProseMirror ol > li {
+  counter-increment: lvl1;
+  position: relative;
+}
+
+.list-decimal .ProseMirror ol > li::before {
+  content: counter(lvl1, decimal) ". ";
+  position: absolute;
+  left: -1.5rem;
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151; /* Tambah warna */
+}
+
+/* Level 2 (a. b. c.) */
+.list-decimal .ProseMirror ol > li > ol {
+  counter-reset: lvl2;
+  padding-left: 2.5rem;
+  margin-left: 0;
+}
+
+.list-decimal .ProseMirror ol > li > ol > li {
+  counter-increment: lvl2;
+  position: relative;
+}
+
+.list-decimal .ProseMirror ol > li > ol > li::before {
+  content: counter(lvl2, lower-alpha) ". ";
+  position: absolute;
+  left: -2.5rem;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* Level 3 (i. ii. iii.) */
+.list-decimal .ProseMirror ol > li > ol > li > ol {
+  counter-reset: lvl3;
+  padding-left: 3.5rem;
+  margin-left: 0;
+}
+
+.list-decimal .ProseMirror ol > li > ol > li > ol > li {
+  counter-increment: lvl3;
+  position: relative;
+}
+
+.list-decimal .ProseMirror ol > li > ol > li > ol > li::before {
+  content: counter(lvl3, lower-roman) ". ";
+  position: absolute;
+  left: -3.5rem;
+  font-size: 12px;
+  color: #374151;
+}
+
+/* =========================================================
+   PRESET 2: OUTLINE (I. A. 1. a.)
+   ========================================================= */
+/* Level 1 (I. II. III.) */
+.list-outline .ProseMirror ol {
+  counter-reset: out1;
+  padding-left: 1.5rem;
+}
+
+.list-outline .ProseMirror ol > li {
+  counter-increment: out1;
+  position: relative;
+}
+
+.list-outline .ProseMirror ol > li::before {
+  content: counter(out1, upper-roman) ". ";
+  position: absolute;
+  left: -1.5rem;
+  font-weight: bold;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Level 2 (A. B. C.) */
+.list-outline .ProseMirror ol > li > ol {
+  counter-reset: out2;
+  padding-left: 2.5rem;
+  margin-left: 0;
+}
+
+.list-outline .ProseMirror ol > li > ol > li {
+  counter-increment: out2;
+  position: relative;
+}
+
+.list-outline .ProseMirror ol > li > ol > li::before {
+  content: counter(out2, upper-alpha) ". ";
+  position: absolute;
+  left: -2.5rem;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* Level 3 (1. 2. 3.) */
+.list-outline .ProseMirror ol > li > ol > li > ol {
+  counter-reset: out3;
+  padding-left: 3.5rem;
+  margin-left: 0;
+}
+
+.list-outline .ProseMirror ol > li > ol > li > ol > li {
+  counter-increment: out3;
+  position: relative;
+}
+
+.list-outline .ProseMirror ol > li > ol > li > ol > li::before {
+  content: counter(out3, decimal) ". ";
+  position: absolute;
+  left: -3.5rem;
+  font-size: 12px;
+  color: #374151;
+}
+
+/* =========================================================
+   PRESET 3: MULTIDECIMAL (1.1.1.1)
+   ========================================================= */
+/* Level 1 (1. 2. 3.) */
+.list-multidecimal .ProseMirror ol {
+  counter-reset: multi1;
+  padding-left: 1.5rem;
+}
+
+.list-multidecimal .ProseMirror ol > li {
+  counter-increment: multi1;
+  position: relative;
+}
+
+.list-multidecimal .ProseMirror ol > li::before {
+  content: counter(multi1, decimal) ". ";
+  position: absolute;
+  left: -1.5rem;
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Level 2 (1.1. 1.2. 1.3.) */
+.list-multidecimal .ProseMirror ol > li > ol {
+  counter-reset: multi2;
+  padding-left: 2.5rem;
+  margin-left: 0;
+}
+
+.list-multidecimal .ProseMirror ol > li > ol > li {
+  counter-increment: multi2;
+  position: relative;
+}
+
+.list-multidecimal .ProseMirror ol > li > ol > li::before {
+  content: counter(multi1, decimal) "." counter(multi2, decimal) ". ";
+  position: absolute;
+  left: -2.5rem;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* Level 3 (1.1.1. 1.1.2. 1.1.3.) */
+.list-multidecimal .ProseMirror ol > li > ol > li > ol {
+  counter-reset: multi3;
+  padding-left: 3.5rem;
+  margin-left: 0;
+}
+
+.list-multidecimal .ProseMirror ol > li > ol > li > ol > li {
+  counter-increment: multi3;
+  position: relative;
+}
+
+.list-multidecimal .ProseMirror ol > li > ol > li > ol > li::before {
+  content: counter(multi1, decimal) "." counter(multi2, decimal) "." counter(multi3, decimal) ". ";
+  position: absolute;
+  left: -3.5rem;
+  font-size: 12px;
+  color: #374151;
+}
+
+/* =========================================================
+   PRESET 4: UPPER ALPHA (A. 1. a.)
+   ========================================================= */
+/* Level 1 (A. B. C.) */
+.list-upper-alpha .ProseMirror ol {
+  counter-reset: ua1;
+  padding-left: 1.5rem;
+}
+
+.list-upper-alpha .ProseMirror ol > li {
+  counter-increment: ua1;
+  position: relative;
+}
+
+.list-upper-alpha .ProseMirror ol > li::before {
+  content: counter(ua1, upper-alpha) ". ";
+  position: absolute;
+  left: -1.5rem;
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Level 2 (1. 2. 3.) */
+.list-upper-alpha .ProseMirror ol > li > ol {
+  counter-reset: ua2;
+  padding-left: 2.5rem;
+  margin-left: 0;
+}
+
+.list-upper-alpha .ProseMirror ol > li > ol > li {
+  counter-increment: ua2;
+  position: relative;
+}
+
+.list-upper-alpha .ProseMirror ol > li > ol > li::before {
+  content: counter(ua2, decimal) ". ";
+  position: absolute;
+  left: -2.5rem;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* Level 3 (a. b. c.) */
+.list-upper-alpha .ProseMirror ol > li > ol > li > ol {
+  counter-reset: ua3;
+  padding-left: 3.5rem;
+  margin-left: 0;
+}
+
+.list-upper-alpha .ProseMirror ol > li > ol > li > ol > li {
+  counter-increment: ua3;
+  position: relative;
+}
+
+.list-upper-alpha .ProseMirror ol > li > ol > li > ol > li::before {
+  content: counter(ua3, lower-alpha) ". ";
+  position: absolute;
+  left: -3.5rem;
+  font-size: 12px;
+  color: #374151;
+}
+
+/* =========================================================
+   PRESET 5: BULLET LIST (• ◦ ▪)
+   ========================================================= */
+/* Level 1 (•) */
+.list-bullet .ProseMirror ul {
+  padding-left: 1.5rem;
+}
+
+.list-bullet .ProseMirror ul > li {
+  position: relative;
+}
+
+.list-bullet .ProseMirror ul > li::before {
+  content: "•";
+  position: absolute;
+  left: -1rem;
+  font-size: 16px;
+  color: #374151;
+}
+
+/* Level 2 (◦) */
+.list-bullet .ProseMirror ul > li > ul {
+  padding-left: 2.5rem;
+  margin-left: 0;
+}
+
+.list-bullet .ProseMirror ul > li > ul > li {
+  position: relative;
+}
+
+.list-bullet .ProseMirror ul > li > ul > li::before {
+  content: "◦";
+  position: absolute;
+  left: -2rem;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* Level 3 (▪) */
+.list-bullet .ProseMirror ul > li > ul > li > ul {
+  padding-left: 3.5rem;
+  margin-left: 0;
+}
+
+.list-bullet .ProseMirror ul > li > ul > li > ul > li {
+  position: relative;
+}
+
+.list-bullet .ProseMirror ul > li > ul > li > ul > li::before {
+  content: "▪";
+  position: absolute;
+  left: -3rem;
+  font-size: 12px;
+  color: #374151;
+}
+
+/* =========================================================
+   UTILITY & OVERRIDES
+   ========================================================= */
+/* Pastikan warna kontras */
+.ProseMirror ol > li::before,
+.ProseMirror ul > li::before {
+  color: #374151 !important;
+}
+
+/* Placeholder styling */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Mixed list spacing */
 .ProseMirror ul ul,
 .ProseMirror ul ol,
 .ProseMirror ol ul,
@@ -215,167 +392,9 @@
   margin-bottom: 0.25rem;
 }
 
-/* =========================================================
-   DEBUG / SAFETY
-   ========================================================= */
-
-.ProseMirror .ordered-list {
-  background-color: transparent;
-}
-
-/* =========================
-   MULTILEVEL LIST PRESETS
-   ========================= */
-
-/* 1. OUTLINE: I. A. 1. a. */
-.ProseMirror.list-outline ol {
-  list-style: none;
-}
-.ProseMirror.list-outline > ol {
-  counter-reset: level1;
-}
-.ProseMirror.list-outline > ol > li {
-  counter-increment: level1;
-}
-.ProseMirror.list-outline > ol > li::before {
-  content: counter(level1, upper-roman) ". ";
-}
-.ProseMirror.list-outline > ol > li > ol {
-  counter-reset: level2;
-}
-.ProseMirror.list-outline > ol > li > ol > li {
-  counter-increment: level2;
-}
-.ProseMirror.list-outline > ol > li > ol > li::before {
-  content: counter(level2, upper-alpha) ". ";
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol {
-  counter-reset: level3;
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol > li {
-  counter-increment: level3;
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol > li::before {
-  content: counter(level3, decimal) ". ";
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol > li > ol {
-  counter-reset: level4;
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol > li > ol > li {
-  counter-increment: level4;
-}
-.ProseMirror.list-outline > ol > li > ol > li > ol > li > ol > li::before {
-  content: counter(level4, lower-alpha) ". ";
-}
-
-/* 2. DECIMAL-ALPHA: 1. 1.a 1.a.1 */
-.ProseMirror.list-decimal-alpha ol {
-  list-style: none;
-}
-.ProseMirror.list-decimal-alpha > ol {
-  counter-reset: dec1;
-}
-.ProseMirror.list-decimal-alpha > ol > li {
-  counter-increment: dec1;
-}
-.ProseMirror.list-decimal-alpha > ol > li::before {
-  content: counter(dec1, decimal) ". ";
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol {
-  counter-reset: alpha2;
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol > li {
-  counter-increment: alpha2;
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(alpha2, lower-alpha) ". ";
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol > li > ol {
-  counter-reset: dec3;
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol > li > ol > li {
-  counter-increment: dec3;
-}
-.ProseMirror.list-decimal-alpha > ol > li > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(alpha2, lower-alpha) "." counter(dec3, decimal) ". ";
-}
-
-/* 3. DECIMAL MULTILEVEL: 1. 1.1 1.1.1 */
-.ProseMirror.list-multidecimal ol {
-  list-style: none;
-}
-.ProseMirror.list-multidecimal > ol {
-  counter-reset: dec1;
-}
-.ProseMirror.list-multidecimal > ol > li {
-  counter-increment: dec1;
-}
-.ProseMirror.list-multidecimal > ol > li::before {
-  content: counter(dec1, decimal) ". ";
-}
-.ProseMirror.list-multidecimal > ol > li > ol {
-  counter-reset: dec2;
-}
-.ProseMirror.list-multidecimal > ol > li > ol > li {
-  counter-increment: dec2;
-}
-.ProseMirror.list-multidecimal > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(dec2, decimal) ". ";
-}
-.ProseMirror.list-multidecimal > ol > li > ol > li > ol {
-  counter-reset: dec3;
-}
-.ProseMirror.list-multidecimal > ol > li > ol > li > ol > li {
-  counter-increment: dec3;
-}
-.ProseMirror.list-multidecimal > ol > li > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(dec2, decimal) "." counter(dec3, decimal) ". ";
-}
-
-/* 4. BULLET MULTILEVEL: • ◦ ▪ */
-.ProseMirror.list-bullet ul {
-  list-style: none;
-}
-.ProseMirror.list-bullet ul li::before {
-  content: "•";
-  position: absolute;
-  left: -1rem;
-}
-.ProseMirror.list-bullet ul ul li::before {
-  content: "◦";
-}
-.ProseMirror.list-bullet ul ul ul li::before {
-  content: "▪";
-}
-
-/* 5. DECIMAL-ALPHA-DECIMAL: 1. 1.a 1.a.1 */
-.ProseMirror.list-decimal-alpha-decimal ol {
-  list-style: none;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol {
-  counter-reset: dec1;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li {
-  counter-increment: dec1;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li::before {
-  content: counter(dec1, decimal) ". ";
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol {
-  counter-reset: alpha2;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li {
-  counter-increment: alpha2;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(alpha2, lower-alpha) ". ";
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li > ol {
-  counter-reset: dec3;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li > ol > li {
-  counter-increment: dec3;
-}
-.ProseMirror.list-decimal-alpha-decimal > ol > li > ol > li > ol > li::before {
-  content: counter(dec1, decimal) "." counter(alpha2, lower-alpha) "." counter(dec3, decimal) ". ";
+/* Responsive */
+@media (max-width: 768px) {
+  .ProseMirror {
+    padding: 20px !important;
+  }
 }
