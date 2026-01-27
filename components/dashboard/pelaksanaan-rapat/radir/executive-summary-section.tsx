@@ -1,77 +1,69 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// components/dashboard/pelaksanaan-rapat/radir/executive-summary-section.tsx
 "use client"
 
-import React from "react"
+import React, { useEffect, useMemo } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
-import {
-    FileText,
-    Bold,
-    Italic,
-    Underline as UnderlineIcon,
-    List,
-    ListOrdered,
-    Heading2,
-    Quote,
-    Undo,
-    Redo,
-    AlignLeft,
-    StickyNote,
-    Info,
-} from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { FileText } from "lucide-react"
+import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import ReusableEditorToolbar from "./reusable-editor-toolbar"
 
 interface ExecutiveSummarySectionProps {
     value: string
     onChange: (value: string) => void
-    activeAgendaTitle?: string // Opsional: untuk menampilkan judul agenda aktif
+    activeAgendaTitle?: string
 }
 
 export function ExecutiveSummarySection({
     value,
     onChange,
     activeAgendaTitle,
-}: ExecutiveSummarySectionProps) {
+}: ExecutiveSummarySectionProps): React.ReactElement {
     const editor = useEditor({
-        extensions: [StarterKit, Underline],
+        extensions: useMemo(
+            () => [
+                StarterKit.configure({
+                    bulletList: { keepMarks: true },
+                    orderedList: { keepMarks: true },
+                }),
+                Underline,
+            ],
+            []
+        ),
         content: value,
-        immediatelyRender: false, // Hindari error hydration Next.js
+        immediatelyRender: false,
         editorProps: {
             attributes: {
-                class:
-                    "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[600px] p-10 md:p-16 max-w-none text-slate-800 leading-relaxed outline-none",
+                class: [
+                    "prose",
+                    "prose-sm",
+                    "max-w-none",
+                    "focus:outline-none",
+                    "min-h-[600px]",
+                    "p-10",
+                    "prose-ul:list-disc",
+                    "prose-ol:list-decimal",
+                    "prose-ul:pl-6",
+                    "prose-ol:pl-6",
+                    "prose-li:marker:text-slate-500",
+                ].join(" "), x
             },
         },
-        onUpdate: ({ editor }: { editor: any }) => {
-            onChange((editor as any).getHTML())
+        onUpdate({ editor }) {
+            onChange(editor.getHTML())
         },
     })
 
-    // Sinkronisasi nilai dari luar (penting saat switch agenda)
-    React.useEffect(() => {
-        if (editor && (editor as any).getHTML() !== value) {
+    useEffect(() => {
+        if (!editor) return
+        if (editor.getHTML() !== value) {
             editor.commands.setContent(value)
         }
-    }, [value, editor])
-
-    if (!editor) {
-        return (
-            <div className="w-full h-150 bg-white border border-slate-200 rounded-lg animate-pulse flex items-center justify-center">
-                <p className="text-slate-400 text-xs font-bold tracking-widest uppercase">
-                    Memuat Editor Risalah...
-                </p>
-            </div>
-        )
-    }
+    }, [editor, value])
 
     return (
         <Card className="border-none shadow-sm overflow-hidden bg-white ring-1 ring-slate-200">
-            {/* HEADER */}
             <CardHeader className="bg-white border-b border-slate-100 py-4 px-6">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -89,170 +81,19 @@ export function ExecutiveSummarySection({
                             )}
                         </div>
                     </div>
-                    <Badge
-                        variant="secondary"
-                        className="text-[9px] font-black bg-emerald-50 text-emerald-700 uppercase"
-                    >
+                    <Badge className="text-[9px] font-black bg-emerald-50 text-emerald-700 uppercase">
                         GOOGLE DOCS MODE
                     </Badge>
                 </div>
             </CardHeader>
 
-            {/* TOOLBAR FORMATTING */}
-            <div className="bg-white border-b p-2 flex flex-wrap gap-1 items-center px-6 sticky top-0 z-20 shadow-sm">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => editor.chain().focus().undo?.().run?.()}
-                    disabled={!(editor as any).can?.().undo?.()}
-                    className="h-8 w-8 p-0"
-                >
-                    <Undo className="h-4 w-4" />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => editor.chain().focus().redo?.().run?.()}
-                    disabled={!(editor as any).can?.().redo?.()}
-                    className="h-8 w-8 p-0"
-                >
-                    <Redo className="h-4 w-4" />
-                </Button>
+            <ReusableEditorToolbar editor={editor} />
 
-                <div className="w-px h-5 bg-slate-200 mx-2" />
-
-                <Button
-                    variant={(editor as any).isActive("bold") ? "secondary" : "ghost"}
-                    size="sm"
-                    // @ts-expect-error: Tiptap dynamic method not recognized by TS
-                    onClick={() => editor.chain().focus().toggleBold?.().run?.()}
-                    className={`h-8 w-8 p-0 ${(editor as any).isActive("bold") ? "bg-slate-100 text-[#14a2ba]" : ""}`}
-                >
-                    <Bold className="h-4 w-4" />
-                </Button>
-                <Button
-                    variant={(editor as any).isActive("italic") ? "secondary" : "ghost"}
-                    size="sm"
-                    // @ts-expect-error: Tiptap dynamic method not recognized by TS
-                    onClick={() => editor.chain().focus().toggleItalic?.().run?.()}
-                    className={`h-8 w-8 p-0 ${(editor as any).isActive("italic") ? "bg-slate-100 text-[#14a2ba]" : ""}`}
-                >
-                    <Italic className="h-4 w-4" />
-                </Button>
-                <Button
-                    variant={(editor as any).isActive("underline") ? "secondary" : "ghost"}
-                    size="sm"
-                    // @ts-expect-error: Tiptap dynamic method not recognized by TS
-                    onClick={() => editor.chain().focus().toggleUnderline?.().run?.()}
-                    className={`h-8 w-8 p-0 ${(editor as any).isActive("underline") ? "bg-slate-100 text-[#14a2ba]" : ""}`}
-                >
-                    <UnderlineIcon className="h-4 w-4" />
-                </Button>
-
-                <div className="w-px h-5 bg-slate-200 mx-2" />
-
-                <Button
-                    variant={(editor as any).isActive("heading", { level: 2 }) ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => editor.chain().focus().toggleHeading?.({ level: 2 }).run?.()}
-                    className={`h-8 px-2 flex gap-1 ${(editor as any).isActive("heading", { level: 2 }) ? "text-[#14a2ba]" : ""}`}
-                >
-                    <Heading2 className="h-4 w-4" />
-                    <span className="text-[9px] font-bold">JUDUL</span>
-                </Button>
-
-                <Button
-                    variant={(editor as any).isActive("bulletList") ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => editor.chain().focus().toggleBulletList?.().run?.()}
-                    className={(editor as any).isActive("bulletList") ? "text-[#14a2ba]" : ""}
-                >
-                    <List className="h-4 w-4" />
-                </Button>
-
-                <Button
-                    variant={(editor as any).isActive("orderedList") ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => editor.chain().focus().toggleOrderedList?.().run?.()}
-                    className={(editor as any).isActive("orderedList") ? "text-[#14a2ba]" : ""}
-                >
-                    <ListOrdered className="h-4 w-4" />
-                </Button>
-
-                <div className="w-px h-5 bg-slate-200 mx-2" />
-
-                <Button
-                    variant={(editor as any).isActive("blockquote") ? "secondary" : "ghost"}
-                    size="sm"
-                    // @ts-expect-error: Tiptap dynamic method not recognized by TS
-                    onClick={() => editor.chain().focus().toggleBlockquote?.().run?.()}
-                    className={`h-8 px-2 flex gap-1 ${(editor as any).isActive("blockquote") ? "text-[#14a2ba]" : ""}`}
-                >
-                    <Quote className="h-4 w-4" />
-                    <span className="text-[9px] font-bold">ARAHAN</span>
-                </Button>
+            <div className="p-6">
+                <EditorContent editor={editor} />
             </div>
-
-            {/* EDITOR CANVAS */}
-            <CardContent className="p-4 md:p-12 flex justify-center bg-slate-100/30">
-                <div className="w-full max-w-4xl bg-white shadow-2xl border border-slate-200 min-h-210.5 relative transition-all">
-                    <EditorContent editor={editor} />
-                </div>
-            </CardContent>
-
-            {/* FOOTER INFO */}
-            <div className="bg-white px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                        <AlignLeft className="h-3.5 w-3.5" />
-                        <span>HTML FORMAT</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <StickyNote className="h-3.5 w-3.5" />
-                        <span>{(editor as any).getText?.().length} KARAKTER</span>
-                    </div>
-                </div>
-                <p className="text-[9px] font-bold italic">
-                    Ringkasan ini akan menjadi inti lembar isi risalah rapat.
-                </p>
-            </div>
-
-            {/* GLOBAL CSS PROSEMIRROR */}
-            <style jsx global>{`
-                .ProseMirror {
-                    outline: none !important;
-                }
-                .ProseMirror ul {
-                    list-style-type: disc !important;
-                    padding-left: 2rem !important;
-                    margin: 1rem 0;
-                }
-                .ProseMirror ol {
-                    list-style-type: decimal !important;
-                    padding-left: 2rem !important;
-                    margin: 1rem 0;
-                }
-                .ProseMirror li p {
-                    margin: 0 !important;
-                }
-                .ProseMirror h2 {
-                    font-size: 1.5rem;
-                    font-weight: 800;
-                    margin: 1.5rem 0 1rem;
-                    color: #125d72;
-                }
-                .ProseMirror blockquote {
-                    border-left: 4px solid #14a2ba;
-                    padding-left: 1.5rem;
-                    font-style: italic;
-                    color: #475569;
-                    margin: 1.5rem 0;
-                }
-                .ProseMirror p {
-                    margin-bottom: 1rem;
-                    line-height: 1.8;
-                }
-            `}</style>
         </Card>
     )
-}   
+}
+
+export default ExecutiveSummarySection
