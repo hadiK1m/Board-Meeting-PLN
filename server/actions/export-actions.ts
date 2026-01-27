@@ -194,7 +194,16 @@ export async function exportRisalahToDocx(
                 title: a.title,
                 pemrakarsa: [a.director, a.initiator].filter(Boolean).join(", ") || "-",
                 executiveSummary: cleanHtml(a.executiveSummary || ""),
-                considerations: formatConsiderationsSmart(a.considerations),
+                considerations: Array.isArray(a.considerations)
+                    ? a.considerations
+                    : (() => {
+                        try {
+                            const arr = JSON.parse(a.considerations || "[]");
+                            return Array.isArray(arr) ? arr : [a.considerations];
+                        } catch {
+                            return [a.considerations];
+                        }
+                    })(),
                 meetingDecisions: Array.isArray(a.meetingDecisions) ? a.meetingDecisions.map((d: any, idx: number) => `${idx + 1}. ${d.text}`).join("\n") : cleanHtml(String(a.meetingDecisions || "")),
                 dissentingOpinion: a.dissentingOpinion || "Tidak ada",
             })),
@@ -374,52 +383,51 @@ export async function exportRakordirToDocx(meetingNumber: string, meetingYear: s
     }
 }
 
-// Helper Function untuk memformat nomor bertingkat saat export
-function formatConsiderationsSmart(considerations: any): string {
-    let items: any[] = [];
 
-    // Parse data dengan aman
-    if (Array.isArray(considerations)) {
-        items = considerations;
-    } else if (typeof considerations === "string") {
-        try {
-            // Coba parse JSON, jika gagal anggap string biasa
-            const parsed = JSON.parse(considerations);
-            if (Array.isArray(parsed)) items = parsed;
-            else return considerations; // Return as plain text if not array
-        } catch {
-            return considerations; // Return original string if parse fails
-        }
-    } else {
-        return "-";
-    }
+function htmlToDocxText(html: string): string {
+    if (!html) return "-";
+    let text = html;
 
-    if (items.length === 0) return "-";
+    // 1. List: Gabungkan nomor dan paragraf dalam satu baris
+    // Tangani <ol><li><p>...</p></li></ol>
+    text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (m, list) => {
+        let i = 1;
+        // Gabungkan isi <li> dan <p> dalam satu baris
+        return list.replace(/<li[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/li>/gi, (_, item) => `${i++}. ${item}\n`);
+    });
+    // Tangani <ul><li><p>...</p></li></ul>
+    text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (m, list) => {
+        return list.replace(/<li[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/li>/gi, (_, item) => `- ${item}\n`);
+    });
 
-    return items.map((item, index) => {
-        const text = item.text || "";
-        const level = item.level ?? 0;
+    // 2. List tanpa <p>
+    text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (m, list) => {
+        let i = 1;
+        return list.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, item) => `${i++}. ${item}\n`);
+    });
+    text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (m, list) => {
+        return list.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, item) => `- ${item}\n`);
+    });
 
-        let count = 0;
-        for (let i = index; i >= 0; i--) {
-            const prev = items[i];
-            const prevLevel = prev.level ?? 0;
-            if (prevLevel === level) count++;
-            else if (prevLevel < level) break;
-        }
+    // 3. Bold: Ubah <b> dan <strong> jadi huruf besar (simulasi bold)
+    text = text.replace(/<(b|strong)>(.*?)<\/\1>/gi, (_, __, val) => val.toUpperCase());
 
-        let label = "";
-        if (level === 0) label = `${count}.`;
-        else if (level === 1) label = `${String.fromCharCode(96 + count)}.`;
-        else if (level === 2) {
-            const roman = ["i", "ii", "iii", "iv", "v", "vi"];
-            label = `${roman[(count - 1) % roman.length] || count}.`;
-        } else {
-            label = "-";
-        }
+    // 4. Italic: Hilangkan tag <em>
+    text = text.replace(/<em>(.*?)<\/em>/gi, '$1');
 
-        // Indentasi visual untuk text file
-        const indent = "    ".repeat(level);
-        return `${indent}${label} ${text}`;
-    }).join("\n");
+    // 5. Paragraph
+    text = text.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n');
+
+    // 6. Line breaks
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+
+    // 7. Remove other tags
+    text = text.replace(/<[^>]+>/g, '');
+
+    // 8. Decode HTML entities
+    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
+    // 9. Clean up multiple newlines
+    text = text.replace(/\n{2,}/g, '\n\n');
+    return text.trim();
 }
