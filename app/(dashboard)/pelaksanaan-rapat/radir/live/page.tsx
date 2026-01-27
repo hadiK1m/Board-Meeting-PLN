@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { agendas } from "@/db/schema/agendas"
 import { inArray, and, eq } from "drizzle-orm"
 import { BulkMeetingClient } from "@/components/dashboard/pelaksanaan-rapat/radir/bulk-meeting-client"
+import LiveTour from "@/components/dashboard/pelaksanaan-rapat/radir/live-tour"
 
 interface PageProps {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -54,6 +55,7 @@ export default async function LiveMeetingPage({ searchParams }: PageProps) {
 
     return (
         <div className="h-[calc(100vh-4rem)] flex flex-col bg-slate-50">
+            <LiveTour />
             <BulkMeetingClient
                 agendas={selectedAgendas}
                 meetingTitle={meetingTitle}
